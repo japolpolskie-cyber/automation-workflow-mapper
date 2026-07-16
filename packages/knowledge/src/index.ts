@@ -8,6 +8,7 @@ export * from './canonical-registry.js';
 export * from './application-packs.js';
 export * from './platform-capabilities.js';
 export * from './patterns.js';
+export * from './sdk-compatibility.js';
 
 export const knowledgeCatalog: KnowledgeCatalog = {
   version: KNOWLEDGE_CATALOG_VERSION,

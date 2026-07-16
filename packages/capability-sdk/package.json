@@ -1,5 +1,5 @@
 {
-  "name": "@awm/knowledge",
+  "name": "@awm/capability-sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,12 +10,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@awm/capability-registry": "*",
-    "@awm/capability-sdk": "*",
-    "@awm/shared": "*"
+    "@awm/shared": "*",
+    "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@types/node": "^24.0.3",
     "vitest": "^3.2.4"
   }
 }

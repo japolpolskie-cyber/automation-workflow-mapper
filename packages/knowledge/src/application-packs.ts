@@ -1,4 +1,6 @@
 import { applicationRegistry, type DataCardinality, type Platform } from '@awm/shared';
+import { capabilityRegistry } from '@awm/capability-registry';
+import { adaptCapabilityPackToKnowledge } from './sdk-compatibility.js';
 import { KNOWLEDGE_CATALOG_VERSION, field, type ApplicationPack, type CanonicalFunctionId, type KnowledgeFieldDefinition, type OperationDefinition, type OperationPlatformMapping } from './types.js';
 
 type MappingSeed = { support?: OperationPlatformMapping['support']; limitation?: string; alternative?: string; implementation?: string };
@@ -81,7 +83,7 @@ const crmOperations: OperationDefinition[] = [
   op(crmId, 'upsert-record', 'action', 'Create or Update CRM Record', 'Creates or updates one record using a supported unique key.', [field('uniqueKey', 'Unique key', 'object', true, 'Field and value used for upsert.'), field('recordData', 'Record data', 'object', true, 'Fields to create or update.')], [recordId], ['single'], 'single', false, ['validation', 'data-transformation'], ['logging', 'end'], ['Assuming every CRM exposes a native upsert operation'], mappings('action', 'CRM', 'Upsert Record', { n8n: { support: 'unknown', limitation: 'Some CRM connectors require an explicit Find then Create/Update pattern.', alternative: 'Use Find Record followed by Binary Condition.' }, make: { support: 'unknown', limitation: 'Some CRM modules require Search then Create/Update.', alternative: 'Use Search followed by Router.' }, zapier: { support: 'unknown', limitation: 'Some CRM apps offer Create or Update; others require Find then Paths.', alternative: 'Use Find followed by Paths.' } })),
 ];
 
-export const applicationPacks: readonly ApplicationPack[] = [
+export const legacyApplicationPacks: readonly ApplicationPack[] = [
   pack(asanaId, 'Asana', ['asana'], 'project-management', asanaOperations),
   pack(driveId, 'Google Drive', ['drive', 'gdrive'], 'storage', driveOperations),
   pack(sheetsId, 'Google Sheets', ['sheets', 'spreadsheet'], 'spreadsheet', sheetsOperations),
@@ -89,6 +91,10 @@ export const applicationPacks: readonly ApplicationPack[] = [
   pack(slackId, 'Slack', ['slack messaging'], 'messaging', slackOperations),
   pack(apiId, 'Webhook / Generic API', ['webhook', 'generic api', 'rest api', 'http'], 'api', apiOperations),
   pack(crmId, 'Generic CRM', ['crm', 'customer relationship management'], 'crm', crmOperations),
+];
+export const applicationPacks: readonly ApplicationPack[] = [
+  ...legacyApplicationPacks,
+  ...capabilityRegistry.listPacks().map(adaptCapabilityPackToKnowledge),
 ];
 
 export function getApplicationPack(applicationIdOrAlias: string): ApplicationPack | undefined {
