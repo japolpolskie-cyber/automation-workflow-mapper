@@ -55,6 +55,8 @@ describe('API foundation', () => {
     const saved = project.json().data;
     expect(saved.workflow.nodes.length).toBeGreaterThan(1);
     expect(saved.visualGraph.nodes).toHaveLength(saved.workflow.nodes.length);
+    expect(saved.workflowSet.workflows).toHaveLength(1);
+    expect(saved.workflowSet.nodeReferences).toHaveLength(saved.workflow.nodes.length);
 
     const movedGraph = {
       ...saved.visualGraph,

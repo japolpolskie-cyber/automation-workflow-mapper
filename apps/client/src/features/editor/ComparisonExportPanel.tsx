@@ -16,13 +16,15 @@ function saveData(data: string, filename: string, mimeType: string) {
 
 interface ComparisonExportPanelProps {
   workflow: Project['workflow'];
+  workflowSet: Project['workflowSet'];
+  selectedWorkflowId: string;
   platform: Platform;
   canvasId: string;
   nodes: Node[];
   onClose: () => void;
 }
 
-export function ComparisonExportPanel({ workflow, platform, canvasId, nodes, onClose }: ComparisonExportPanelProps) {
+export function ComparisonExportPanel({ workflow, workflowSet, selectedWorkflowId, platform, canvasId, nodes, onClose }: ComparisonExportPanelProps) {
   const [tab, setTab] = useState<'compare' | 'export'>('compare');
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
@@ -93,7 +95,7 @@ export function ComparisonExportPanel({ workflow, platform, canvasId, nodes, onC
     </> : <>
       <p className="export-notice">All exports are planning drafts and require review before platform implementation or import.</p>
       <div className="export-grid">
-        <button onClick={() => saveData(JSON.stringify({ label: 'Draft export — review required before platform import', workflow }, null, 2), `${name}-workflow.json`, 'application/json')}><FileCode2 /><strong>Workflow JSON</strong><span>Canonical workflow and planning metadata</span></button>
+        <button onClick={() => saveData(JSON.stringify({ label: 'Draft export — review required before platform import', selectedWorkflowId, workflowSet, workflow }, null, 2), `${name}-workflow.json`, 'application/json')}><FileCode2 /><strong>Workflow JSON</strong><span>Canonical workflow, workflow set, and planning metadata</span></button>
         <button onClick={() => saveData(generateImplementationMarkdown(workflow, platform), `${name}-implementation.md`, 'text/markdown')}><FileText /><strong>Technical handoff</strong><span>Steps, mappings, credentials, testing, and deployment</span></button>
         <button onClick={() => saveData(generateImplementationChecklist(workflow, platform), `${name}-checklist.md`, 'text/markdown')}><CheckCircle2 /><strong>Implementation checklist</strong><span>Actionable setup and testing tasks</span></button>
         <button disabled={Boolean(working)} onClick={() => void exportVisual('png')}><Image /><strong>Canvas PNG</strong><span>High-resolution workflow image</span></button>

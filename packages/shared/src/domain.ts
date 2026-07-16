@@ -171,6 +171,46 @@ export const visualGraphSchema = z.object({
   edges: z.array(z.object({ id: z.string(), source: z.string(), target: z.string(), data: z.object({ domainConnectionId: z.string().uuid() }) }))
 });
 
+export const workflowReadinessSchema = z.enum(['draft', 'needs_clarification', 'platform_limited', 'build_ready']);
+export const workflowSetStatusSchema = z.enum(['active', 'archived']);
+export const workflowSetEntrySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(160),
+  description: z.string().max(2_000).default(''),
+  triggerSummary: z.string().max(1_000).default(''),
+  platformSummary: z.string().max(1_000).default(''),
+  readiness: workflowReadinessSchema.default('draft'),
+  status: workflowSetStatusSchema.default('active'),
+  applications: z.array(z.string().min(1).max(160)).default([]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+export const workflowOwnershipReferenceSchema = z.object({
+  resourceId: z.string().uuid(),
+  owningWorkflowId: z.string().uuid(),
+  referencedByWorkflowIds: z.array(z.string().uuid()).default([])
+});
+export const workflowSetSchema = z.object({
+  schemaVersion: z.literal('1.0'),
+  workflows: z.array(workflowSetEntrySchema).min(1),
+  nodeReferences: z.array(workflowOwnershipReferenceSchema).default([]),
+  connectionReferences: z.array(workflowOwnershipReferenceSchema).default([]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}).superRefine((set, context) => {
+  const workflowIds = new Set(set.workflows.map((workflow) => workflow.id));
+  if (workflowIds.size !== set.workflows.length) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Workflow IDs must be unique.', path: ['workflows'] });
+  for (const [collectionName, references] of [['nodeReferences', set.nodeReferences], ['connectionReferences', set.connectionReferences]] as const) {
+    const resourceIds = new Set<string>();
+    references.forEach((reference, index) => {
+      if (resourceIds.has(reference.resourceId)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Resource ownership references must be unique.', path: [collectionName, index, 'resourceId'] });
+      resourceIds.add(reference.resourceId);
+      if (!workflowIds.has(reference.owningWorkflowId)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Owning workflow does not exist.', path: [collectionName, index, 'owningWorkflowId'] });
+      if (reference.referencedByWorkflowIds.some((id) => !workflowIds.has(id))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Shared workflow reference does not exist.', path: [collectionName, index, 'referencedByWorkflowIds'] });
+    });
+  }
+});
+
 export const projectSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(160),
@@ -180,9 +220,17 @@ export const projectSchema = z.object({
   status: projectStatusSchema,
   originalScope: z.string().max(100_000).default(''),
   workflow: canonicalWorkflowSchema,
+  workflowSet: workflowSetSchema,
   visualGraph: visualGraphSchema.default({ nodes: [], edges: [] }),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
+}).superRefine((project, context) => {
+  const nodeIds = new Set(project.workflow.nodes.map((node) => node.id));
+  const referencedNodeIds = new Set(project.workflowSet.nodeReferences.map((reference) => reference.resourceId));
+  const connectionIds = new Set(project.workflow.connections.map((connection) => connection.id));
+  const referencedConnectionIds = new Set(project.workflowSet.connectionReferences.map((reference) => reference.resourceId));
+  if (nodeIds.size !== referencedNodeIds.size || [...nodeIds].some((id) => !referencedNodeIds.has(id))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Every canonical node must have exactly one workflow ownership reference.', path: ['workflowSet', 'nodeReferences'] });
+  if (connectionIds.size !== referencedConnectionIds.size || [...connectionIds].some((id) => !referencedConnectionIds.has(id))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Every canonical connection must have exactly one workflow ownership reference.', path: ['workflowSet', 'connectionReferences'] });
 });
 
 export const createProjectSchema = z.object({
@@ -210,7 +258,7 @@ export const extractedDocumentSchema = z.object({
 
 export const analyzeWorkflowRequestSchema = z.object({ projectId: z.string().uuid() }).strict();
 export const convertWorkflowRequestSchema = z.object({ projectId: z.string().uuid(), platform: platformSchema }).strict();
-export const saveWorkflowEditorSchema = z.object({ workflow: canonicalWorkflowSchema, visualGraph: visualGraphSchema }).strict();
+export const saveWorkflowEditorSchema = z.object({ workflow: canonicalWorkflowSchema, workflowSet: workflowSetSchema.optional(), visualGraph: visualGraphSchema }).strict();
 export const workflowAnalysisResultSchema = z.object({
   workflow: canonicalWorkflowSchema,
   graphValidation: z.object({ valid: z.boolean(), errorCount: z.number().int().nonnegative(), warningCount: z.number().int().nonnegative() }),
@@ -230,6 +278,9 @@ export type DataMapping = z.infer<typeof dataMappingSchema>;
 export type ClarificationQuestion = z.infer<typeof clarificationQuestionSchema>;
 export type WorkflowRisk = z.infer<typeof workflowRiskSchema>;
 export type CanonicalWorkflow = z.infer<typeof canonicalWorkflowSchema>;
+export type WorkflowSetEntry = z.infer<typeof workflowSetEntrySchema>;
+export type WorkflowOwnershipReference = z.infer<typeof workflowOwnershipReferenceSchema>;
+export type WorkflowSet = z.infer<typeof workflowSetSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectScopeInput = z.infer<typeof updateProjectScopeSchema>;

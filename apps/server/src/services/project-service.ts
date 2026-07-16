@@ -13,6 +13,6 @@ export class ProjectService {
     const workflow = applyVisualTopology({ ...parsed.workflow, nodes: parsed.workflow.nodes.filter((node) => visibleNodeIds.has(node.id)) }, parsed.visualGraph);
     const validation = validateWorkflowGraph(workflow);
     if (!validation.valid) throw new Error(`Workflow editor graph is invalid: ${validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ')}`);
-    return this.repository.updateEditor(id, workflow, parsed.visualGraph);
+    return this.repository.updateEditor(id, workflow, parsed.workflowSet, parsed.visualGraph);
   }
 }

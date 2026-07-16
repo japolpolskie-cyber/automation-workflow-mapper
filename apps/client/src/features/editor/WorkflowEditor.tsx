@@ -1,5 +1,5 @@
 import { Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, type NodeMouseHandler } from '@xyflow/react';
-import { validateWorkflow, type Platform, type PlatformBuildPlan, type Project, type WorkflowNode } from '@awm/shared';
+import { normalizeWorkflowSet, validateWorkflow, type Platform, type PlatformBuildPlan, type Project, type WorkflowNode } from '@awm/shared';
 import { buildPlatformPlan } from '@awm/platforms';
 import { ArrowLeft, Check, Download, LayoutDashboard, LoaderCircle, Redo2, Save, Sparkles, Undo2, Workflow } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -40,7 +40,7 @@ export function WorkflowEditor({ project, onBack, onSaved }: { project: Project;
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
   const nodeTypes = useMemo(() => ({ workflow: WorkflowCanvasNode }), []);
   const currentWorkflow = store.workflow ?? project.workflow;
-  const workflows = useMemo(() => splitIndependentWorkflows(currentWorkflow), [currentWorkflow]);
+  const workflows = useMemo(() => splitIndependentWorkflows(currentWorkflow, project.workflowSet), [currentWorkflow, project.workflowSet]);
   const activeSlice = workflows.find((item) => item.id === selectedWorkflowId) ?? workflows[0]!;
   const activeWorkflow = activeSlice.workflow;
   const plan: PlatformBuildPlan = useMemo(() => buildPlatformPlan(targetPlatform, activeWorkflow), [targetPlatform, activeWorkflow]);
@@ -83,7 +83,19 @@ export function WorkflowEditor({ project, onBack, onSaved }: { project: Project;
         nodes: store.nodes.map((node) => ({ id: node.id, position: node.position, data: { domainNodeId: node.data.domainNodeId } })),
         edges: store.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, data: { domainConnectionId: edge.data!.domainConnectionId } })),
       };
-      const updated = await projectApi.updateEditor(project.id, store.workflow, visualGraph);
+      const normalizedSet = normalizeWorkflowSet(store.workflow, project.workflowSet, activeSlice.id);
+      const persistedSet = {
+        ...normalizedSet,
+        workflows: normalizedSet.workflows.map((item) => item.id === activeSlice.id ? {
+          ...item,
+          readiness: readiness.status === 'Needs Clarification' ? 'needs_clarification' as const : readiness.status === 'Platform Limited' ? 'platform_limited' as const : readiness.status === 'Build Ready' ? 'build_ready' as const : 'draft' as const,
+          platformSummary: targetPlatform,
+          applications: [...new Set(activeWorkflow.nodes.map((node) => node.service).filter((service): service is string => Boolean(service)))],
+          updatedAt: new Date().toISOString(),
+        } : item),
+        updatedAt: new Date().toISOString(),
+      };
+      const updated = await projectApi.updateEditor(project.id, store.workflow, persistedSet, visualGraph);
       onSaved(updated); setSaved(true);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Workflow changes could not be saved.'); }
     finally { setSaving(false); }
@@ -116,6 +128,6 @@ export function WorkflowEditor({ project, onBack, onSaved }: { project: Project;
       {view === 'automation' ? <NodeConfigurationPanel plan={plan} /> : <aside className="node-config view-summary"><span>{view === 'business' ? 'Business flow' : view === 'implementation' ? 'Developer view' : 'Client handoff'}</span><p>{view === 'business' ? 'This view simplifies technical steps for client discussion. Switch to Automation to edit nodes and connections.' : view === 'implementation' ? 'Application, operation, credential, and limitation guidance for the selected workflow.' : 'Resolve blocking readiness items before exporting to a client.'}</p><strong>{activeWorkflow.nodes.length} synchronized steps</strong><ReadinessBadge readiness={readiness} /></aside>}
     </div>
     {assistantOpen && <AssistantPanel projectId={project.id} workflow={currentWorkflow} selectedNodeId={selectedDomainNodeId} onClose={() => setAssistantOpen(false)} onApply={(proposal) => { store.applyProposedWorkflow(proposal.proposedWorkflow); setAssistantOpen(false); setSaved(false); }} />}
-    {comparisonOpen && <ComparisonExportPanel workflow={activeWorkflow} platform={targetPlatform} canvasId="workflow-canvas-export" nodes={visibleNodes} onClose={() => setComparisonOpen(false)} />}
+    {comparisonOpen && <ComparisonExportPanel workflow={activeWorkflow} workflowSet={project.workflowSet} selectedWorkflowId={activeSlice.id} platform={targetPlatform} canvasId="workflow-canvas-export" nodes={visibleNodes} onClose={() => setComparisonOpen(false)} />}
   </div>;
 }

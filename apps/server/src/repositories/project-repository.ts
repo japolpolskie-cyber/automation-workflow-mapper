@@ -1,18 +1,20 @@
-import type { CanonicalWorkflow, CreateProjectInput, Project } from '@awm/shared';
-import { migrateWorkflow, projectSchema, projectWorkflowToVisualGraph } from '@awm/shared';
+import type { CanonicalWorkflow, CreateProjectInput, Project, WorkflowSet } from '@awm/shared';
+import { createDefaultWorkflowSet, createWorkflowSetFromGraph, migrateWorkflow, normalizeWorkflowSet, projectSchema, projectWorkflowToVisualGraph, workflowSetSchema } from '@awm/shared';
 import type { Database } from '../database/database.js';
 
 interface ProjectRow {
   id: string; name: string; client_name: string; description: string; platform: Project['platform'];
-  status: Project['status']; original_scope: string; workflow_json: string; visual_graph_json: string; created_at: string; updated_at: string;
+  status: Project['status']; original_scope: string; workflow_json: string; workflow_set_json: string | null; visual_graph_json: string; created_at: string; updated_at: string;
 }
 
 function toProject(row: ProjectRow): Project {
   const workflow = migrateWorkflow(JSON.parse(row.workflow_json) as unknown);
+  const parsedWorkflowSet = row.workflow_set_json ? workflowSetSchema.parse(JSON.parse(row.workflow_set_json) as unknown) : createDefaultWorkflowSet(workflow, row.updated_at);
+  const workflowSet = normalizeWorkflowSet(workflow, parsedWorkflowSet);
   return projectSchema.parse({
     id: row.id, name: row.name, clientName: row.client_name, description: row.description,
     platform: row.platform, status: row.status, originalScope: row.original_scope,
-    workflow, createdAt: row.created_at, updatedAt: row.updated_at
+    workflow, workflowSet, createdAt: row.created_at, updatedAt: row.updated_at
     ,visualGraph: JSON.parse(row.visual_graph_json) as unknown
   });
 }
@@ -38,11 +40,12 @@ export class ProjectRepository {
       branches: [], errorHandling: [], clarificationQuestions: [], risks: [], complexity: 'simple',
       assumptions: [], missingInformation: [], warnings: [], recommendations: [], completionCriteria: [], estimatedExecutionTime: '', createdAt: now, updatedAt: now
     };
-    const project = projectSchema.parse({ ...input, id, status: 'draft', originalScope: '', workflow, createdAt: now, updatedAt: now });
+    const workflowSet = createDefaultWorkflowSet(workflow, now);
+    const project = projectSchema.parse({ ...input, id, status: 'draft', originalScope: '', workflow, workflowSet, createdAt: now, updatedAt: now });
     const transaction = this.database.prepare(`INSERT INTO projects
-      (id, name, client_name, description, platform, status, original_scope, workflow_json, visual_graph_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    transaction.run(id, project.name, project.clientName, project.description, project.platform, project.status, '', JSON.stringify(workflow), JSON.stringify({ nodes: [], edges: [] }), now, now);
+      (id, name, client_name, description, platform, status, original_scope, workflow_json, workflow_set_json, visual_graph_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    transaction.run(id, project.name, project.clientName, project.description, project.platform, project.status, '', JSON.stringify(workflow), JSON.stringify(workflowSet), JSON.stringify({ nodes: [], edges: [] }), now, now);
     this.database.prepare(`INSERT INTO project_versions (id, project_id, version_number, event_type, snapshot_json, created_at)
       VALUES (?, ?, 1, 'project_created', ?, ?)`).run(crypto.randomUUID(), id, JSON.stringify(project), now);
     return project;
@@ -71,25 +74,33 @@ export class ProjectRepository {
     const current = this.findById(id); if (!current) return null;
     const now = new Date().toISOString();
     const visualGraph = projectWorkflowToVisualGraph(workflow);
-    const updated = projectSchema.parse({ ...current, workflow: { ...workflow, updatedAt: now }, visualGraph, status: workflow.missingInformation.length ? 'needs_input' : 'ready', updatedAt: now });
+    const updatedWorkflow = { ...workflow, updatedAt: now };
+    const incomingNodeIds = new Set(updatedWorkflow.nodes.map((node) => node.id));
+    const retainsKnownOwnership = current.workflowSet.nodeReferences.some((reference) => incomingNodeIds.has(reference.resourceId));
+    const workflowSet = !retainsKnownOwnership
+      ? createWorkflowSetFromGraph(updatedWorkflow, now)
+      : normalizeWorkflowSet(updatedWorkflow, current.workflowSet);
+    const updated = projectSchema.parse({ ...current, workflow: updatedWorkflow, workflowSet, visualGraph, status: workflow.missingInformation.length ? 'needs_input' : 'ready', updatedAt: now });
     const versionRow = this.database.prepare('SELECT COALESCE(MAX(version_number), 0) AS version FROM project_versions WHERE project_id = ?').get(id) as { version: number };
     this.database.exec('BEGIN IMMEDIATE');
     try {
-      this.database.prepare('UPDATE projects SET workflow_json = ?, visual_graph_json = ?, status = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(updated.workflow), JSON.stringify(visualGraph), updated.status, now, id);
+      this.database.prepare('UPDATE projects SET workflow_json = ?, workflow_set_json = ?, visual_graph_json = ?, status = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(updated.workflow), JSON.stringify(workflowSet), JSON.stringify(visualGraph), updated.status, now, id);
       this.database.prepare(`INSERT INTO project_versions (id, project_id, version_number, event_type, snapshot_json, created_at) VALUES (?, ?, ?, 'workflow_analyzed', ?, ?)`).run(crypto.randomUUID(), id, versionRow.version + 1, JSON.stringify(updated), now);
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
     return updated;
   }
 
-  public updateEditor(id: string, workflow: CanonicalWorkflow, visualGraph: Project['visualGraph']): Project | null {
+  public updateEditor(id: string, workflow: CanonicalWorkflow, workflowSet: WorkflowSet | undefined, visualGraph: Project['visualGraph']): Project | null {
     const current = this.findById(id); if (!current) return null;
     const now = new Date().toISOString();
-    const updated = projectSchema.parse({ ...current, workflow: { ...workflow, updatedAt: now }, visualGraph, updatedAt: now });
+    const updatedWorkflow = { ...workflow, updatedAt: now };
+    const normalizedSet = normalizeWorkflowSet(updatedWorkflow, workflowSet ?? current.workflowSet);
+    const updated = projectSchema.parse({ ...current, workflow: updatedWorkflow, workflowSet: normalizedSet, visualGraph, updatedAt: now });
     const versionRow = this.database.prepare('SELECT COALESCE(MAX(version_number), 0) AS version FROM project_versions WHERE project_id = ?').get(id) as { version: number };
     this.database.exec('BEGIN IMMEDIATE');
     try {
-      this.database.prepare('UPDATE projects SET workflow_json = ?, visual_graph_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(updated.workflow), JSON.stringify(visualGraph), now, id);
+      this.database.prepare('UPDATE projects SET workflow_json = ?, workflow_set_json = ?, visual_graph_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(updated.workflow), JSON.stringify(normalizedSet), JSON.stringify(visualGraph), now, id);
       this.database.prepare(`INSERT INTO project_versions (id, project_id, version_number, event_type, snapshot_json, created_at) VALUES (?, ?, ?, 'graph_edited', ?, ?)`).run(crypto.randomUUID(), id, versionRow.version + 1, JSON.stringify(updated), now);
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }

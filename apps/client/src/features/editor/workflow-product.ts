@@ -1,4 +1,4 @@
-import type { CanonicalWorkflow, PlatformBuildPlan, WorkflowNode } from '@awm/shared';
+import { workflowIdsForResource, type CanonicalWorkflow, type PlatformBuildPlan, type WorkflowSet, type WorkflowNode } from '@awm/shared';
 
 export interface WorkflowSlice {
   id: string;
@@ -18,7 +18,28 @@ export interface WorkflowReadiness {
 
 const isTrigger = (node: WorkflowNode) => ['trigger', 'start', 'webhook'].includes(node.category);
 
-export function splitIndependentWorkflows(workflow: CanonicalWorkflow): WorkflowSlice[] {
+export function splitIndependentWorkflows(workflow: CanonicalWorkflow, workflowSet?: WorkflowSet): WorkflowSlice[] {
+  if (workflowSet) {
+    return workflowSet.workflows.filter((item) => item.status === 'active').map((item) => {
+      const nodeIds = new Set(workflowSet.nodeReferences.filter((reference) => workflowIdsForResource(reference).includes(item.id)).map((reference) => reference.resourceId));
+      const connectionIds = new Set(workflowSet.connectionReferences.filter((reference) => workflowIdsForResource(reference).includes(item.id)).map((reference) => reference.resourceId));
+      return {
+        id: item.id,
+        label: item.name,
+        workflow: {
+          ...workflow,
+          name: item.name,
+          summary: item.description || workflow.summary,
+          nodes: workflow.nodes.filter((node) => nodeIds.has(node.id)),
+          connections: workflow.connections.filter((edge) => connectionIds.has(edge.id) && nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId)),
+          branches: workflow.branches.filter((branch) => nodeIds.has(branch.sourceNodeId) || Boolean(branch.destinationNodeId && nodeIds.has(branch.destinationNodeId))),
+          errorHandling: workflow.errorHandling.filter((rule) => nodeIds.has(rule.nodeId)),
+          clarificationQuestions: workflow.clarificationQuestions.filter((question) => !question.relatedNodeId || nodeIds.has(question.relatedNodeId)),
+          risks: workflow.risks.filter((risk) => !risk.nodeId || nodeIds.has(risk.nodeId)),
+        },
+      };
+    });
+  }
   if (!workflow.nodes.length) return [{ id: workflow.id, label: workflow.name, workflow }];
   const incoming = new Set(workflow.connections.map((edge) => edge.targetNodeId));
   const roots = workflow.nodes.filter((node) => isTrigger(node) || !incoming.has(node.id));

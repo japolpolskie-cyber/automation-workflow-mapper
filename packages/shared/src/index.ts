@@ -7,6 +7,7 @@ export * from './validation.js';
 export * from './assistant.js';
 export * from './application-registry.js';
 export * from './workflow-migration.js';
+export * from './workflow-set.js';
 export * from './architecture-compiler.js';
 export * from './planning-facts.js';
 export * from './knowledge-context.js';

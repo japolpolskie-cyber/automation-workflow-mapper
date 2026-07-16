@@ -43,7 +43,7 @@ Canonical workflow (source of truth)
         +--> Validation and export
 ```
 
-The canonical workflow is the persisted source of truth. Canvas positions, workflow cards, readiness, platform recommendations, and layered views are derived projections. UI workflow separation therefore does not change stored workflow data.
+The canonical workflow remains the persisted source of truth for nodes and edges. A versioned workflow set stores workflow metadata and ownership references to those canonical IDs, including explicit shared-node and shared-edge references. Canvas positions, platform recommendations, and layered views remain derived projections.
 
 ## Technology stack
 
@@ -109,7 +109,7 @@ npm run build
 - Generated plans require a human review before implementation.
 - Unsupported capabilities are shown rather than silently fabricated.
 - Local models can be slower and less reliable than hosted models.
-- Multiple workflow cards are currently a non-persisted UI projection of independent trigger chains.
+- Workflow-set membership is persisted separately from the canonical graph; shared resources are referenced, not duplicated.
 
 ## License
 

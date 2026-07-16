@@ -8,6 +8,7 @@ import { ScopeWorkspace } from './ScopeWorkspace';
 const now = new Date().toISOString();
 const project: Project = {
   id: '00000000-0000-4000-8000-000000000001', name: 'Lead intake', clientName: '', description: '', platform: 'n8n', status: 'draft', originalScope: '', visualGraph: { nodes: [], edges: [] }, createdAt: now, updatedAt: now,
+  workflowSet: { schemaVersion: '1.0', workflows: [{ id: '00000000-0000-4000-8000-000000000002', name: 'Lead intake', description: '', triggerSummary: 'Manual or upstream start', platformSummary: 'n8n', readiness: 'draft', status: 'active', applications: [], createdAt: now, updatedAt: now }], nodeReferences: [], connectionReferences: [], createdAt: now, updatedAt: now },
   workflow: { schemaVersion: '1.0', id: '00000000-0000-4000-8000-000000000002', name: 'Lead intake', summary: '', objective: '', targetPlatform: 'n8n', confidence: null, actors: [], systems: [], nodes: [], connections: [], branches: [], errorHandling: [], clarificationQuestions: [], risks: [], complexity: 'simple', assumptions: [], missingInformation: [], warnings: [], recommendations: [], completionCriteria: [], estimatedExecutionTime: '', createdAt: now, updatedAt: now }
 };
 

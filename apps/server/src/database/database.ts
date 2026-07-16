@@ -18,6 +18,7 @@ export function createDatabase(databasePath: string): Database {
       status TEXT NOT NULL CHECK (status IN ('draft', 'analyzing', 'ready', 'needs_input', 'archived')),
       original_scope TEXT NOT NULL DEFAULT '',
       workflow_json TEXT NOT NULL,
+      workflow_set_json TEXT,
       visual_graph_json TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -46,5 +47,6 @@ export function createDatabase(databasePath: string): Database {
   `);
   const projectColumns = database.prepare('PRAGMA table_info(projects)').all() as Array<{ name: string }>;
   if (!projectColumns.some((column) => column.name === 'visual_graph_json')) database.exec(`ALTER TABLE projects ADD COLUMN visual_graph_json TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}'`);
+  if (!projectColumns.some((column) => column.name === 'workflow_set_json')) database.exec('ALTER TABLE projects ADD COLUMN workflow_set_json TEXT');
   return database;
 }
