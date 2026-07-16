@@ -1,0 +1,35 @@
+import type { Platform } from '@awm/shared';
+import { KNOWLEDGE_CATALOG_VERSION, canonicalFunctionIds, type CanonicalFunctionId, type PlatformCapabilityDefinition } from './types.js';
+
+type CapabilitySeed = { implementation: string; support?: PlatformCapabilityDefinition['support']; limitation?: string; alternative?: string };
+type PlatformSeeds = Record<Platform, CapabilitySeed>;
+
+const seeds: Record<CanonicalFunctionId, PlatformSeeds> = {
+  trigger: { n8n: { implementation: 'Trigger, Webhook, or Schedule Trigger' }, make: { implementation: 'Trigger module, Webhook, or Scheduler' }, zapier: { implementation: 'Trigger step' } },
+  action: { n8n: { implementation: 'Application node or HTTP Request' }, make: { implementation: 'Application action module' }, zapier: { implementation: 'Application action step' } },
+  'data-retrieval': { n8n: { implementation: 'Get/Get Many/Search application operation' }, make: { implementation: 'Search or Get application module' }, zapier: { implementation: 'Find/Search action step' } },
+  'data-transformation': { n8n: { implementation: 'Edit Fields, Code, or Item Lists' }, make: { implementation: 'Tools and mapping functions' }, zapier: { implementation: 'Formatter by Zapier' } },
+  validation: { n8n: { implementation: 'IF or Code validation' }, make: { implementation: 'Filter plus validation route', support: 'workaround', limitation: 'Make has no universal validation node; implement explicit checks with filters or functions.' }, zapier: { implementation: 'Filter, Formatter, or Code validation', support: 'workaround', limitation: 'Validation may require multiple utility steps.' } },
+  filter: { n8n: { implementation: 'Filter node or IF with stop path' }, make: { implementation: 'Filter on a route' }, zapier: { implementation: 'Filter by Zapier' } },
+  'binary-condition': { n8n: { implementation: 'IF node' }, make: { implementation: 'Router with two filtered routes', support: 'workaround', limitation: 'Make represents a binary decision with a Router and mutually exclusive route filters.' }, zapier: { implementation: 'Paths by Zapier', limitation: 'Use Filter instead only when unmatched records should stop without actions.' } },
+  'multi-route-decision': { n8n: { implementation: 'Switch node' }, make: { implementation: 'Router with route filters' }, zapier: { implementation: 'Paths by Zapier', limitation: 'Path availability and limits depend on the Zapier plan.' } },
+  iterator: { n8n: { implementation: 'Native item execution or Loop Over Items' }, make: { implementation: 'Iterator module' }, zapier: { implementation: 'Looping by Zapier', limitation: 'Every loop iteration consumes downstream tasks.' } },
+  loop: { n8n: { implementation: 'Controlled cycle using Loop Over Items, Wait, and IF' }, make: { implementation: 'Repeater or controlled scenario cycle', support: 'workaround', limitation: 'Arbitrary route cycles are constrained; a scheduled or state-based design may be safer.' }, zapier: { implementation: 'Looping, Delay, Paths, and persisted state', support: 'workaround', limitation: 'General until-condition loops are not native and may require multiple Zaps.', alternative: 'Use a scheduled Zap with stored attempt state.' } },
+  merge: { n8n: { implementation: 'Merge node' }, make: { implementation: 'Route convergence', support: 'workaround', limitation: 'Make routers do not provide a universal wait-for-all merge primitive.' }, zapier: { implementation: 'Shared downstream redesign', support: 'workaround', limitation: 'Zapier Paths do not always reconverge into one shared step.', alternative: 'Duplicate the shared action or call a Sub-Zap.' } },
+  aggregator: { n8n: { implementation: 'Aggregate, Item Lists, or Code' }, make: { implementation: 'Array or Text Aggregator' }, zapier: { implementation: 'Formatter, Digest, Code, or Storage', support: 'workaround', limitation: 'Zapier lacks a general native array aggregator across arbitrary paths.' } },
+  delay: { n8n: { implementation: 'Wait node' }, make: { implementation: 'Sleep or scheduling tools' }, zapier: { implementation: 'Delay by Zapier' } },
+  'human-approval': { n8n: { implementation: 'Wait for webhook/form response plus messaging', support: 'workaround', limitation: 'Approval is composed from multiple nodes.' }, make: { implementation: 'Webhook or approval application route', support: 'workaround', limitation: 'Approval behavior depends on the connected application.' }, zapier: { implementation: 'Approval application, Interfaces form, or email response', support: 'workaround', limitation: 'No universal built-in approval primitive exists.' } },
+  retry: { n8n: { implementation: 'Node retry settings or controlled retry flow' }, make: { implementation: 'Error handler route with retry strategy' }, zapier: { implementation: 'Platform autoreplay or explicit stateful workaround', support: 'workaround', limitation: 'Custom retry logic is constrained and plan-dependent.' } },
+  'error-handler': { n8n: { implementation: 'Error output or Error Workflow' }, make: { implementation: 'Error handler route' }, zapier: { implementation: 'Zapier Manager alert or fallback Paths', support: 'workaround', limitation: 'Per-step error routing is less flexible than n8n or Make.' } },
+  notification: { n8n: { implementation: 'Messaging application node' }, make: { implementation: 'Messaging application module' }, zapier: { implementation: 'Messaging application action' } },
+  logging: { n8n: { implementation: 'Database, Data Store, Code, or logging service node' }, make: { implementation: 'Data Store or logging application module' }, zapier: { implementation: 'Storage, Tables, or logging application action' } },
+  'manual-review': { n8n: { implementation: 'Queue/database record plus human notification', support: 'workaround', limitation: 'Manual review requires an external queue or application.' }, make: { implementation: 'Data Store/queue plus notification', support: 'workaround', limitation: 'Manual review requires an external queue or application.' }, zapier: { implementation: 'Tables/Interfaces/approval application', support: 'workaround', limitation: 'Manual review requires an external queue or interface.' } },
+  end: { n8n: { implementation: 'Terminal branch with no outgoing connection' }, make: { implementation: 'Terminal route' }, zapier: { implementation: 'Final action or stopped path' } },
+};
+
+export const platformCapabilities: readonly PlatformCapabilityDefinition[] = canonicalFunctionIds.flatMap((canonicalFunctionId) => (['n8n', 'make', 'zapier'] as const).map((platform) => {
+  const seed = seeds[canonicalFunctionId][platform];
+  return { id: `${platform}.${canonicalFunctionId}`, platform, canonicalFunctionId, implementation: seed.implementation, support: seed.support ?? 'native', limitation: seed.limitation ?? null, alternative: seed.alternative ?? null, catalogVersion: KNOWLEDGE_CATALOG_VERSION };
+}));
+
+export function getPlatformCapability(id: string): PlatformCapabilityDefinition | undefined { return platformCapabilities.find((item) => item.id === id); }

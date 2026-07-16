@@ -1,0 +1,141 @@
+import { applicationPacks, canonicalFunctionRegistry, KNOWLEDGE_CATALOG_VERSION, ruleManuals, workflowPatterns, type CanonicalFunctionId, type OperationDefinition } from '@awm/knowledge';
+import { applicationRegistry, detectedProcessSummarySchema, type ConfidenceCalculation, type CoverageResult, type DetectedProcessFact, type DeterministicEvidence, type EvidenceType, type ProcessClarification, type ScopeSegment, type DetectedProcessSummary } from '@awm/shared';
+import { segmentScope } from './scope-segmentation.js';
+
+export const K3_RULE_VERSION = '1.1.0' as const;
+export const K3_SCORING_RULE_ID = 'weighted-evidence-v1' as const;
+export const DEFAULT_KNOWLEDGE_BUDGET = 12_000;
+const priority: Record<EvidenceType, number> = { explicit: 1, linguistic: 0.8, semantic: 0.75, pattern: 0.7, derived: 0.6, missing_information: 0.5 };
+const precedence = ['explicit', 'linguistic', 'semantic', 'pattern', 'derived', 'missing_information'];
+const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const find = (scope: string, expression: RegExp, offset = 0) => { const match = expression.exec(scope); return match?.[0] ? { text: match[0], start: offset + match.index, end: offset + match.index + match[0].length } : null; };
+const segmentFor = (segments: ScopeSegment[], position: number | null) => position === null ? undefined : segments.filter((item) => item.kind === 'clause' && item.start <= position && item.end >= position).sort((a, b) => a.end - a.start - (b.end - b.start))[0] ?? segments.find((item) => item.kind === 'step' && item.start <= position && item.end >= position);
+
+function ev(ruleId: string, category: string, type: EvidenceType, match: ReturnType<typeof find>, explanation: string, confidence: number, weight: number, relationship: DeterministicEvidence['relationship'] = 'supporting', segments: ScopeSegment[] = [], relatedEvidenceIds: string[] = [], supportingFactIds: string[] = []): DeterministicEvidence {
+  const segment = segmentFor(segments, match?.start ?? null);
+  return { id: `ev-${slug(ruleId)}-${match?.start ?? 'missing'}-${relationship}`, evidenceType: type, relationship, confidence, weight, ruleId, ruleVersion: K3_RULE_VERSION, ruleCategory: category, sourceLocation: { source: 'scope', start: match?.start ?? null, end: match?.end ?? null, ...(segment ? { segmentId: segment.id, stepId: segment.stepId } : {}) }, evidenceText: match?.text ?? `Missing information: ${explanation}`, explanation, relatedEvidenceIds, supportingFactIds };
+}
+
+export function calculateEvidenceConfidence(items: readonly DeterministicEvidence[], completenessPenalty = 0): ConfidenceCalculation {
+  const weighted = items.map((item) => ({ item, effective: item.weight * priority[item.evidenceType] }));
+  const support = weighted.filter(({ item }) => item.relationship === 'supporting').reduce((sum, { item, effective }) => sum + item.confidence * effective, 0);
+  const conflict = weighted.filter(({ item }) => item.relationship !== 'supporting').reduce((sum, { item, effective }) => sum + item.confidence * effective, 0);
+  const total = weighted.reduce((sum, { effective }) => sum + effective, 0) || 1;
+  const finalConfidence = Number((Math.max(0, Math.min(1, (support - conflict) / total)) * (1 - completenessPenalty)).toFixed(4));
+  return { scoringRuleId: K3_SCORING_RULE_ID, scoringRuleVersion: K3_RULE_VERSION, precedence, contributingEvidenceIds: items.map((item) => item.id), weightedSupport: Number(support.toFixed(4)), weightedConflict: Number(conflict.toFixed(4)), totalWeight: Number(total.toFixed(4)), completenessPenalty, formula: 'max(0,min(1,(weightedSupport-weightedConflict)/totalWeight))*(1-completenessPenalty)', finalConfidence };
+}
+
+const fact = (kind: DetectedProcessFact['kind'], value: string, explanation: string, evidence: DeterministicEvidence[], subject?: DetectedProcessFact['subject'], penalty = 0): DetectedProcessFact => ({ id: `fact-${kind}-${slug(value)}${subject?.segmentId ? `-${subject.segmentId}` : ''}`, kind, value, explanation, evidence, confidence: calculateEvidenceConfidence(evidence, penalty), ...(subject ? { subject } : {}) });
+const missing = (category: ProcessClarification['category'], key: string, question: string, reason: string, support: DeterministicEvidence[], segments: ScopeSegment[]): ProcessClarification => { const absent = ev(`clarification.${key}`, 'clarification', 'missing_information', null, reason, 1, 1, 'missing', segments, support.map((item) => item.id)); const evidence = [...support, absent]; return { id: `clarification-${key}`, category, question, reason, missingFact: key.replaceAll('-', ' '), assumptionNotMade: `K3 did not assume ${key.replaceAll('-', ' ')}.`, evidence, confidence: calculateEvidenceConfidence(evidence, 0.2) }; };
+
+const appSources = [...applicationRegistry.map((item) => ({ id: item.id, name: item.name, aliases: item.aliases, legacy: item })), ...applicationPacks.filter((pack) => !applicationRegistry.some((item) => item.id === pack.applicationId)).map((pack) => ({ id: pack.applicationId, name: pack.name, aliases: pack.aliases, legacy: null }))];
+const entityNouns = ['lead', 'contact', 'customer', 'employee', 'candidate', 'invoice', 'ticket', 'card', 'item', 'order', 'task', 'subtask', 'folder', 'attachment', 'file', 'row', 'email', 'record', 'message'];
+const verbWords = ['create', 'update', 'retrieve', 'find', 'search', 'send', 'notify', 'log', 'wait', 'follow up', 'approve', 'validate', 'upload', 'save', 'process', 'aggregate', 'merge', 'retry', 'escalate'];
+const functionRules: { id: string; regex: RegExp; explanation: string; type: EvidenceType }[] = [
+  { id: 'filter', regex: /\b(?:discard|drop|ignore|stop)\s+(?:the\s+)?(?:invalid|unmatched|nonmatching)|\bcontinue only\b/i, explanation: 'Unmatched records stop without a visible alternate action.', type: 'semantic' },
+  { id: 'merge', regex: /\bmerge\s+(?:all\s+)?(?:routes|branches|paths)|\brejoin\b/i, explanation: 'Branches explicitly rejoin into one workflow path.', type: 'explicit' },
+  { id: 'aggregator', regex: /\baggregate\b|\bcombine all .{0,30}(?:results|items)\b|\bone summary\b/i, explanation: 'Multiple item results are combined into one output.', type: 'explicit' },
+  { id: 'retry', regex: /\bretr(?:y|ies|ied)\b|\btry again\b/i, explanation: 'A failed operation is attempted again.', type: 'explicit' },
+  { id: 'error-handler', regex: /\b(?:if|when|after) (?:it |the .{0,30})?(?:fails?|errors?)\b|\bfinal failure\b/i, explanation: 'Failure has an explicit handling path.', type: 'semantic' },
+  { id: 'delay', regex: /\bwait\s+(?:for\s+)?\d+\s*(?:minutes?|hours?|days?|weeks?)\b|\bafter\s+\d+\s*(?:minutes?|hours?|days?|weeks?)\b/i, explanation: 'Execution pauses for an explicit duration.', type: 'explicit' },
+  { id: 'loop', regex: /\buntil\b|\brepeat\b|\bretry up to\b|\bacross every page\b/i, explanation: 'A bounded or conditional repetition cycle is explicit.', type: 'semantic' },
+];
+
+export class ScopeIntelligenceService {
+  public constructor(private readonly maximumCharacters = DEFAULT_KNOWLEDGE_BUDGET) {}
+  public analyze(scope: string, now = new Date()): DetectedProcessSummary {
+    const segments = segmentScope(scope); const facts: DetectedProcessFact[] = []; const clarifications: ProcessClarification[] = [];
+    const steps = segments.filter((item) => item.kind === 'step');
+    const units = steps.flatMap((step) => { const clauses = segments.filter((item) => item.kind === 'clause' && item.stepId === step.id); return clauses.length ? clauses : [step]; });
+
+    for (const app of appSources) {
+      const names = [app.name, ...app.aliases].filter((name) => name.length >= 3);
+      const match = names.map((name) => find(scope, new RegExp(`\\b${escape(name).replace(/\\s+/g, '\\s+')}\\b`, 'i'))).find(Boolean) ?? null;
+      if (match) facts.push(fact('application', app.name, `The complete application registry resolves this phrase to ${app.name}.`, [ev(`application.${app.id}`, 'application', 'explicit', match, `Exact registered name or alias resolves to ${app.id}.`, 0.99, 5, 'supporting', segments)]));
+    }
+
+    for (const unit of units) {
+      for (const noun of entityNouns) { const match = find(unit.text, new RegExp(`\\b${noun}(?:s)?\\b`, 'i'), unit.start); if (match && !facts.some((item) => item.kind === 'entity' && item.value === noun && item.subject?.stepId === unit.stepId)) facts.push(fact('entity', noun, `The ${noun} entity is explicit in this step.`, [ev(`entity.${noun}`, 'entity', 'explicit', match, 'The entity noun occurs directly in this clause.', 0.97, 4, 'supporting', segments)], { entityId: noun, segmentId: unit.id, stepId: unit.stepId })); }
+      for (const verb of verbWords) { const match = find(unit.text, new RegExp(`\\b${escape(verb).replace('\\ ', '[ -]?')}(?:s|d|ing)?\\b`, 'i'), unit.start); if (match && !facts.some((item) => item.kind === 'business_verb' && item.value === verb && item.subject?.stepId === unit.stepId)) facts.push(fact('business_verb', verb, `The step explicitly uses “${verb}”.`, [ev(`verb.${slug(verb)}`, 'business-verb', 'explicit', match, 'The business verb occurs directly in this clause.', 0.98, 4, 'supporting', segments)], { entityId: null, segmentId: unit.id, stepId: unit.stepId })); }
+
+      const collection = find(unit.text, /\b(?:for each|each|all|multiple|collection of)\s+(?:approved\s+)?(?!minute|hour|day|week|month)([a-z][a-z-]*)|\battachments\b/i, unit.start);
+      const singleMatches = [...unit.text.matchAll(/\b(?:a single|single|one)\s+(?:[a-z][a-z-]+\s+)?(contact|customer|employee|candidate|invoice|ticket|card|item|order|task|subtask|folder|attachment|file|row|email|record|message|lead)\b/gi)].map((match) => ({ text: match[0], start: unit.start + (match.index ?? 0), end: unit.start + (match.index ?? 0) + match[0].length }));
+      if (collection) {
+        const entity = (collection.text.match(/(?:for each|each|all|multiple|collection of)\s+(?:approved\s+)?([a-z][a-z-]*)/i)?.[1] ?? (collection.text.toLowerCase().includes('attachment') ? 'attachment' : 'item')).replace(/s$/, '');
+        const evidence = [ev('cardinality.collection', 'cardinality', 'linguistic', collection, `The quantifier applies to the ${entity} entity, not to scheduling frequency.`, 0.95, 3, 'supporting', segments)];
+        const conflictingSingle = singleMatches.find((item) => item.text.toLowerCase().includes(entity));
+        if (conflictingSingle) evidence.push(ev('cardinality.single-conflict', 'cardinality', 'explicit', conflictingSingle, `The same ${entity} is also described as single in this clause.`, 0.98, 5, 'conflicting', segments, evidence.map((item) => item.id)));
+        facts.push(fact('cardinality', 'collection', `Collection cardinality is scoped to ${entity}.`, evidence, { entityId: entity, segmentId: unit.id, stepId: unit.stepId }));
+        facts.push(fact('workflow_function', 'iterator', `Iterate over the detected ${entity} collection.`, [ev('function.iterator', 'workflow-function', 'derived', collection, 'Iterator is derived from entity-scoped collection evidence.', 0.92, 3, 'supporting', segments, evidence.map((item) => item.id))], { entityId: entity, segmentId: unit.id, stepId: unit.stepId }));
+        if (evidence.some((item) => item.relationship === 'conflicting')) clarifications.push(missing('cardinality', `collection-versus-single-${slug(entity)}`, `Should this step process one ${entity} or a collection?`, `The same ${entity} has conflicting cardinality in one clause.`, evidence, segments));
+      }
+      for (const single of singleMatches) { const entity = single.text.split(/\s+/).at(-1)!.replace(/s$/, ''); facts.push(fact('cardinality', 'single', `Single cardinality is scoped to ${entity}.`, [ev(`cardinality.single.${entity}`, 'cardinality', 'explicit', single, `One ${entity} does not justify iteration.`, 0.98, 5, 'supporting', segments)], { entityId: entity, segmentId: unit.id, stepId: unit.stepId })); }
+
+      for (const rule of functionRules) { const match = find(unit.text, rule.regex, unit.start); if (match) facts.push(fact('workflow_function', rule.id, rule.explanation, [ev(`function.${rule.id}`, 'workflow-function', rule.type, match, rule.explanation, rule.type === 'explicit' ? 0.98 : 0.92, rule.type === 'explicit' ? 5 : 3, 'supporting', segments)], { entityId: null, segmentId: unit.id, stepId: unit.stepId })); }
+    }
+
+    const binary = find(scope, /(?:did|has|is|was|does|can|should)\s+(?:the\s+)?(?:lead|client|customer|task|record)[^?\n]{0,80}\?|\b(?:if|whether)\b[^.\n]{0,80}\b(?:responded|replied|approved|valid|exists|found|failed)\b/i);
+    if (binary) facts.push(fact('decision', 'binary-condition', 'The predicate has two meaningful business outcomes.', [ev('decision.binary', 'decision', 'semantic', binary, 'A yes/no or matched/unmatched predicate produces two outcomes.', 0.93, 3, 'supporting', segments)]));
+    const route = find(scope, /(?:based on|depending on|route by)\s+(?:the\s+)?service(?: type)?/i); const routeMatches = [...scope.matchAll(/\b(?:cleaning|maintenance|repair|installation|consulting|design|support)\b/gi)];
+    if (route && new Set(routeMatches.map((item) => item[0].toLowerCase())).size >= 3) { facts.push(fact('decision', 'multi-route-decision', 'Service type selects among at least three named paths.', [ev('decision.service-routes', 'routing', 'semantic', route, 'Three or more named outcomes require multi-route routing.', 0.94, 3, 'supporting', segments)])); for (const name of new Set(routeMatches.map((item) => item[0]))) facts.push(fact('route', name, `Named service route: ${name}.`, [ev(`route.${slug(name)}`, 'routing', 'explicit', find(scope, new RegExp(`\\b${name}\\b`, 'i')), 'The route is explicitly named.', 0.98, 5, 'supporting', segments)])); }
+
+    const repetition = find(scope, /\b(?:repeat|repeated|until|for each|each|retry|follow[ -]?up|reminder)\b/i); if (repetition) facts.push(fact('repetition', 'repeated-work', 'The process includes repeated work.', [ev('repetition.detected', 'repetition', 'linguistic', repetition, 'The phrase is a deterministic repetition signal.', 0.9, 3, 'supporting', segments)]));
+    const patternFacts = this.detectPatterns(scope, facts, segments); facts.push(...patternFacts);
+
+    const followUp = patternFacts.find((item) => item.value === 'Follow Up Until Response');
+    if (followUp) {
+      if (!/\b(?:every|after|wait(?: for)?)\s+\d+\s*(?:minute|hour|day|week)s?\b|\b(?:daily|weekly|monthly)\b/i.test(scope)) clarifications.push(missing('timing', 'follow-up-interval', 'How long should the workflow wait between follow-up attempts?', 'Follow-up behavior is present but no interval is specified.', followUp.evidence, segments));
+      if (!/\b(?:(?:maximum|max|up to|no more than)\s+\d+|stop after\s+\d+)\s*(?:attempts?|follow[ -]?ups?|reminders?)\b/i.test(scope)) clarifications.push(missing('repetition', 'maximum-follow-up-attempts', 'What is the maximum number of follow-up attempts?', 'The repeated process has no bounded attempt limit.', followUp.evidence, segments));
+      if (!/\b(?:escalate(?:d|s)?|escalation|notify (?:an? )?(?:owner|manager|admin)|manual review|stop after)\b/i.test(scope)) clarifications.push(missing('escalation', 'escalation-policy', 'What should happen after the final unsuccessful attempt?', 'No escalation or terminal policy is specified.', followUp.evidence, segments));
+      if (!/\b(?:gmail|email|sms|slack|whatsapp|phone|call)\b/i.test(scope)) clarifications.push(missing('channel', 'communication-channel', 'Which channel should send the follow-up?', 'No communication channel is named.', followUp.evidence, segments));
+    }
+    const approvalProcess = find(scope, /\b(?:ask|request|require|needs?)\b[^.\n]{0,60}\bapproval\b|\bapproval (?:from|by)\b/i);
+    if (approvalProcess && !/\b(?:manager|director|owner|admin|supervisor|team lead|finance|hr)\b[^.\n]{0,40}\b(?:approval|approve)\b|\bapproval (?:from|by)\s+(?:the\s+)?[a-z]/i.test(scope)) clarifications.push(missing('approval', 'approval-owner', 'Who is responsible for approval?', 'An approval action exists but its owner is not named.', [ev('approval.process', 'approval', 'semantic', approvalProcess, 'This is an approval action rather than an Approved status value.', 0.94, 3, 'supporting', segments)], segments));
+    if (/\b(?:if|whether)\b/i.test(scope) && !/\b(?:otherwise|else|if no|if not|if rejected|if invalid|on failure|after the final failure)\b/i.test(scope) && !binary) clarifications.push(missing('condition', 'ambiguous-false-path', 'What should happen when the condition is false?', 'A condition exists without a visible unmatched path.', [ev('condition.present', 'decision', 'linguistic', find(scope, /\b(?:if|whether)\b/i), 'Condition language is present.', 0.85, 2, 'supporting', segments)], segments));
+    if (/\bcreate\b[^.\n]{0,40}\b(?:record|contact|lead|customer)\b|\bcreate (?:or )?update\b/i.test(scope) && !/\b(?:duplicate|existing|find|search|upsert|create or update)\b/i.test(scope)) clarifications.push(missing('duplicates', 'duplicate-handling-policy', 'How should an existing matching record be handled?', 'Record creation has no duplicate policy.', [ev('create.record', 'duplicates', 'explicit', find(scope, /\bcreate\b[^.\n]{0,40}\b(?:record|contact|lead|customer)\b/i), 'Record creation is explicit.', 0.98, 4, 'supporting', segments)], segments));
+    for (const clarification of clarifications) facts.push(fact('uncertainty', clarification.missingFact, clarification.reason, clarification.evidence, undefined, 0.2));
+
+    const coverage = this.coverage(scope, facts); const confidence = facts.filter((item) => item.kind !== 'uncertainty').reduce((sum, item, _, list) => sum + item.confidence.finalConfidence / Math.max(1, list.length), 0); const reliability = { confidence: Number(confidence.toFixed(4)), coverage: coverage.score, overall: Number((confidence * coverage.score).toFixed(4)), formula: 'confidence * coverage' as const };
+    const knowledgeContext = this.retrieve(scope, facts, patternFacts, clarifications);
+    return detectedProcessSummarySchema.parse({ version: '1.0', feature: 'k3-deterministic-scope-intelligence', shadowMode: true, segments, facts, clarifications, knowledgeContext, coverage, reliability, generatedAt: now.toISOString() });
+  }
+
+  private detectPatterns(scope: string, facts: DetectedProcessFact[], segments: ScopeSegment[]): DetectedProcessFact[] {
+    const matchers: Record<string, RegExp[]> = {
+      'follow-up-until-response': [/follow[ -]?up|reminder/i, /(?:until|unless|check)[^.\n]{0,60}(?:response|respond)|(?:response|respond)[^.\n]{0,50}(?:until|check)/i],
+      'create-or-update-record': [/\b(?:create or update|upsert)\b/i, /(?:find|search)[\s\S]{0,140}(?:create|update)/i],
+      'process-approved-collection': [/\b(?:approval|approved)\b/i, /\b(?:for each|each|all|collection|attachments)\b/i],
+      'scheduled-reminder': [/\breminder\b/i, /\b(?:daily|weekly|monthly|every\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d+\s*(?:hours?|days?|weeks?)))\b/i],
+      'deduplicate-before-create': [/(?:find|search|check)[\s\S]{0,140}(?:before|then)[\s\S]{0,80}creat/i, /\b(?:duplicate|existing|before creat)\b/i],
+      'service-based-routing': [/(?:based on|depending on|route by)\s+(?:the\s+)?service/i, /\b(?:route|path|service type)\b/i],
+    }; const output: DetectedProcessFact[] = [];
+    for (const pattern of workflowPatterns) { const matches = (matchers[pattern.id] ?? []).map((regex) => find(scope, regex)).filter((item): item is NonNullable<typeof item> => Boolean(item)); if (matches.length < 2) continue; const ordered = [...matches].sort((a, b) => a.start - b.start); const evidence = matches.map((match, index) => ev(`pattern.${pattern.id}.${index + 1}`, 'pattern', 'pattern', match, `Independent signal ${index + 1} for ${pattern.title}.`, 0.9, 2, 'supporting', segments)); const spanStart = ordered[0]!.start; const spanEnd = ordered.at(-1)!.end; const relatedFacts = facts.filter((item) => item.evidence.some((itemEvidence) => itemEvidence.sourceLocation.start !== null && itemEvidence.sourceLocation.start! <= spanEnd + 120 && itemEvidence.sourceLocation.end! >= spanStart - 120)).map((item) => item.id); evidence.push(ev(`pattern.${pattern.id}.derived`, 'pattern', 'derived', { text: scope.slice(spanStart, spanEnd), start: spanStart, end: spanEnd }, `All versioned signals for ${pattern.title} are present.`, 0.92, 2, 'supporting', segments, evidence.map((item) => item.id), relatedFacts)); output.push(fact('pattern', pattern.title, pattern.purpose, evidence)); }
+    return output;
+  }
+
+  private coverage(scope: string, facts: DetectedProcessFact[]): CoverageResult {
+    const required = new Set<string>(); const detected = new Set<string>();
+    for (const app of appSources) if ([app.name, ...app.aliases].some((name) => name.length >= 3 && new RegExp(`\\b${escape(name)}\\b`, 'i').test(scope))) required.add(`application:${app.id}`);
+    if (/\bwhen\b/i.test(scope)) required.add('trigger'); if (/\b(?:if|whether|otherwise)\b|\?/i.test(scope)) required.add('decision'); if (/\b(?:for each|each|all|single|one)\s+(?!minute|hour|day|week)/i.test(scope)) required.add('cardinality');
+    for (const rule of functionRules) if (rule.regex.test(scope)) required.add(`function:${rule.id}`); for (const verb of verbWords) if (new RegExp(`\\b${escape(verb)}`, 'i').test(scope)) required.add(`verb:${slug(verb)}`);
+    for (const item of facts) { if (item.kind === 'application') { const source = appSources.find((app) => app.name === item.value); if (source) detected.add(`application:${source.id}`); } if (item.kind === 'decision') detected.add('decision'); if (item.kind === 'cardinality') detected.add('cardinality'); if (item.kind === 'workflow_function') detected.add(`function:${item.value}`); if (item.kind === 'business_verb') detected.add(`verb:${slug(item.value)}`); }
+    if (required.has('trigger') && /\bwhen\b/i.test(scope)) detected.add('trigger'); const missingDimensions = [...required].filter((item) => !detected.has(item)); const score = Number((required.size ? (required.size - missingDimensions.length) / required.size : 1).toFixed(4));
+    return { requiredDimensions: [...required], detectedDimensions: [...detected].filter((item) => required.has(item)), missingDimensions, score, formula: '(required dimensions - missing dimensions) / required dimensions' };
+  }
+
+  private retrieve(scope: string, facts: DetectedProcessFact[], patterns: DetectedProcessFact[], clarifications: ProcessClarification[]): DetectedProcessSummary['knowledgeContext'] {
+    const candidates: DetectedProcessSummary['knowledgeContext']['retrieved'] = []; const add = (kind: 'canonical_function' | 'application' | 'operation' | 'pattern' | 'manual', id: string, reason: string, payload: unknown) => candidates.push({ kind, id, reason, estimatedCharacters: JSON.stringify(payload).length });
+    const detectedApps = facts.filter((item) => item.kind === 'application').map((item) => item.value);
+    for (const name of detectedApps) { const pack = applicationPacks.find((item) => item.name === name); const legacy = applicationRegistry.find((item) => item.name === name); if (pack) add('application', pack.applicationId, 'Exact application evidence selected this K2 pack.', { applicationId: pack.applicationId, name: pack.name, category: pack.category }); else if (legacy) add('application', legacy.id, 'Exact application evidence selected this legacy registry adapter; no K2 operation pack exists.', legacy); }
+    const tokens = new Set((scope.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((word) => !['the', 'and', 'then', 'when', 'with', 'into', 'from'].includes(word)));
+    for (const pack of applicationPacks.filter((item) => detectedApps.includes(item.name))) for (const operation of pack.operations) { const searchable = `${operation.title} ${operation.purpose} ${operation.operationId}`.toLowerCase(); const score = [...tokens].filter((token) => searchable.includes(token)).length; if (score >= 2 || this.operationVerbMatch(scope, operation)) add('operation', `${pack.applicationId}.${operation.operationId}`, `Deterministic verb/entity matching selected this operation (${score} shared terms).`, operation); }
+    const canonicalIds = new Set<CanonicalFunctionId>(); const functionMap: Record<string, CanonicalFunctionId> = { filter: 'filter', iterator: 'iterator', loop: 'loop', merge: 'merge', aggregator: 'aggregator', retry: 'retry', 'error-handler': 'error-handler', delay: 'delay' };
+    for (const item of facts) { if (item.kind === 'decision' && item.value === 'binary-condition') canonicalIds.add('binary-condition'); if (item.kind === 'decision' && item.value === 'multi-route-decision') canonicalIds.add('multi-route-decision'); if (item.kind === 'workflow_function' && functionMap[item.value]) canonicalIds.add(functionMap[item.value]!); }
+    for (const definition of canonicalFunctionRegistry.filter((item) => canonicalIds.has(item.id))) add('canonical_function', definition.id, 'Selected by a first-class detected workflow function.', definition);
+    for (const patternFact of patterns) { const definition = workflowPatterns.find((item) => item.title === patternFact.value); if (definition) add('pattern', definition.id, 'All deterministic pattern signals were present.', definition); }
+    const manuals = new Set<string>(); if (canonicalIds.has('iterator')) manuals.add('iterator-manual'); if (canonicalIds.has('binary-condition')) manuals.add('binary-condition-manual'); if (canonicalIds.has('multi-route-decision')) manuals.add('multi-route-manual'); if (clarifications.length) manuals.add('clarification-manual'); for (const manual of ruleManuals.filter((item) => manuals.has(item.id))) add('manual', manual.id, 'Selected for a detected semantic fact or open clarification.', manual);
+    let used = 0; const retrieved = []; let truncated = false; for (const item of candidates) { if (used + item.estimatedCharacters > this.maximumCharacters) { truncated = true; continue; } retrieved.push(item); used += item.estimatedCharacters; } return { catalogVersion: KNOWLEDGE_CATALOG_VERSION, retrieved, estimatedCharacters: used, maximumCharacters: this.maximumCharacters, truncated };
+  }
+  private operationVerbMatch(scope: string, operation: OperationDefinition): boolean { const title = operation.title.toLowerCase(); const appNamed = appSources.find((app) => app.id === operation.applicationId)?.name ?? operation.applicationId; if (!scope.toLowerCase().includes(appNamed.toLowerCase()) && !applicationPacks.find((pack) => pack.applicationId === operation.applicationId)?.aliases.some((alias) => scope.toLowerCase().includes(alias))) return false; const verbs = title.match(/^(find|search|create|update|retrieve|send|upload|add|append|lookup|receive)/)?.[1]; return Boolean(verbs && new RegExp(`\\b${verbs}(?:s|d|ing)?\\b`, 'i').test(scope)); }
+}
