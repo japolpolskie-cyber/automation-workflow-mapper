@@ -6,6 +6,7 @@ import { NewProjectDialog } from './components/NewProjectDialog';
 import { PlatformMark } from './components/PlatformMark';
 import { ScopeWorkspace } from './components/ScopeWorkspace';
 import { WorkflowEditor } from './features/editor/WorkflowEditor';
+import { ThemeSelector } from './theme/ThemeSelector';
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -39,7 +40,7 @@ export default function App() {
       <div className="sidebar-bottom"><a className="nav-item" href="#help"><CircleHelp size={18} /> Help & resources</a><a className="nav-item" href="#settings"><Settings size={18} /> Settings</a><div className="account"><span>JP</span><div><strong>Workspace owner</strong><small>Local workspace</small></div><ChevronDown size={16} /></div></div>
     </aside>
     <main>
-      <header className="topbar sticky-global-header"><div className="global-search"><Search size={18} /><input aria-label="Search everything" placeholder="Search projects and workflows…" /><kbd>⌘ K</kbd></div><button className="icon-button" aria-label="Notifications"><Bell size={19} /></button><span className="status-dot">System ready</span></header>
+      <header className="topbar sticky-global-header"><div className="global-search"><Search size={18} /><input aria-label="Search everything" placeholder="Search projects and workflows…" /><kbd>⌘ K</kbd></div><ThemeSelector compact /><button className="icon-button" aria-label="Notifications"><Bell size={19} /></button><span className="status-dot">System ready</span></header>
       <div className="content">
         <section className="hero"><div><p className="eyebrow"><Sparkles size={14} /> Automation architecture workspace</p><h1>Turn requirements into<br /><em>clear workflow plans.</em></h1><p>Map, validate, and document automations before you build them in Zapier, Make, or n8n.</p></div><button className="button primary hero-action" onClick={() => setDialogOpen(true)}><Plus size={18} /> Create workflow</button></section>
         <section className="stats" aria-label="Workspace summary"><article><span>Projects</span><strong>{projects.length}</strong><small>in this workspace</small></article><article><span>Draft workflows</span><strong>{projects.filter((item) => item.status === 'draft').length}</strong><small>ready to continue</small></article><article><span>Platforms</span><strong>{new Set(projects.map((item) => item.platform)).size || 3}</strong><small>Zapier · Make · n8n</small></article><article className="insight"><Sparkles size={18} /><div><span>Architecture tip</span><small>Define the trigger and failure path early.</small></div></article></section>

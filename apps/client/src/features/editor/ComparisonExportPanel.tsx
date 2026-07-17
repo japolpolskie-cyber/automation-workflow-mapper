@@ -6,6 +6,8 @@ import { jsPDF } from 'jspdf';
 import { CheckCircle2, Download, FileCode2, FileText, Image, LoaderCircle, Scale, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+export const EXPORT_THEME_CLASS = 'kaizen-export-surface';
+
 const safeName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workflow';
 function saveData(data: string, filename: string, mimeType: string) {
   const link = document.createElement('a');
@@ -56,8 +58,11 @@ export function ComparisonExportPanel({ workflow, workflowSet, selectedWorkflowI
   };
   const exportVisual = async (format: 'png' | 'svg' | 'pdf') => {
     setWorking(format); setError('');
+    let exportElement: HTMLElement | null = null;
     try {
       const surface = exportSurface();
+      exportElement = surface.element;
+      exportElement.classList.add(EXPORT_THEME_CLASS);
       const options = {
         backgroundColor: '#f4f7f5',
         width: surface.width,
@@ -79,7 +84,7 @@ export function ComparisonExportPanel({ workflow, workflowSet, selectedWorkflowI
         }
       }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Export failed.'); }
-    finally { setWorking(''); }
+    finally { exportElement?.classList.remove(EXPORT_THEME_CLASS); setWorking(''); }
   };
 
   return <div className="assistant-backdrop"><section className="compare-export-panel">
