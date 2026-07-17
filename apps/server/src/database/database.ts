@@ -1,13 +1,14 @@
-import { mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 export type Database = DatabaseSync;
 
 export function createDatabase(databasePath: string): Database {
-  if (databasePath !== ':memory:') mkdirSync(dirname(resolve(databasePath)), { recursive: true });
+  if (databasePath !== ":memory:")
+    mkdirSync(dirname(resolve(databasePath)), { recursive: true });
   const database = new DatabaseSync(databasePath);
-  database.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+  database.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
   database.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
@@ -44,9 +45,27 @@ export function createDatabase(databasePath: string): Database {
       metadata_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS custom_workflow_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      snapshot_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_custom_workflow_templates_updated_at
+      ON custom_workflow_templates(updated_at DESC);
   `);
-  const projectColumns = database.prepare('PRAGMA table_info(projects)').all() as Array<{ name: string }>;
-  if (!projectColumns.some((column) => column.name === 'visual_graph_json')) database.exec(`ALTER TABLE projects ADD COLUMN visual_graph_json TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}'`);
-  if (!projectColumns.some((column) => column.name === 'workflow_set_json')) database.exec('ALTER TABLE projects ADD COLUMN workflow_set_json TEXT');
+  const projectColumns = database
+    .prepare("PRAGMA table_info(projects)")
+    .all() as Array<{ name: string }>;
+  if (!projectColumns.some((column) => column.name === "visual_graph_json"))
+    database.exec(
+      `ALTER TABLE projects ADD COLUMN visual_graph_json TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}'`,
+    );
+  if (!projectColumns.some((column) => column.name === "workflow_set_json"))
+    database.exec("ALTER TABLE projects ADD COLUMN workflow_set_json TEXT");
   return database;
 }
