@@ -64,6 +64,30 @@ describe('K3 deterministic scope intelligence', () => {
     ]));
   });
 
+  it.each([
+    ['Request human approval before processing the invoice.'],
+    ['The finance manager must approve or reject the purchase request.'],
+    ['When an onboarding task is approved, create the customer folder.'],
+  ])('recognizes explicit approval workflow language without changing the compiler', (scope) => {
+    const result = run(scope);
+    expect(result.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_function', value: 'human-approval' }),
+    ]));
+  });
+
+  it.each([
+    ['If the lead is qualified, update it; otherwise notify the owner.'],
+    ['Did the client reply? If yes continue; if no stop.'],
+    ['If the operation succeeded continue, otherwise handle the failure.'],
+    ['If the request status is approved continue; else stop.'],
+  ])('recognizes explicit two-outcome business decisions', (scope) => {
+    const result = run(scope);
+    expect(result.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'decision', value: 'binary-condition' }),
+      expect.objectContaining({ kind: 'workflow_function', value: 'binary-condition' }),
+    ]));
+  });
+
   it('keeps conflicting cardinality evidence visible and requests clarification', () => {
     const result = run('Process each attachment and a single attachment.');
     const cardinality = result.facts.find((fact) => fact.kind === 'cardinality')!;
