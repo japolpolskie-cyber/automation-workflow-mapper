@@ -112,8 +112,10 @@ export class StageCGroundingService {
     const node = plan.nodes.find((item) => item.id === nodeId)!;
     const incoming = plan.edges.filter((edge) => edge.target === nodeId);
     const iteratorItem = incoming.some((edge) => edge.label === 'ITEM' && plan.nodes.find((item) => item.id === edge.source)?.canonicalFunctionId === 'iterator');
-    const inputCardinality = node.canonicalFunctionId === 'trigger' ? 'none' : node.canonicalFunctionId === 'iterator' ? 'collection' : iteratorItem ? 'single' : node.canonicalFunctionId === 'aggregator' ? 'collection' : 'single';
-    const expectedOutputCardinality = node.canonicalFunctionId === 'end' ? 'none' : node.canonicalFunctionId === 'aggregator' ? 'collection' : node.canonicalFunctionId === 'data-retrieval' ? 'unknown' : 'single';
+    const inputCardinality = node.canonicalFunctionId === 'trigger' ? 'none' : node.canonicalFunctionId === 'end' ? 'unknown' : node.canonicalFunctionId === 'iterator' ? 'collection' : iteratorItem ? 'single' : node.canonicalFunctionId === 'aggregator' ? 'collection' : 'single';
+    const aggregatedResultFeedsAction = node.canonicalFunctionId === 'aggregator'
+      && plan.edges.some((edge) => edge.source === nodeId && edge.label === 'USE AGGREGATED RESULT');
+    const expectedOutputCardinality = node.canonicalFunctionId === 'end' ? 'none' : node.canonicalFunctionId === 'aggregator' ? (aggregatedResultFeedsAction ? 'single' : 'collection') : node.canonicalFunctionId === 'data-retrieval' ? 'unknown' : 'single';
     const relevantFacts = context.facts.filter((fact) => node.factIds.includes(fact.id)).map((fact) => ({ id: fact.id, kind: fact.kind, value: fact.value, entityId: fact.entityId }));
     const candidates = buildStageCCandidates(node.canonicalFunctionId, context.platform);
     return stageCNodeGroundingInputSchema.parse({

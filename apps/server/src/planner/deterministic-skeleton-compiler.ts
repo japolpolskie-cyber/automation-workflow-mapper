@@ -74,7 +74,7 @@ export class DeterministicSkeletonCompiler {
     if (/follow[ -]?up[\s\S]{0,80}until (?:response|(?:the )?(?:lead |client )?respond)/.test(scope)) patternIds.add('follow-up-until-response');
     if (/create (?:it |the \w+ )?when absent|create or update|update (?:it |the \w+ )?when present/.test(scope)) patternIds.add('create-or-update-record');
     if (/(?:three|3) service types|route to [^.;]+, [^.;]+, or /.test(scope)) patternIds.add('service-based-routing');
-    if (/approv\w*[\s\S]{0,80}(?:collection|each|every|all )/.test(scope)) patternIds.add('process-approved-collection');
+    if (/(?:(?:after|upon|once|request|human)\s+approv\w*|(?:manager|human|reviewer)\s+approv\w*|approval)[\s\S]{0,80}(?:collection|attachments|each|every|all )/.test(scope)) patternIds.add('process-approved-collection');
     if (/(?:each|every|all )\s*(?:attachment|file|entry|item)/.test(scope)) patternIds.add('collection-processing');
     if (/remind|reminder/.test(scope) && /daily|weekly|monthly|every \d+|schedule/.test(scope)) patternIds.add('scheduled-reminder');
     const blockers = context.clarifications.map((item) => item.id);
@@ -91,7 +91,7 @@ export class DeterministicSkeletonCompiler {
       apply(patternIds.has('create-or-update-record') ? 'create-or-update-record' : 'deduplicate-before-create', () => this.createOrUpdate(graph, tail, blockers));
     }
     if (patternIds.has('process-approved-collection')) apply('process-approved-collection', () => this.approvedCollection(graph, tail, blockers));
-    else if (patternIds.has('collection-processing')) apply('collection-processing', () => this.collectionProcessing(graph, tail, blockers));
+    else if (patternIds.has('collection-processing')) apply('collection-processing', () => this.collectionProcessing(graph, tail, blockers, context));
     if (patternIds.has('scheduled-reminder')) apply('scheduled-reminder', () => this.scheduledReminder(graph, tail, blockers));
     if (patternIds.has('service-based-routing')) apply('service-based-routing', () => this.serviceRouting(graph, tail, blockers, context));
 
@@ -184,16 +184,43 @@ export class DeterministicSkeletonCompiler {
     return notify;
   }
 
-  private collectionProcessing(graph: GraphBuilder, previous: Node, blockers: string[]): Node {
+  private collectionProcessing(graph: GraphBuilder, previous: Node, blockers: string[], context: PlannerContext): Node {
     const pattern = ['collection-processing'];
+    const functions = new Set(context.facts.filter((fact) => fact.kind === 'workflow_function').map((fact) => fact.value));
+    let entry = previous;
+    if (functions.has('data-retrieval')) {
+      const retrieval = graph.node('data-retrieval', 'Retrieve collection for processing', pattern);
+      graph.edge(entry, retrieval, 'RETRIEVE COLLECTION', null, 'pattern.collection.retrieve');
+      entry = retrieval;
+    }
     const iterator = graph.node('iterator', 'Iterate collection', pattern, blockers.filter((id) => /cardinality/.test(id)));
-    graph.edge(previous, iterator, 'ITERATE', null, 'pattern.collection.entry');
-    const item = graph.node('action', 'Process current item', pattern);
-    graph.edge(iterator, item, 'ITEM', 'A collection item is available.', 'pattern.collection.item');
-    graph.edge(item, iterator, 'NEXT ITEM', 'More items remain.', 'pattern.collection.next');
+    graph.edge(entry, iterator, 'ITERATE', null, 'pattern.collection.entry');
+    let itemTail = graph.node('action', 'Process current item', pattern);
+    graph.edge(iterator, itemTail, 'ITEM', 'A collection item is available.', 'pattern.collection.item');
+    if (functions.has('delay')) {
+      const delay = graph.node('delay', 'Wait for the specified item timing', pattern, blockers.filter((id) => /timing|interval/.test(id)));
+      graph.edge(itemTail, delay, 'WAIT', null, 'pattern.collection.delay');
+      itemTail = delay;
+    }
+    if (functions.has('notification')) {
+      const notification = graph.node('notification', 'Send notification for current item', pattern);
+      graph.edge(itemTail, notification, 'NOTIFY', null, 'pattern.collection.notify');
+      itemTail = notification;
+    }
+    if (functions.has('logging')) {
+      const logging = graph.node('logging', 'Log current item result', pattern);
+      graph.edge(itemTail, logging, 'LOG', null, 'pattern.collection.log');
+      itemTail = logging;
+    }
+    graph.edge(itemTail, iterator, 'NEXT ITEM', 'More items remain.', 'pattern.collection.next');
     const aggregate = graph.node('aggregator', 'Aggregate item results', pattern);
     graph.edge(iterator, aggregate, 'ITERATION COMPLETE', 'No collection items remain.', 'pattern.collection.complete');
-    return aggregate;
+    const aggregatorPosition = this.firstEvidencePosition(context, 'aggregator');
+    const actionAfterAggregator = context.facts.some((fact) => fact.kind === 'workflow_function' && fact.value === 'action' && this.factPosition(context, fact) > aggregatorPosition);
+    if (!actionAfterAggregator) return aggregate;
+    const action = graph.node('action', 'Perform action with aggregated results', pattern);
+    graph.edge(aggregate, action, 'USE AGGREGATED RESULT', null, 'pattern.collection.aggregated-action');
+    return action;
   }
 
   private serviceRouting(graph: GraphBuilder, previous: Node, blockers: string[], context: PlannerContext): Node {
@@ -219,14 +246,21 @@ export class DeterministicSkeletonCompiler {
 
   private compileDetectedFunctions(graph: GraphBuilder, previous: Node, blockers: string[], context: PlannerContext): Node {
     let tail = previous;
-    const functions = context.facts.filter((fact) => fact.kind === 'workflow_function').map((fact) => fact.value);
-    for (const functionId of [...new Set(functions)]) {
+    const functionFacts = context.facts
+      .filter((fact) => fact.kind === 'workflow_function')
+      .sort((left, right) => this.factPosition(context, left) - this.factPosition(context, right));
+    const functions = functionFacts.map((fact) => fact.value);
+    if (functions.includes('iterator')) return this.collectionProcessing(graph, tail, blockers, context);
+    const seenControls = new Set<string>();
+    for (const functionId of functions) {
       if (functionId === 'trigger' || functionId === 'end') continue;
+      if (!['action', 'notification', 'logging', 'data-retrieval', 'delay'].includes(functionId)) {
+        if (seenControls.has(functionId)) continue;
+        seenControls.add(functionId);
+      }
       if (functionId === 'loop') {
         if (/\bretry\b/i.test(context.objective) && !/follow[ -]?up|remind|until (?:response|(?:the )?(?:lead |client )?respond)/i.test(context.objective)) continue;
         tail = this.followUp(graph, tail, blockers);
-      } else if (functionId === 'iterator') {
-        tail = this.collectionProcessing(graph, tail, blockers);
       } else if (functionId === 'multi-route-decision') {
         tail = this.serviceRouting(graph, tail, blockers, context);
       } else if (functionId === 'retry') {
@@ -249,7 +283,10 @@ export class DeterministicSkeletonCompiler {
         graph.merges.push({ nodeId: merge.id, incomingBranches: [yesIn.id, noIn.id], mergeStrategy: 'first_available', continuationEdgeId: continuationEdge.id });
         tail = continuation;
       } else {
-        const next = graph.node(functionId, `Perform ${functionId.replaceAll('-', ' ')}`, [], blockers);
+        const title = functionId === 'delay' ? 'Wait for the specified duration'
+          : functionId === 'aggregator' ? 'Aggregate collection results'
+            : `Perform ${functionId.replaceAll('-', ' ')}`;
+        const next = graph.node(functionId, title, [], blockers);
         graph.edge(tail, next);
         tail = next;
       }
@@ -260,6 +297,17 @@ export class DeterministicSkeletonCompiler {
       return action;
     }
     return tail;
+  }
+
+  private factPosition(context: PlannerContext, fact: PlannerContext['facts'][number]): number {
+    return Math.min(...fact.evidenceIds.map((id) => context.evidence.find((item) => item.id === id)?.sourceStart ?? Number.MAX_SAFE_INTEGER));
+  }
+
+  private firstEvidencePosition(context: PlannerContext, functionId: string): number {
+    const positions = context.facts
+      .filter((fact) => fact.kind === 'workflow_function' && fact.value === functionId)
+      .map((fact) => this.factPosition(context, fact));
+    return positions.length ? Math.min(...positions) : Number.MAX_SAFE_INTEGER;
   }
 
   private technicalRetry(graph: GraphBuilder, previous: Node, blockers: string[], objective: string): Node {

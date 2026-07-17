@@ -139,6 +139,7 @@ export class StageDGroundingService {
     if (plan.merges.some((item) => item.nodeId === edge.target)) return 'merge-input';
     if (plan.merges.some((item) => item.continuationEdgeId === edgeId)) return 'merge-continuation';
     if (edge.label === 'ITEM') return 'current-item';
+    if (edge.label === 'NEXT ITEM') return 'loop-back';
     if (edge.label === 'DONE') return 'completion';
     if (/retry/i.test(edge.label)) return 'retry';
     if (/exhaust/i.test(edge.label)) return 'retry-exhausted';
@@ -199,6 +200,7 @@ export class StageDGroundingService {
 
   private cardinalityCompatible(edge: GroundedEdge): boolean {
     if (edge.groundingMethod === 'unresolved' || edge.sourceCardinality === 'unknown' || edge.targetCardinality === 'unknown' || edge.sourceCardinality === 'none') return true;
+    if (/next item/i.test(edge.displayLabel)) return edge.targetCardinality === 'collection';
     if (edge.edgeType === 'collection-input') return edge.sourceCardinality === 'collection' && edge.targetCardinality === 'collection';
     if (edge.edgeType === 'current-item') return edge.targetCardinality === 'single';
     if (edge.edgeType === 'item-result') return true;

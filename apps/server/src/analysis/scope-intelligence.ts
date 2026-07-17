@@ -1,5 +1,6 @@
 import { applicationPacks, canonicalFunctionRegistry, KNOWLEDGE_CATALOG_VERSION, ruleManuals, workflowPatterns, type CanonicalFunctionId, type OperationDefinition } from '@awm/knowledge';
 import { applicationRegistry, detectedProcessSummarySchema, type ConfidenceCalculation, type CoverageResult, type DetectedProcessFact, type DeterministicEvidence, type EvidenceType, type ProcessClarification, type ScopeSegment, type DetectedProcessSummary } from '@awm/shared';
+import { normalizeBusinessLanguage } from './scope-language-normalizer.js';
 import { segmentScope } from './scope-segmentation.js';
 
 export const K3_RULE_VERSION = '1.1.0' as const;
@@ -33,9 +34,9 @@ const appSources = [...applicationRegistry.map((item) => ({ id: item.id, name: i
 const entityNouns = ['lead', 'contact', 'customer', 'employee', 'candidate', 'invoice', 'ticket', 'card', 'item', 'order', 'task', 'subtask', 'folder', 'attachment', 'file', 'row', 'email', 'record', 'message'];
 const verbWords = ['create', 'update', 'retrieve', 'find', 'search', 'send', 'notify', 'log', 'wait', 'follow up', 'approve', 'validate', 'upload', 'save', 'process', 'aggregate', 'merge', 'retry', 'escalate'];
 const functionRules: { id: string; regex: RegExp; explanation: string; type: EvidenceType }[] = [
-  { id: 'data-retrieval', regex: /\b(?:retrieve|fetch|load|get|find|search|look\s*up|lookup|query|read)\b[^,.;]{0,60}\b(?:details?|data|metadata|record|records|row|rows|entry|entries|item|items|task|tasks|card|cards|customer|customers|attachment|attachments|file|files|email|emails|message|messages|appointment|appointments|event|events|folder|folders|contact|contacts|lead|leads|invoice|invoices|conflict|conflicts)\b/i, explanation: 'Existing data is explicitly retrieved or searched for downstream work.', type: 'explicit' },
+  { id: 'data-retrieval', regex: /\b(?:retrieve|fetch|load|get|find|search|look\s*up|lookup|query|read)\b[^,.;]{0,60}\b(?:details?|data|metadata|record|records|row|rows|entry|entries|item|items|task|tasks|card|cards|customer|customers|attachment|attachments|file|files|email|emails|message|messages|appointment|appointments|event|events|folder|folders|contact|contacts|lead|leads|invoice|invoices|conflict|conflicts|post|posts)\b/i, explanation: 'Existing data is explicitly retrieved or searched for downstream work.', type: 'explicit' },
   { id: 'notification', regex: /\b(?:notify|alert|remind|inform|message|email)\b(?:\s+(?:the|a|an))?\s+(?:slack|team|owner|manager|admin|administrator|hr|finance|requester|customer|client|lead|user|channel|recipient)\b|\bsend\b[^,.;]{0,50}\b(?:notification|alert|notice|reminder|confirmation|invitation|summary|rejection)\b/i, explanation: 'A person or channel is explicitly informed about an event or required action.', type: 'explicit' },
-  { id: 'logging', regex: /\b(?:log|record|audit|track)\b[^,.;]{0,60}\b(?:result|results|outcome|outcomes|completion|event|events|execution|activity|activities|entry|entries|item|items|record|records|row|rows|payment|invoice|attachment|attachments)\b|\b(?:add|append|write)\b[^,.;]{0,40}\b(?:row|rows|entry|entries)\b[^,.;]{0,40}\b(?:google sheets|spreadsheet|sheet|table|log)\b/i, explanation: 'Execution evidence or a business result is explicitly recorded for reporting or audit.', type: 'explicit' },
+  { id: 'logging', regex: /\b(?:log|record|audit|track)\b[^,.;]{0,60}\b(?:result|results|outcome|outcomes|completion|event|events|execution|activity|activities|entry|entries|item|items|record|records|row|rows|payment|invoice|attachment|attachments)\b|\blog\s+it\s+in\s+google sheets\b|\b(?:add|append|write)\b[^,.;]{0,40}\b(?:row|rows|entry|entries)\b[^,.;]{0,40}\b(?:google sheets|spreadsheet|sheet|table|log)\b/i, explanation: 'Execution evidence or a business result is explicitly recorded for reporting or audit.', type: 'explicit' },
   { id: 'validation', regex: /\b(?:validate|verify|check|ensure|confirm)\b(?:\s+(?:the|a|an|that))?\s+(?:email|address|inventory|stock|data|input|fields?|format|amount|value|record|registration|invoice|request|payload|availability|required fields?)\b/i, explanation: 'Input data or a required business value is explicitly checked before continuing.', type: 'explicit' },
   { id: 'human-approval', regex: /\b(?:request|require|seek|obtain|await|needs?)\s+(?:(?:a|an|the)\s+)?(?:(?:human|manager|finance|hr|owner|supervisor)\s+)?approval\b|\b(?:manager|finance|hr|owner|supervisor|reviewer)\b[^,.;]{0,40}\b(?:approve|reject|review)\b|\bwhen\b[^,.;]{0,80}\b(?:is|was|becomes?|gets?)\s+approved\b/i, explanation: 'A person or role must approve or reject the work before the workflow continues.', type: 'explicit' },
   { id: 'action', regex: /\b(?:create|update|upload|fulfill|schedule|archive|move|mark|save|send)\b[^,.;]{0,70}\b(?:project|task|subtask|folder|file|record|lead|contact|customer|order|event|email|message|newsletter|invitation|confirmation|summary|status|row)\b/i, explanation: 'An external application record, file, message, or business object is explicitly changed or created.', type: 'explicit' },
@@ -65,10 +66,12 @@ export class ScopeIntelligenceService {
       for (const noun of entityNouns) { const match = find(unit.text, new RegExp(`\\b${noun}(?:s)?\\b`, 'i'), unit.start); if (match && !facts.some((item) => item.kind === 'entity' && item.value === noun && item.subject?.stepId === unit.stepId)) facts.push(fact('entity', noun, `The ${noun} entity is explicit in this step.`, [ev(`entity.${noun}`, 'entity', 'explicit', match, 'The entity noun occurs directly in this clause.', 0.97, 4, 'supporting', segments)], { entityId: noun, segmentId: unit.id, stepId: unit.stepId })); }
       for (const verb of verbWords) { const match = find(unit.text, new RegExp(`\\b${escape(verb).replace('\\ ', '[ -]?')}(?:s|d|ing)?\\b`, 'i'), unit.start); if (match && !facts.some((item) => item.kind === 'business_verb' && item.value === verb && item.subject?.stepId === unit.stepId)) facts.push(fact('business_verb', verb, `The step explicitly uses “${verb}”.`, [ev(`verb.${slug(verb)}`, 'business-verb', 'explicit', match, 'The business verb occurs directly in this clause.', 0.98, 4, 'supporting', segments)], { entityId: null, segmentId: unit.id, stepId: unit.stepId })); }
 
-      const collection = find(unit.text, /\b(?:for each|each|all|multiple|collection of)\s+(?:approved\s+)?(?!minute|hour|day|week|month)([a-z][a-z-]*)|\battachments\b/i, unit.start);
+      const collection = find(unit.text, /\b(?:for each|each|every|all|multiple|collection of)\s+(?:approved\s+)?(?!minute|hour|day|week|month)([a-z][a-z-]*)|\battachments\b|\baggregate\s+(?:the\s+)?(?:entries|items|rows|records|links)\b/i, unit.start);
       const singleMatches = [...unit.text.matchAll(/\b(?:a single|single|one)\s+(?:[a-z][a-z-]+\s+)?(contact|customer|employee|candidate|invoice|ticket|card|item|order|task|subtask|folder|attachment|file|row|email|record|message|lead)\b/gi)].map((match) => ({ text: match[0], start: unit.start + (match.index ?? 0), end: unit.start + (match.index ?? 0) + match[0].length }));
       if (collection) {
-        const entity = (collection.text.match(/(?:for each|each|all|multiple|collection of)\s+(?:approved\s+)?([a-z][a-z-]*)/i)?.[1] ?? (collection.text.toLowerCase().includes('attachment') ? 'attachment' : 'item')).replace(/s$/, '');
+        const entity = (collection.text.match(/(?:for each|each|every|all|multiple|collection of)\s+(?:approved\s+)?([a-z][a-z-]*)/i)?.[1]
+          ?? collection.text.match(/aggregate\s+(?:the\s+)?([a-z][a-z-]*)/i)?.[1]
+          ?? (collection.text.toLowerCase().includes('attachment') ? 'attachment' : 'item')).replace(/s$/, '');
         const evidence = [ev('cardinality.collection', 'cardinality', 'linguistic', collection, `The quantifier applies to the ${entity} entity, not to scheduling frequency.`, 0.95, 3, 'supporting', segments)];
         const conflictingSingle = singleMatches.find((item) => item.text.toLowerCase().includes(entity));
         if (conflictingSingle) evidence.push(ev('cardinality.single-conflict', 'cardinality', 'explicit', conflictingSingle, `The same ${entity} is also described as single in this clause.`, 0.98, 5, 'conflicting', segments, evidence.map((item) => item.id)));
@@ -86,6 +89,47 @@ export class ScopeIntelligenceService {
           const detected = fact('workflow_function', rule.id, rule.explanation, [ev(`function.${rule.id}`, 'workflow-function', rule.type, match, rule.explanation, rule.type === 'explicit' ? 0.98 : 0.92, rule.type === 'explicit' ? 5 : 3, 'supporting', segments)], { entityId: null, segmentId: unit.id, stepId: unit.stepId });
           if (rule.id === 'action') detected.id = `${detected.id}-${match.start}`;
           facts.push(detected);
+        }
+      }
+    }
+
+    const normalizedLanguage = normalizeBusinessLanguage(scope);
+    const addNormalizedFunction = (value: string, concept: (typeof normalizedLanguage.concepts)[number], explanation: string, entityId: string | null = null) => {
+      const segment = segmentFor(segments, concept.start);
+      if (facts.some((item) => item.kind === 'workflow_function' && item.value === value && (!segment || item.subject?.stepId === segment.stepId))) return;
+      const evidence = ev(concept.ruleId, 'language-normalization', 'linguistic', { text: concept.phrase, start: concept.start, end: concept.end }, `${concept.explanation} Original wording is retained as evidence.`, 0.94, 3, 'supporting', segments);
+      facts.push(fact('workflow_function', value, explanation, [evidence], segment ? { entityId, segmentId: segment.id, stepId: segment.stepId } : undefined));
+    };
+    for (const concept of normalizedLanguage.concepts) {
+      if (concept.concept === 'human-approval') addNormalizedFunction('human-approval', concept, 'A deterministic approval synonym identifies a human approval boundary.');
+      if (concept.concept === 'notification') addNormalizedFunction('notification', concept, 'A deterministic communication synonym identifies a notification operation.');
+      if (concept.concept === 'validation') addNormalizedFunction('validation', concept, 'A deterministic data-check expression identifies validation.');
+      if (concept.concept === 'delay') addNormalizedFunction('delay', concept, 'A deterministic temporal expression identifies a delay boundary.');
+      if (concept.concept === 'aggregator') addNormalizedFunction('aggregator', concept, 'An explicit many-to-one expression identifies aggregation.');
+      if (concept.concept === 'collection') {
+        const entity = concept.phrase.match(/\b(?:for each|each|every|all)\s+(?:the\s+)?([a-z][a-z-]*)/i)?.[1]?.replace(/s$/, '') ?? 'item';
+        const segment = segmentFor(segments, concept.start);
+        const alreadyScoped = facts.some((item) => item.kind === 'cardinality' && item.value === 'collection' && item.subject?.entityId === entity && (!segment || item.subject?.stepId === segment.stepId));
+        if (!alreadyScoped) {
+          const evidence = ev(concept.ruleId, 'language-normalization', 'linguistic', { text: concept.phrase, start: concept.start, end: concept.end }, `${concept.explanation} Collection cardinality is scoped to ${entity}.`, 0.95, 3, 'supporting', segments);
+          facts.push(fact('cardinality', 'collection', `Collection cardinality is scoped to ${entity}.`, [evidence], segment ? { entityId: entity, segmentId: segment.id, stepId: segment.stepId } : undefined));
+        }
+      }
+      if (concept.concept === 'binary-condition') {
+        if (!facts.some((item) => item.kind === 'decision' && item.value === 'binary-condition')) {
+          const evidence = ev(concept.ruleId, 'language-normalization', 'semantic', { text: concept.phrase, start: concept.start, end: concept.end }, concept.explanation, 0.93, 3, 'supporting', segments);
+          facts.push(fact('decision', 'binary-condition', 'The normalized expression has exactly two stated outcomes.', [evidence]));
+        }
+        addNormalizedFunction('binary-condition', concept, 'Compile the explicit two-outcome expression as a binary condition.');
+      }
+      if (concept.concept === 'multi-route-decision' && concept.routes.length >= 3) {
+        const evidence = ev(concept.ruleId, 'language-normalization', 'semantic', { text: concept.phrase, start: concept.start, end: concept.end }, `${concept.explanation} ${concept.routes.length} routes are explicitly named.`, 0.94, 3, 'supporting', segments);
+        if (!facts.some((item) => item.kind === 'decision' && item.value === 'multi-route-decision')) facts.push(fact('decision', 'multi-route-decision', 'An explicit routing dimension selects among at least three named paths.', [evidence]));
+        addNormalizedFunction('multi-route-decision', concept, 'Compile the explicitly named alternatives as a deterministic router.');
+        for (const routeName of concept.routes) {
+          if (facts.some((item) => item.kind === 'route' && item.value.toLowerCase() === routeName.toLowerCase())) continue;
+          const routeMatch = find(scope, new RegExp(`\\b${escape(routeName)}\\b`, 'i'));
+          facts.push(fact('route', routeName, `Named route: ${routeName}.`, [ev(`${concept.ruleId}.route.${slug(routeName)}`, 'language-normalization', 'explicit', routeMatch, 'The route destination is explicitly named in the original scope.', 0.98, 5, 'supporting', segments)]));
         }
       }
     }
@@ -137,7 +181,7 @@ export class ScopeIntelligenceService {
     const matchers: Record<string, RegExp[]> = {
       'follow-up-until-response': [/follow[ -]?up|reminder/i, /(?:until|unless|check)[^.\n]{0,60}(?:response|respond)|(?:response|respond)[^.\n]{0,50}(?:until|check)/i],
       'create-or-update-record': [/\b(?:create or update|upsert)\b/i, /(?:find|search)[\s\S]{0,140}(?:create|update)/i],
-      'process-approved-collection': [/\b(?:approval|approved)\b/i, /\b(?:for each|each|all|collection|attachments)\b/i],
+      'process-approved-collection': [/\b(?:approval|approved by|after approval|upon approval|(?:manager|human|reviewer)\s+approv\w*)\b/i, /\b(?:for each|each|all|collection|attachments)\b/i],
       'scheduled-reminder': [/\breminder\b/i, /\b(?:daily|weekly|monthly|every\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d+\s*(?:hours?|days?|weeks?)))\b/i],
       'deduplicate-before-create': [/(?:find|search|check)[\s\S]{0,140}(?:before|then)[\s\S]{0,80}creat/i, /\b(?:duplicate|existing|before creat)\b/i],
       'service-based-routing': [/(?:based on|depending on|route by)\s+(?:the\s+)?service/i, /\b(?:route|path|service type)\b/i],

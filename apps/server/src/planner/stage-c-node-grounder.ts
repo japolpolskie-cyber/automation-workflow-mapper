@@ -155,6 +155,7 @@ export class StageCNodeGrounder {
       [/(?:find|search).*folder/, 'google-drive', 'find-folder'],
       [/create.*folder/, 'google-drive', 'create-folder'],
       [/upload.*(?:file|attachment)/, 'google-drive', 'upload-file'],
+      [/retrieve.*(?:rows|collection)/, 'google-sheets', 'list-rows'],
       [/(?:add|append|log).*(?:row|sheet|entry)/, 'google-sheets', 'add-row'],
       [/(?:send|follow.?up|welcome|recommendation).*email/, 'gmail', 'send-email'],
       [/(?:receive|new).*email/, 'gmail', 'new-email'],
