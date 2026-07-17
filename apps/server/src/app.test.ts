@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createDefaultWorkflowSet,
   leadQualificationWorkflow,
@@ -53,6 +53,7 @@ const testEnvironment = {
   STAGE_D_MAX_OUTPUT_CHARS: 30_000,
 } as const;
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
@@ -244,6 +245,51 @@ describe("API foundation", () => {
     expect(unchanged.json().data.workflow.nodes).toHaveLength(
       saved.workflow.nodes.length,
     );
+  });
+
+  it("returns 200 for an Ollama procedural graph repaired with canonical Start", async () => {
+    const candidate = structuredClone(leadQualificationWorkflow);
+    const trigger = candidate.nodes.find((node) => node.category === "trigger")!;
+    trigger.category = "action";
+    trigger.service = null;
+    trigger.operation = "Prepare input";
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith("/api/tags")) {
+        return new Response(JSON.stringify({ models: [{ name: "qwen3:8b" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: { content: JSON.stringify(candidate) } }), { status: 200 });
+    }));
+    const app = await buildApp({
+      ...testEnvironment,
+      AI_PROVIDER: "ollama",
+      K4_PLANNER_SHADOW: false,
+      P2_DISTRIBUTED_PLANNER: false,
+      P3_DISTRIBUTED_PLANNER: false,
+    });
+    apps.push(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/workflows",
+      payload: { name: "Procedural review", platform: "n8n" },
+    });
+    const id = created.json().data.id as string;
+    await app.inject({
+      method: "PATCH",
+      url: `/api/workflows/${id}/scope`,
+      payload: { originalScope: "Validate the imported records, notify the owner, and archive the completed report." },
+    });
+
+    const analyzed = await app.inject({
+      method: "POST",
+      url: "/api/workflows/analyze",
+      payload: { projectId: id },
+    });
+
+    expect(analyzed.statusCode).toBe(200);
+    expect(analyzed.json().data).toMatchObject({ provider: "ollama", graphValidation: { valid: true } });
+    expect(analyzed.json().data.workflow.nodes.filter((node: { category: string }) => ["trigger", "start"].includes(node.category))).toEqual([
+      expect.objectContaining({ category: "start", name: "Workflow Start", service: null }),
+    ]);
   });
 
   it("wires consolidated planner feature flags without changing the persisted production workflow", async () => {

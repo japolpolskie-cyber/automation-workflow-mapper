@@ -21,6 +21,11 @@ describe('OllamaAnalysisProvider', () => {
     const result = await provider.analyze({ scope: 'test', projectName: 'test', platform: 'n8n' });
     expect(result).toContain('Lead Qualification');
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    const body = JSON.parse((fetchMock.mock.calls[2]![1] as RequestInit).body as string);
+    expect(body.messages[0].content).toContain('exactly one workflow entry point');
+    expect(body.messages[0].content).toContain('Never invent a platform-specific trigger');
+    expect(body.messages[1].content).toContain('"minContains":1');
+    expect(body.messages[1].content).toContain('"maxContains":1');
   });
 
   it('does not fall back to an unconfigured cloud service', async () => {

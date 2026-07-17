@@ -19,6 +19,56 @@ function setup(provider: AnalysisProvider) {
 }
 
 describe('AnalysisService output boundary', () => {
+  it('accepts Ollama output with exactly one valid trigger', async () => {
+    const provider: AnalysisProvider = { name: 'ollama', async analyze() { return structuredClone(leadQualificationWorkflow); }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
+    const { project, service } = setup(provider);
+
+    const result = await service.analyze(project.id);
+
+    expect(result.provider).toBe('ollama');
+    expect(result.workflow.nodes.filter((node) => ['trigger', 'start'].includes(node.category))).toHaveLength(1);
+  });
+
+  it('adds one canonical Start when an otherwise valid Ollama graph omits its entry point', async () => {
+    const candidate = structuredClone(leadQualificationWorkflow);
+    const trigger = candidate.nodes.find((node) => node.category === 'trigger')!;
+    trigger.category = 'action'; trigger.service = null; trigger.operation = 'Prepare workflow input';
+    const provider: AnalysisProvider = { name: 'ollama', async analyze() { return candidate; }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
+    const { project, service } = setup(provider);
+
+    const result = await service.analyze(project.id);
+
+    const entries = result.workflow.nodes.filter((node) => ['trigger', 'start'].includes(node.category));
+    expect(result.provider).toBe('ollama');
+    expect(entries).toEqual([expect.objectContaining({ category: 'start', name: 'Workflow Start', service: null })]);
+    expect(result.workflow.warnings.join(' ')).toMatch(/platform-neutral Start node was added/i);
+    expect(result.graphValidation.valid).toBe(true);
+  });
+
+  it('falls back locally when Ollama returns multiple entry points', async () => {
+    const candidate = structuredClone(leadQualificationWorkflow);
+    candidate.nodes.push({ ...structuredClone(candidate.nodes.find((node) => node.category === 'trigger')!), id: crypto.randomUUID(), name: 'Unsupported second entry' });
+    const provider: AnalysisProvider = { name: 'ollama', async analyze() { return candidate; }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
+    const { project, service } = setup(provider);
+
+    const result = await service.analyze(project.id);
+
+    expect(result.provider).toBe('local');
+    expect(result.workflow.nodes.filter((node) => ['trigger', 'start'].includes(node.category))).toHaveLength(1);
+  });
+
+  it('falls back locally when an Ollama graph has unrecoverable references', async () => {
+    const candidate = structuredClone(leadQualificationWorkflow);
+    candidate.connections[0]!.sourceNodeId = crypto.randomUUID();
+    const provider: AnalysisProvider = { name: 'ollama', async analyze() { return candidate; }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
+    const { project, service } = setup(provider);
+
+    const result = await service.analyze(project.id);
+
+    expect(result.provider).toBe('local');
+    expect(result.graphValidation.valid).toBe(true);
+  });
+
   it('preserves a detailed multiline graph through analysis, persistence, and reload', async () => {
     const database = createDatabase(':memory:'); databases.push(database);
     const repository = new ProjectRepository(database);

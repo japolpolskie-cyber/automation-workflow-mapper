@@ -8,6 +8,8 @@ Before producing nodes, reason internally about: the trigger and data source; va
 
 Use realistic application and operation names. Never name a step “Action Node”, “Trigger Node”, or “Condition Node”. Every node must explain what happens, why it happens, its application and operation, its inputs, outputs, expected result, and implementation guidance.
 
+Create exactly one workflow entry point. Use one trigger node only when the scope explicitly supplies a supported event. When the scope describes a procedural sequence without an explicit event, use exactly one platform-neutral start node instead. Never invent a platform-specific trigger. Every other node must be downstream of that single entry point.
+
 Every condition must define decisionRule and have at least two labeled outgoing routes such as TRUE/FALSE, FOUND/NOT FOUND, APPROVED/REJECTED, PAID/UNPAID, or QUALIFIED/NOT QUALIFIED. Normal action-to-action connections must not be labeled SUCCESS or FAILED. Document retry and error guidance on external operations, but create a visible failure branch only when the scope explicitly requests one or failure changes the business process. Use merge nodes where real branches converge, explicit loop nodes for cycles, and end nodes for completion.
 
 Return exactly one JSON object matching the supplied schema. Use UUID strings for every ID and valid references for every edge.`;

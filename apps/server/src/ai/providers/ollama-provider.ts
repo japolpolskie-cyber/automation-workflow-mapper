@@ -79,7 +79,7 @@ export class OllamaAnalysisProvider implements AnalysisProvider {
   }
 
   private async requestModel(model: string, input: AnalysisProviderInput): Promise<string> {
-    const schema = zodToJsonSchema(aiWorkflowOutputSchema, { $refStrategy: 'none' });
+    const schema = ollamaWorkflowSchema();
     const response = await fetch(`${this.baseUrl()}/api/chat`, {
       method: 'POST', signal: AbortSignal.timeout(600_000), headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, stream: false, think: false, format: 'json', keep_alive: '10m', options: { temperature: 0, num_ctx: 16_384, num_predict: 8_192 }, messages: [{ role: 'system', content: workflowAnalysisSystemPrompt }, { role: 'user', content: `${buildWorkflowAnalysisPrompt(input)}\n\nReturn an object matching this JSON schema exactly:\n${JSON.stringify(schema)}` }] })
@@ -94,4 +94,28 @@ export class OllamaAnalysisProvider implements AnalysisProvider {
   }
 
   private baseUrl() { return this.config.baseUrl.replace(/\/$/, ''); }
+}
+
+export function ollamaWorkflowSchema(): Record<string, unknown> {
+  const schema = zodToJsonSchema(aiWorkflowOutputSchema, { $refStrategy: 'none' }) as Record<string, unknown>;
+  return {
+    ...schema,
+    allOf: [
+      ...((Array.isArray(schema.allOf) ? schema.allOf : []) as unknown[]),
+      {
+        properties: {
+          nodes: {
+            contains: {
+              type: 'object',
+              properties: { category: { enum: ['trigger', 'start'] } },
+              required: ['category'],
+            },
+            minContains: 1,
+            maxContains: 1,
+          },
+        },
+        required: ['nodes'],
+      },
+    ],
+  };
 }

@@ -1,4 +1,4 @@
-import { aiWorkflowOutputSchema, compileAutomationArchitecture, inferWorkflowConnections, validateWorkflowGraph, workflowAnalysisResultSchema, type WorkflowAnalysisResult } from '@awm/shared';
+import { aiWorkflowOutputSchema, compileAutomationArchitecture, inferWorkflowConnections, validateWorkflowGraph, workflowAnalysisResultSchema, type CanonicalWorkflow, type WorkflowAnalysisResult, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
 import { parseJsonWithRepair } from '../ai/repair/json-repair.js';
 import { repairWorkflowCandidate } from '../ai/repair/workflow-repair.js';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
@@ -48,17 +48,82 @@ export class AnalysisService {
       await useFreeFallback(reason); parsed = aiWorkflowOutputSchema.safeParse(raw);
     }
     if (!parsed.success) throw new AnalysisError('AI_SCHEMA_VALIDATION_FAILED', 'The free local fallback could not produce a valid workflow.');
-    parsed.data = compileAutomationArchitecture(inferWorkflowConnections(parsed.data));
-    let validation = validateWorkflowGraph(parsed.data);
-    if (!validation.valid && providerUsed !== 'local') {
-      await useFreeFallback(`Generated workflow graph was invalid: ${validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ')}`);
-      const fallback = aiWorkflowOutputSchema.parse(raw); parsed = { success: true, data: compileAutomationArchitecture(inferWorkflowConnections(fallback)) }; validation = validateWorkflowGraph(parsed.data);
+    let prepared = prepareWorkflowForPersistence(parsed.data, providerUsed === 'ollama');
+    parsed.data = prepared.workflow;
+    let validation = prepared.validation;
+    if ((!validation.valid || prepared.boundaryError) && providerUsed !== 'local') {
+      const reason = prepared.boundaryError ?? validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ');
+      await useFreeFallback(`Generated workflow graph was invalid: ${reason}`);
+      const fallback = aiWorkflowOutputSchema.parse(raw);
+      prepared = prepareWorkflowForPersistence(fallback, false);
+      parsed = { success: true, data: prepared.workflow };
+      validation = prepared.validation;
     }
-    if (!validation.valid) throw new AnalysisError('AI_GRAPH_VALIDATION_FAILED', `Generated workflow graph is invalid: ${validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ')}`);
+    if (!validation.valid || prepared.boundaryError) {
+      const reason = prepared.boundaryError ?? validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ');
+      throw new AnalysisError('AI_GRAPH_VALIDATION_FAILED', `Generated workflow graph is invalid: ${reason}`);
+    }
     if (fallbackReason) parsed.data.warnings.push(`Free deterministic fallback used because the configured AI result could not be accepted: ${fallbackReason}`);
     const plannerResult = detectedProcess && this.plannerRuntime ? await this.plannerRuntime.execute(this.provider, project.originalScope, project.platform, detectedProcess, parsed.data) : {};
     const plannerShadow = plannerResult.plannerShadow;
     this.repository.updateWorkflow(project.id, parsed.data);
     return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}) });
   }
+}
+
+function prepareWorkflowForPersistence(input: CanonicalWorkflow, requireSingleEntry: boolean) {
+  let workflow = compileAutomationArchitecture(inferWorkflowConnections(input));
+  let validation = validateWorkflowGraph(workflow);
+  let entries = workflow.nodes.filter(isEntryNode);
+  let boundaryError = workflow.nodes.length ? '' : 'The generated workflow contains no workflow steps.';
+
+  const graphErrors = validation.issues.filter((issue) => issue.severity === 'error');
+  const missingOnlyEntry = entries.length === 0
+    && graphErrors.length === 1
+    && graphErrors[0]?.code === 'TRIGGER_REQUIRED';
+  if (missingOnlyEntry) {
+    const repaired = addCanonicalStart(workflow);
+    if (repaired) {
+      workflow = compileAutomationArchitecture(repaired);
+      validation = validateWorkflowGraph(workflow);
+      entries = workflow.nodes.filter(isEntryNode);
+      boundaryError = '';
+    }
+  }
+  if (requireSingleEntry && entries.length !== 1) {
+    boundaryError = `Ollama must return exactly one trigger or start node; received ${entries.length}.`;
+  }
+  return { workflow, validation, boundaryError };
+}
+
+function addCanonicalStart(workflow: CanonicalWorkflow): CanonicalWorkflow | null {
+  const incoming = new Set(workflow.connections.map((connection) => connection.targetNodeId));
+  const roots = workflow.nodes.filter((node) => !incoming.has(node.id) && !['note', 'group'].includes(node.category));
+  if (!roots.length) return null;
+  const start: WorkflowNode = {
+    id: crypto.randomUUID(), category: 'start', name: 'Workflow Start',
+    description: 'Platform-neutral entry point for a procedural workflow without an explicit trigger.',
+    service: null, operation: 'Start workflow', purpose: 'Begin the documented procedure without inventing an application event.',
+    expectedResult: 'The workflow begins with the supplied procedural inputs.', icon: 'generic-start',
+    estimatedExecution: 'Immediate', inputs: [], outputs: [], credentials: [], configuration: {},
+    status: 'incomplete', configurationCompleteness: 20, conditions: [], decisionRule: null, notes: 'Deterministically added because the otherwise valid model graph omitted its entry point.',
+    bestPractices: ['Replace with an evidenced trigger only when the business event is known.'], potentialErrors: [],
+    alternativeImplementations: [], performanceNotes: [], securityNotes: [], riskLevel: 'low',
+  };
+  const connections: WorkflowConnection[] = roots.map((root) => ({
+    id: crypto.randomUUID(), sourceNodeId: start.id, targetNodeId: root.id,
+    sourcePort: 'output', targetPort: 'input', label: '', branchLabel: null,
+    condition: null, routeType: 'success', style: 'default', mappings: [],
+  }));
+  return {
+    ...workflow,
+    nodes: [start, ...workflow.nodes],
+    connections: [...connections, ...workflow.connections],
+    warnings: [...workflow.warnings, 'A platform-neutral Start node was added because the model omitted the workflow entry point.'],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function isEntryNode(node: WorkflowNode) {
+  return node.category === 'trigger' || node.category === 'start';
 }
