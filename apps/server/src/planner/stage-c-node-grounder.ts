@@ -160,6 +160,7 @@ export class StageCNodeGrounder {
       [/(?:receive|new).*email/, 'gmail', 'new-email'],
       [/(?:search|retrieve).*(?:reply|email|message)/, 'gmail', 'search-email'],
       [/(?:notify|send).*(?:slack|channel)/, 'slack', 'send-channel-message'],
+      [/(?:find|search).*(?:existing|matching).*(?:record|contact|lead|customer)/, 'generic-crm', 'find-record'],
       [/(?:find|retrieve).*lead/, 'generic-crm', 'find-record'],
     ];
     if (phrases.some(([pattern, app, operation]) => pattern.test(purpose) && candidate.applicationId === app && candidate.operationId === operation)) score += 30;

@@ -41,6 +41,19 @@ describe('Stage C capability-constrained grounding', () => {
     expect(result.node).toMatchObject({ applicationId: 'google-drive', operationId: 'find-folder' });
   });
 
+  it('selects Generic CRM retrieval for an existing matching record search', async () => {
+    const result = await new StageCNodeGrounder().ground(input({
+      canonicalFunctionId: 'data-retrieval',
+      semanticRole: 'data-retrieval',
+      purpose: 'Search for existing matching CRM record',
+      relevantFacts: [{ id: 'fact-1', kind: 'application', value: 'Generic CRM', entityId: 'record' }],
+      candidates: buildStageCCandidates('data-retrieval', 'n8n'),
+      expectedOutputCardinality: 'unknown',
+    }), new AbortController().signal);
+
+    expect(result.node).toMatchObject({ applicationId: 'generic-crm', operationId: 'find-record', groundingMethod: 'deterministic' });
+  });
+
   it('does not pass a collection directly to Google Sheets Add Row', async () => {
     const result = await new StageCNodeGrounder().ground(input({
       purpose: 'Add all entries to Google Sheets',
