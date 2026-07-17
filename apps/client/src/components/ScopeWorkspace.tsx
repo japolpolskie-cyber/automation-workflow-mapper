@@ -51,12 +51,19 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
     if (/timeout|timed out/i.test(error)) return { title: 'Analysis took longer than expected', detail: 'The local model may still be loading. Wait a moment and retry; your requirements have not been lost.' };
     return { title: 'We could not complete that step', detail: error };
   }, [error]);
+  const replaceScopeText = (nextText: string) => {
+    setText(nextText);
+    setDocument(null);
+    setSaved(false);
+    setError('');
+    if (nextText !== text) setAnalysis(null);
+  };
 
   const processFile = async (file: File) => {
     setError(''); setSaved(false);
     if (file.size > MAX_SIZE) { setError('The file exceeds the 10 MB upload limit.'); return; }
     setExtracting(true);
-    try { const result = await documentApi.extract(file); setDocument(result); setText(result.text); }
+    try { const result = await documentApi.extract(file); replaceScopeText(result.text); setDocument(result); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The document could not be processed.'); }
     finally { setExtracting(false); }
   };
@@ -85,10 +92,10 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
   return <div className="scope-page">
     <header className="scope-topbar sticky-global-header"><button className="back-button" onClick={onBack}><ArrowLeft size={18} /> Projects</button><div className="scope-title"><PlatformMark platform={project.platform} compact /><div><strong>{project.name}</strong><small>Scope of Work</small></div></div><button className="button primary" disabled={saving || !text.trim()} onClick={() => void save()}>{saving ? <LoaderCircle className="spin" size={17} /> : saved ? <Check size={17} /> : null}{saving ? 'Saving…' : saved ? 'Saved' : 'Save scope'}</button></header>
     <main className="scope-content"><section className="scope-intro"><p className="eyebrow"><Sparkles size={14} /> Requirements intake</p><h1>Add your Scope of Work</h1><p>Paste requirements or upload a supported document. Review and edit the extracted text before analysis.</p>
-      <div className="sample-requests" aria-label="Example workflow requests"><span><Lightbulb size={14} /> Try an example</span>{workflowTemplates.slice(0, 4).map((template) => <button type="button" key={template.id} onClick={() => { setText(template.scope); setDocument(null); setSaved(false); }}>{template.name}</button>)}</div>
+      <div className="sample-requests" aria-label="Example workflow requests"><span><Lightbulb size={14} /> Try an example</span>{workflowTemplates.slice(0, 4).map((template) => <button type="button" key={template.id} onClick={() => replaceScopeText(template.scope)}>{template.name}</button>)}</div>
     </section>
-      <div className="scope-layout"><section className="editor-panel"><div className="panel-heading"><div><h2>Requirements</h2><p>Use plain language, process steps, conditions, and expected outcomes.</p></div><button className="text-button danger" disabled={!text} onClick={() => { setText(''); setDocument(null); setSaved(false); }}><Trash2 size={15} /> Clear</button></div>
-        <textarea className="scope-editor" aria-label="Scope of Work text" value={text} maxLength={100000} onChange={(event) => { setText(event.target.value); setSaved(false); }} placeholder="Example: When a new Facebook Lead Ads submission is received, validate the email address…" />
+      <div className="scope-layout"><section className="editor-panel"><div className="panel-heading"><div><h2>Requirements</h2><p>Use plain language, process steps, conditions, and expected outcomes.</p></div><button className="text-button danger" disabled={!text} onClick={() => replaceScopeText('')}><Trash2 size={15} /> Clear</button></div>
+        <textarea className="scope-editor" aria-label="Scope of Work text" value={text} maxLength={100000} onChange={(event) => replaceScopeText(event.target.value)} placeholder="Example: When a new Facebook Lead Ads submission is received, validate the email address…" />
         <footer className="editor-footer"><span>{counts.words.toLocaleString()} words</span><span>{counts.characters.toLocaleString()} / 100,000 characters</span></footer></section>
         <aside className="upload-panel"><div className="panel-heading"><div><h2>Upload document</h2><p>We extract text locally through the application server.</p></div></div>
           <input ref={picker} type="file" accept={ACCEPTED} hidden onChange={choose} />
@@ -102,7 +109,7 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
       {friendlyError && <div className="scope-error enhanced-feedback" role="alert"><AlertCircle size={18} /><div><strong>{friendlyError.title}</strong><p>{friendlyError.detail}</p></div></div>}
       {saved && !analyzing && <div className="scope-success" role="status"><Check size={17} /><div><strong>Your progress is saved</strong><p>You can continue editing, analyze the requirements, or return later.</p></div></div>}
       {analyzing && <div className="analysis-progress sticky-workspace-toolbar" role="status"><LoaderCircle className="spin" size={18} /><div className="analysis-progress-content"><div className="analysis-progress-heading"><strong>{analysisProgress.stage}</strong><b>{analysisProgress.percent}%</b></div><div className="analysis-progress-track" aria-label={`Estimated analysis progress ${analysisProgress.percent}%`}><span style={{ width: `${analysisProgress.percent}%` }} /></div><small>Estimated progress · {analysisSeconds}s elapsed. Local AI timing varies, and progress pauses while the model is still generating.</small></div></div>}
-      {analysis ? <section className="analysis-results"><div className="draft-plan-notice" role="note"><Info size={18} /><div><strong>This is a draft automation plan</strong><p>Review applications, operations, branches, credentials, and platform limitations before implementation. Analysis does not deploy or activate an automation.</p></div></div><header className="sticky-workspace-toolbar"><div><span className="analysis-icon"><Bot size={20} /></span><div><p className="eyebrow">Analysis complete · {analysis.analyzedAt === project.updatedAt ? 'Saved analysis' : analysis.provider === 'local' ? 'Local preview' : analysis.provider === 'ollama' ? 'Free local AI' : 'OpenAI provider'}</p><h2>{analysis.workflow.name}</h2><p>{analysis.workflow.summary || analysis.workflow.objective}</p></div></div><strong>{Math.round((analysis.workflow.confidence ?? 0) * 100)}% confidence</strong></header>
+      {analysis ? <section className="analysis-results"><div className="draft-plan-notice" role="note"><Info size={18} /><div><strong>Draft plan ready for review</strong><p>This notice does not block editing. Change the requirements to start a new analysis, or use Regenerate analysis below to update this draft.</p></div></div><header className="sticky-workspace-toolbar"><div><span className="analysis-icon"><Bot size={20} /></span><div><p className="eyebrow">Analysis complete · {analysis.analyzedAt === project.updatedAt ? 'Saved analysis' : analysis.provider === 'local' ? 'Local preview' : analysis.provider === 'ollama' ? 'Free local AI' : 'OpenAI provider'}</p><h2>{analysis.workflow.name}</h2><p>{analysis.workflow.summary || analysis.workflow.objective}</p></div></div><strong>{Math.round((analysis.workflow.confidence ?? 0) * 100)}% confidence</strong></header>
         <div className="analysis-metrics"><article><Layers3 size={17} /><div><strong>{analysis.workflow.nodes.length}</strong><span>Workflow steps</span></div></article><article><GitBranch size={17} /><div><strong>{analysis.workflow.branches.length}</strong><span>Branches</span></div></article><article><KeyRound size={17} /><div><strong>{new Set(analysis.workflow.nodes.flatMap((node) => node.credentials)).size}</strong><span>Credentials</span></div></article><article><Sparkles size={17} /><div><strong className="capitalize">{analysis.workflow.complexity}</strong><span>Complexity</span></div></article></div>
         {analysis.detectedProcess && <DetectedProcessSummary summary={analysis.detectedProcess} />}
         {analysis.workflow.clarificationQuestions.length > 0 && <div className="clarifications"><h3>More information will improve this plan</h3><p>These are business decisions—not technical errors. Add the answers to your requirements, then regenerate the analysis.</p>{analysis.workflow.clarificationQuestions.map((question, index) => <div className="question" key={question.id}><span>{index + 1}</span><div><strong>{question.question}</strong><small>Missing detail · {question.category.replace('_', ' ')}</small></div></div>)}</div>}

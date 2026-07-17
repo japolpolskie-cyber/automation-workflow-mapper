@@ -5,6 +5,7 @@ import { createDatabase, type Database } from '../database/database.js';
 import { ProjectRepository } from '../repositories/project-repository.js';
 import { AnalysisService } from './analysis-service.js';
 import { ScopeIntelligenceService } from '../analysis/scope-intelligence.js';
+import { LocalAnalysisProvider } from '../ai/providers/local-provider.js';
 
 const databases: Database[] = [];
 afterEach(() => { for (const database of databases.splice(0)) database.close(); });
@@ -18,6 +19,35 @@ function setup(provider: AnalysisProvider) {
 }
 
 describe('AnalysisService output boundary', () => {
+  it('preserves a detailed multiline graph through analysis, persistence, and reload', async () => {
+    const database = createDatabase(':memory:'); databases.push(database);
+    const repository = new ProjectRepository(database);
+    const project = repository.create({ name: 'Lead response', clientName: '', description: '', platform: 'n8n' });
+    const scope = `When a new lead enters the CRM, validate the email address.
+
+If valid, assign the lead to a salesperson and send a welcome email.
+
+If invalid, notify the sales manager and move the lead to manual review.
+
+After three days, check whether the lead replied.
+
+If there is no reply, send a follow-up message.`;
+    repository.updateScope(project.id, scope);
+
+    const result = await new AnalysisService(repository, new LocalAnalysisProvider(), undefined, new ScopeIntelligenceService()).analyze(project.id);
+    const reloaded = repository.findById(project.id)!;
+
+    // The provider's twelve process nodes plus the canonical architecture start node.
+    expect(result.workflow.nodes).toHaveLength(13);
+    expect(result.workflow.branches).toHaveLength(4);
+    expect(reloaded.originalScope).toBe(scope);
+    expect(reloaded.workflow.nodes).toHaveLength(result.workflow.nodes.length);
+    expect(reloaded.workflow.branches).toHaveLength(result.workflow.branches.length);
+    expect(reloaded.workflowSet.nodeReferences).toHaveLength(result.workflow.nodes.length);
+    expect(reloaded.visualGraph.nodes).toHaveLength(result.workflow.nodes.length);
+    expect(reloaded.visualGraph.edges).toHaveLength(result.workflow.connections.length);
+  });
+
   it('uses the free deterministic fallback when provider JSON cannot be repaired', async () => {
     const provider: AnalysisProvider = { name: 'openai', async analyze() { return 'not json'; }, async getStatus() { return { provider: 'openai', available: true, models: ['test'], message: 'ready' }; } };
     const { project, service } = setup(provider);
