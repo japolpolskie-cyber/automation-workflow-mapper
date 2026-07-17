@@ -28,6 +28,17 @@ describe('K4 planner boundary', () => {
     expect(context.supportedOperations).not.toContain('google-sheets.append-rows-batch');
   });
 
+  it('selects operations from their owning application clauses in a sequential scope', () => {
+    const sequentialScope = 'Retrieve Asana task details, create a Google Drive folder, send a Gmail email, and add a row in Google Sheets.';
+    const context = new PlannerContextBuilder().build(sequentialScope, 'n8n', new ScopeIntelligenceService().analyze(sequentialScope, new Date('2026-07-16T00:00:00.000Z')));
+    expect(context.supportedOperations).toEqual(expect.arrayContaining([
+      'asana.get-task-details',
+      'google-drive.create-folder',
+      'gmail.send-email',
+      'google-sheets.add-row',
+    ]));
+  });
+
   it('builds a modular prompt without metric leakage', () => {
     const prompt = new PlannerPromptBuilder().build(new PlannerContextBuilder().build(scope, 'n8n', analysis));
     expect(prompt.sections.map((item) => item.name)).toEqual(['Planning Objective', 'Business Context', 'Planning Facts', 'Evidence References', 'Clarifications', 'Detected Patterns', 'Retrieved Knowledge', 'Allowed Operations', 'Planning Rules', 'Planner Constraints']);

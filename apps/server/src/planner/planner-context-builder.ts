@@ -30,16 +30,33 @@ export class PlannerContextBuilder {
   }
 
   private selectOperations(objective: string, analysis: DetectedProcessSummary, retrievedIds: Set<string>) {
-    const sentences = objective.split(/(?<=[.!?;])|\n/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+    const clauses = objective.split(/(?<=[.!?;])|\n|,\s+(?=(?:then\s+)?(?:retrieve|fetch|find|search|create|update|upload|send|notify|log|add|append|validate|wait|fulfill|schedule|route)\b)|\s+\bthen\b\s+/i).map((item) => item.trim().toLowerCase()).filter(Boolean);
     const detectedNames = new Set(analysis.facts.filter((fact) => fact.kind === 'application').map((fact) => fact.value.toLowerCase()));
     const verbAliases: Record<string, string[]> = { retrieve: ['retrieve', 'get', 'load'], get: ['retrieve', 'get', 'load'], find: ['find', 'search', 'lookup'], search: ['find', 'search', 'lookup'], create: ['create', 'add'], add: ['add', 'append', 'log', 'create'], append: ['append', 'add', 'log'], send: ['send', 'notify', 'follow-up', 'follow up'], update: ['update'], upload: ['upload'] };
-    return applicationPacks.flatMap((pack) => pack.operations.map((operation) => ({ pack, operation }))).filter(({ pack, operation }) => {
-      const ref = `${operation.applicationId}.${operation.operationId}`; const packNames = [pack.name, ...pack.aliases].map((item) => item.toLowerCase());
-      if (!detectedNames.has(pack.name.toLowerCase())) return false;
-      if (operation.acceptedInputCardinality.length === 1 && operation.acceptedInputCardinality[0] === 'collection' && !analysis.facts.some((fact) => fact.kind === 'cardinality' && fact.value === 'collection' && (!fact.subject?.entityId || operation.title.toLowerCase().includes(fact.subject.entityId)))) return false;
+    let previousApplications = new Set<string>();
+    const clauseApplications = clauses.map((clause) => {
+      const explicit = new Set(applicationPacks.filter((pack) => [pack.name, ...pack.aliases].some((name) => name.length >= 3 && clause.includes(name.toLowerCase()))).map((pack) => pack.applicationId));
+      if (explicit.size) previousApplications = explicit;
+      return explicit.size ? explicit : new Set(previousApplications);
+    });
+    const candidates = applicationPacks.flatMap((pack) => pack.operations.map((operation) => ({ pack, operation }))).flatMap(({ pack, operation }) => {
+      const ref = `${operation.applicationId}.${operation.operationId}`; const packNames = [pack.name, ...pack.aliases].map((item) => item.toLowerCase()).filter((item) => item.length >= 3);
+      if (!detectedNames.has(pack.name.toLowerCase())) return [];
+      if (operation.acceptedInputCardinality.length === 1 && operation.acceptedInputCardinality[0] === 'collection' && !analysis.facts.some((fact) => fact.kind === 'cardinality' && fact.value === 'collection' && (!fact.subject?.entityId || operation.title.toLowerCase().includes(fact.subject.entityId)))) return [];
       const operationWords = operation.title.toLowerCase().split(/\s+/); const aliases = verbAliases[operationWords[0]!] ?? [operationWords[0]!]; const entities = operationWords.slice(1).filter((word) => word.length > 2);
-      const sentenceMatch = sentences.some((sentence) => packNames.some((name) => sentence.includes(name)) && aliases.some((verb) => sentence.includes(verb)));
-      return sentenceMatch || (retrievedIds.has(ref) && sentences.some((sentence) => packNames.some((name) => sentence.includes(name)) && entities.some((entity) => sentence.includes(entity))));
-    }).map(({ operation }) => operation);
+      return clauses.flatMap((clause, clauseIndex) => {
+        if (!clauseApplications[clauseIndex]?.has(pack.applicationId) && !packNames.some((name) => clause.includes(name))) return [];
+        const verbMatch = aliases.some((verb) => new RegExp(`\\b${verb.replaceAll(' ', '[ -]?')}(?:s|d|ing)?\\b`, 'i').test(clause));
+        const entityMatches = entities.filter((entity) => clause.includes(entity)).length;
+        const score = (verbMatch ? 4 : 0) + Math.min(4, entityMatches * 2) + (retrievedIds.has(ref) ? 1 : 0);
+        return score > 0 ? [{ operation, clauseIndex, score }] : [];
+      });
+    }).filter((item): item is { operation: (typeof applicationPacks)[number]['operations'][number]; clauseIndex: number; score: number } => Boolean(item));
+    const bestByClauseAndApplication = new Map<string, number>();
+    for (const candidate of candidates) {
+      const key = `${candidate.clauseIndex}:${candidate.operation.applicationId}`;
+      bestByClauseAndApplication.set(key, Math.max(bestByClauseAndApplication.get(key) ?? 0, candidate.score));
+    }
+    return [...new Map(candidates.filter((candidate) => candidate.score === bestByClauseAndApplication.get(`${candidate.clauseIndex}:${candidate.operation.applicationId}`)).map((candidate) => [`${candidate.operation.applicationId}.${candidate.operation.operationId}`, candidate.operation])).values()];
   }
 }

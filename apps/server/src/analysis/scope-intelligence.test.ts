@@ -88,6 +88,36 @@ describe('K3 deterministic scope intelligence', () => {
     ]));
   });
 
+  it.each([
+    ['Route Hardware, Software, and Access requests to separate Slack channels.', ['Hardware', 'Software', 'Access']],
+    ['Route Contracts, Invoices, and Other files to matching folders.', ['Contracts', 'Invoices', 'Other']],
+    ['Switch by priority: Low, Normal, High, Default.', ['Low', 'Normal', 'High', 'Default']],
+  ])('recognizes three-or-more named router destinations', (scope, routes) => {
+    const result = run(scope);
+    expect(result.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'decision', value: 'multi-route-decision' }),
+      expect.objectContaining({ kind: 'workflow_function', value: 'multi-route-decision' }),
+    ]));
+    expect(result.facts.filter((item) => item.kind === 'route').map((item) => item.value)).toEqual(expect.arrayContaining(routes));
+  });
+
+  it('preserves external action semantics across sequential clauses', () => {
+    const result = run('Retrieve the record, create a folder, update the task, send a summary email.');
+    const actions = result.facts.filter((item) => item.kind === 'workflow_function' && item.value === 'action');
+    expect(actions.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(actions.map((item) => item.evidence[0]?.sourceLocation.start).filter((item) => item !== null)).size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('resolves exact calendar and project-management applications used by remaining benchmarks', () => {
+    const result = run('Find a Google Calendar event, then retrieve a Trello card.');
+    const applications = result.facts
+      .filter((item) => item.kind === 'application')
+      .map((item) => item.value);
+
+    expect(applications).toContain('Google Calendar');
+    expect(applications).toContain('Trello');
+  });
+
   it('keeps conflicting cardinality evidence visible and requests clarification', () => {
     const result = run('Process each attachment and a single attachment.');
     const cardinality = result.facts.find((fact) => fact.kind === 'cardinality')!;
