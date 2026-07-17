@@ -43,6 +43,27 @@ describe('K3 deterministic scope intelligence', () => {
     expect(single.knowledgeContext.retrieved.some((item) => item.id === 'iterator')).toBe(false);
   });
 
+  it.each([
+    ['data-retrieval', 'Retrieve the Asana task details before continuing.'],
+    ['data-retrieval', 'Search Google Calendar for conflicting events.'],
+    ['notification', 'Notify the Slack channel when processing completes.'],
+    ['notification', 'Send a rejection notice to the requester.'],
+    ['logging', 'Log every processed attachment in Google Sheets.'],
+    ['logging', 'Add one row to Google Sheets for the payment.'],
+    ['validation', 'Validate the email address before creating the record.'],
+    ['validation', 'Verify inventory before fulfilling the order.'],
+    ['delay', 'Wait two days before sending a reminder.'],
+    ['delay', 'Wait until two hours before the appointment.'],
+  ])('promotes %s knowledge from platform-oriented operation language', (canonicalFunction, scope) => {
+    const result = run(scope);
+    expect(result.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_function', value: canonicalFunction }),
+    ]));
+    expect(result.knowledgeContext.retrieved).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'canonical_function', id: canonicalFunction }),
+    ]));
+  });
+
   it('keeps conflicting cardinality evidence visible and requests clarification', () => {
     const result = run('Process each attachment and a single attachment.');
     const cardinality = result.facts.find((fact) => fact.kind === 'cardinality')!;
