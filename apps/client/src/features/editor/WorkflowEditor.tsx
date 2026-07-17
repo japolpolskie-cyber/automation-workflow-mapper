@@ -2,12 +2,11 @@ import { Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, typ
 import { normalizeWorkflowSet, validateWorkflow, type Platform, type PlatformBuildPlan, type Project, type WorkflowNode } from '@awm/shared';
 import { buildPlatformPlan } from '@awm/platforms';
 import { ArrowLeft, Check, Download, LayoutDashboard, LoaderCircle, Redo2, Save, Sparkles, Undo2, Workflow } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { projectApi } from '../../api/projects';
 import { PlatformMark } from '../../components/PlatformMark';
 import { AssistantPanel } from './AssistantPanel';
 import { BusinessFlowView } from './BusinessFlowView';
-import { ComparisonExportPanel } from './ComparisonExportPanel';
 import { NodeConfigurationPanel } from './NodeConfigurationPanel';
 import { ImplementationNotesView } from './ImplementationNotesView';
 import { ValidationPanel } from './ValidationPanel';
@@ -19,6 +18,8 @@ import { evaluateWorkflowReadiness, splitIndependentWorkflows } from './workflow
 import { useEditorStore, type EditorNode } from './editor-store';
 import { ThemeSelector } from '../../theme/ThemeSelector';
 import { useTheme, workflowCanvasThemeTokens } from '../../theme/theme';
+
+const ComparisonExportPanel = lazy(() => import('./ComparisonExportPanel').then((module) => ({ default: module.ComparisonExportPanel })));
 
 const palette: Array<{ category: WorkflowNode['category']; label: string }> = [
   { category: 'trigger', label: 'Trigger' }, { category: 'webhook', label: 'Webhook' }, { category: 'action', label: 'Action' }, { category: 'ai', label: 'AI' },
@@ -131,6 +132,6 @@ export function WorkflowEditor({ project, onBack, onSaved }: { project: Project;
       {view === 'automation' ? <NodeConfigurationPanel plan={plan} /> : <aside className="node-config view-summary"><span>{view === 'business' ? 'Business flow' : view === 'implementation' ? 'Developer view' : 'Client handoff'}</span><p>{view === 'business' ? 'This view simplifies technical steps for client discussion. Switch to Automation to edit nodes and connections.' : view === 'implementation' ? 'Application, operation, credential, and limitation guidance for the selected workflow.' : 'Resolve blocking readiness items before exporting to a client.'}</p><strong>{activeWorkflow.nodes.length} synchronized steps</strong><ReadinessBadge readiness={readiness} /></aside>}
     </div>
     {assistantOpen && <AssistantPanel projectId={project.id} workflow={currentWorkflow} selectedNodeId={selectedDomainNodeId} onClose={() => setAssistantOpen(false)} onApply={(proposal) => { store.applyProposedWorkflow(proposal.proposedWorkflow); setAssistantOpen(false); setSaved(false); }} />}
-    {comparisonOpen && <ComparisonExportPanel workflow={activeWorkflow} workflowSet={project.workflowSet} selectedWorkflowId={activeSlice.id} platform={targetPlatform} canvasId="workflow-canvas-export" nodes={visibleNodes} onClose={() => setComparisonOpen(false)} />}
+    {comparisonOpen && <Suspense fallback={<div className="panel-loading" role="status"><LoaderCircle className="spin" size={18} />Loading comparison and export tools…</div>}><ComparisonExportPanel workflow={activeWorkflow} workflowSet={project.workflowSet} selectedWorkflowId={activeSlice.id} platform={targetPlatform} canvasId="workflow-canvas-export" nodes={visibleNodes} onClose={() => setComparisonOpen(false)} /></Suspense>}
   </div>;
 }

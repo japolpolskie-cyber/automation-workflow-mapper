@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 describe('dashboard', () => {
-  beforeEach(() => { vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => ({ success: true, data: [], error: null, meta: { requestId: 'test' } }) })); });
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: [], error: null, meta: { requestId: 'test' } }) })); });
   afterEach(() => vi.unstubAllGlobals());
   it('renders the product outcome and creation action', async () => {
     render(<App />);

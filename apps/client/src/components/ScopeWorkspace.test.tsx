@@ -15,7 +15,7 @@ const project: Project = {
 describe('ScopeWorkspace', () => {
   afterEach(() => vi.unstubAllGlobals());
   it('accepts pasted requirements and updates counts', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => ({ success: true, data: { provider: 'local', available: true, models: ['preview'], message: 'ready' }, error: null, meta: { requestId: 'test' } }) }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: { provider: 'local', available: true, models: ['preview'], message: 'ready' }, error: null, meta: { requestId: 'test' } }) }));
     render(<ScopeWorkspace project={project} onBack={vi.fn()} onSaved={vi.fn()} onOpenBuilder={undefined} />);
     expect(screen.getByRole('banner')).toHaveClass('sticky-global-header');
     expect(screen.getByRole('button', { name: 'Analyze requirements' }).closest('section')).toHaveClass('sticky-workspace-toolbar');

@@ -3,9 +3,16 @@ import type { AnalysisProviderStatus, ApiResponse, CreateProjectInput, Platform,
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers: { ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init?.headers } });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...init, headers: { ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init?.headers } });
+  } catch {
+    throw new Error('The local application service is unavailable. Confirm the server is running, then try again.');
+  }
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) throw new Error(response.ok ? 'The server returned an unexpected response.' : `The server could not complete the request (${response.status}).`);
   const payload = await response.json() as ApiResponse<T>;
-  if (!payload.success) throw new Error(payload.error.message);
+  if (!response.ok || !payload.success) throw new Error(payload.success ? `The server could not complete the request (${response.status}).` : payload.error?.message ?? 'The request could not be completed.');
   return payload.data;
 }
 
