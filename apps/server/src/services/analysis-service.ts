@@ -37,6 +37,7 @@ export class AnalysisService {
       try { raw = parseJsonWithRepair(raw); }
       catch (error) { await useFreeFallback(error instanceof Error ? error.message : 'AI output could not be repaired.'); }
     }
+
     let parsed = aiWorkflowOutputSchema.safeParse(raw);
     if (!parsed.success) {
       const repaired = repairWorkflowCandidate(raw);
@@ -51,6 +52,7 @@ export class AnalysisService {
     let prepared = prepareWorkflowForPersistence(parsed.data, providerUsed === 'ollama');
     parsed.data = prepared.workflow;
     let validation = prepared.validation;
+
     if ((!validation.valid || prepared.boundaryError) && providerUsed !== 'local') {
       const reason = prepared.boundaryError ?? validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ');
       await useFreeFallback(`Generated workflow graph was invalid: ${reason}`);
@@ -76,6 +78,47 @@ function prepareWorkflowForPersistence(input: CanonicalWorkflow, requireSingleEn
   let validation = validateWorkflowGraph(workflow);
   let entries = workflow.nodes.filter(isEntryNode);
   let boundaryError = workflow.nodes.length ? '' : 'The generated workflow contains no workflow steps.';
+
+  const startNodes = workflow.nodes.filter(
+    (node) => node.category === 'start'
+  );
+
+  const triggerNodes = workflow.nodes.filter(
+    (node) => node.category === 'trigger'
+  );
+
+  if (startNodes.length === 1 && triggerNodes.length === 1) {
+    const startNode = startNodes[0]!;
+    const triggerNode = triggerNodes[0]!;
+
+    const startToTrigger = workflow.connections.some(
+      (connection) =>
+        connection.sourceNodeId === startNode.id &&
+        connection.targetNodeId === triggerNode.id
+    );
+
+    if (startToTrigger) {
+      workflow = {
+        ...workflow,
+        nodes: workflow.nodes.filter(
+          (node) => node.id !== startNode.id
+        ),
+        connections: workflow.connections.filter(
+          (connection) =>
+            connection.sourceNodeId !== startNode.id &&
+            connection.targetNodeId !== startNode.id
+        ),
+        warnings: [
+          ...workflow.warnings,
+          'Removed redundant Start node because the workflow already contains an explicit trigger.',
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+
+      validation = validateWorkflowGraph(workflow);
+      entries = workflow.nodes.filter(isEntryNode);
+    }
+  }
 
   const graphErrors = validation.issues.filter((issue) => issue.severity === 'error');
   const missingOnlyEntry = entries.length === 0

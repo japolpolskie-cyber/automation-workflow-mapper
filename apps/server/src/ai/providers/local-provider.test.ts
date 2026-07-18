@@ -24,6 +24,38 @@ After three days, check whether the lead replied.
 
 If there is no reply, send a follow-up message.`;
 
+const explicitSequenceScope = `You are an automation workflow architect.
+
+Workflow Name
+Lead Qualification and Outreach Automation
+
+Target Platform
+n8n
+
+Trigger
+Webhook — Incoming webhook request
+
+Workflow Sequence
+1. Webhook: Receive data
+2. External API: Get company info
+3. Function: Score and prioritize lead
+4. Database: Store lead in SQL
+5. Email: Send notification
+6. LLM: Generate outreach email
+
+Required Integrations
+- Webhook
+- External API
+- Function
+- Database
+- Email
+- LLM
+
+Workflow Mapping Rules
+- Create one explicit node for every business step.
+- Add an explicit connection between every related node.
+- Use an IF node for binary decisions.`;
+
 describe('LocalAnalysisProvider operational fallback', () => {
   it('ignores hiring prose and extracts explicit trigger/action requirements', async () => {
     const workflow = await new LocalAnalysisProvider().analyze({ scope, projectName: 'Asana CRM', platform: 'make' }) as CanonicalWorkflow;
@@ -57,5 +89,53 @@ describe('LocalAnalysisProvider operational fallback', () => {
     expect(workflow.connections.filter((edge) => edge.branchLabel === 'TRUE')).toHaveLength(2);
     expect(workflow.connections.filter((edge) => edge.branchLabel === 'FALSE')).toHaveLength(2);
     expect(workflow.complexity).toBe('moderate');
+  });
+
+  it('preserves every numbered workflow-sequence step and ignores mapping instructions', async () => {
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: explicitSequenceScope,
+      projectName: 'Lead Qualification and Outreach Automation',
+      platform: 'n8n',
+    }) as CanonicalWorkflow;
+
+    expect(workflow.nodes).toHaveLength(6);
+    expect(workflow.connections).toHaveLength(5);
+    expect(workflow.branches).toHaveLength(0);
+    expect(workflow.nodes.map((node) => node.name)).toEqual([
+      'Webhook: Receive data',
+      'External API: Get company info',
+      'Function: Score and prioritize lead',
+      'Database: Store lead in SQL',
+      'Email: Send notification',
+      'LLM: Generate outreach email',
+    ]);
+    expect(workflow.nodes[0]).toMatchObject({ category: 'trigger', service: 'Webhook' });
+    expect(workflow.nodes[1]).toMatchObject({ category: 'api_request', operation: 'Retrieve data' });
+    expect(workflow.nodes[3]).toMatchObject({ category: 'database', operation: 'Create record' });
+    expect(workflow.nodes.map((node) => node.name).join(' ')).not.toMatch(/explicit node|explicit connection|binary decisions/i);
+  });
+
+  it.each(['make', 'zapier', 'n8n'] as const)('preserves paired qualification branches for %s', async (platform) => {
+    const naturalScope = `When a lead submits our website form, someone reviews it.
+
+If the deal is marked as Not Qualified, send a thank-you email and close the opportunity.
+
+If it is marked as Qualified, automatically generate a proposal using our Google Docs template.
+
+If the folder does not exist, create it automatically.
+
+Once the proposal is ready, notify the salesperson in Slack.`;
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: naturalScope,
+      projectName: 'Lead Management',
+      platform,
+    }) as CanonicalWorkflow;
+
+    expect(workflow.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: expect.stringMatching(/generate.*proposal/i), operation: 'Generate document' }),
+      expect.objectContaining({ name: expect.stringMatching(/thank-you email/i) }),
+    ]));
+    const qualification = workflow.nodes.find((node) => /Not Qualified/i.test(node.name))!;
+    expect(workflow.connections.filter((edge) => edge.sourceNodeId === qualification.id).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
   });
 });

@@ -23,7 +23,11 @@ export class ProjectRepository {
   public constructor(private readonly database: Database) {}
 
   public list(): Project[] {
-    return (this.database.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all() as unknown as ProjectRow[]).map(toProject);
+    return (this.database.prepare("SELECT * FROM projects WHERE status <> 'archived' ORDER BY updated_at DESC").all() as unknown as ProjectRow[]).map(toProject);
+  }
+
+  public listArchived(): Project[] {
+    return (this.database.prepare("SELECT * FROM projects WHERE status = 'archived' ORDER BY updated_at DESC").all() as unknown as ProjectRow[]).map(toProject);
   }
 
   public findById(id: string): Project | null {
@@ -62,6 +66,49 @@ export class ProjectRepository {
       this.database.prepare('UPDATE projects SET original_scope = ?, updated_at = ? WHERE id = ?').run(originalScope, now, id);
       this.database.prepare(`INSERT INTO project_versions (id, project_id, version_number, event_type, snapshot_json, created_at)
         VALUES (?, ?, ?, 'scope_updated', ?, ?)`).run(crypto.randomUUID(), id, versionRow.version + 1, JSON.stringify(updated), now);
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return updated;
+  }
+
+  public archive(id: string): Project | null {
+    const current = this.findById(id);
+    if (!current) return null;
+    const now = new Date().toISOString();
+    const updated = projectSchema.parse({ ...current, status: 'archived', updatedAt: now });
+    const versionRow = this.database.prepare('SELECT COALESCE(MAX(version_number), 0) AS version FROM project_versions WHERE project_id = ?').get(id) as { version: number };
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database.prepare("UPDATE projects SET status = 'archived', updated_at = ? WHERE id = ?").run(now, id);
+      this.database.prepare(`INSERT INTO project_versions (id, project_id, version_number, event_type, snapshot_json, created_at)
+        VALUES (?, ?, ?, 'project_archived', ?, ?)`).run(crypto.randomUUID(), id, versionRow.version + 1, JSON.stringify(updated), now);
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return updated;
+  }
+
+  public restore(id: string): Project | null {
+    const current = this.findById(id);
+    if (!current) return null;
+    const now = new Date().toISOString();
+    const status: Project['status'] = !current.workflow.nodes.length
+      ? 'draft'
+      : current.workflow.missingInformation.length
+        ? 'needs_input'
+        : 'ready';
+    const updated = projectSchema.parse({ ...current, status, updatedAt: now });
+    const versionRow = this.database.prepare('SELECT COALESCE(MAX(version_number), 0) AS version FROM project_versions WHERE project_id = ?').get(id) as { version: number };
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database.prepare('UPDATE projects SET status = ?, updated_at = ? WHERE id = ?').run(status, now, id);
+      this.database.prepare(`INSERT INTO project_versions (id, project_id, version_number, event_type, snapshot_json, created_at)
+        VALUES (?, ?, ?, 'project_restored', ?, ?)`).run(crypto.randomUUID(), id, versionRow.version + 1, JSON.stringify(updated), now);
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');

@@ -51,6 +51,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const projectApi = {
   list: () => request<Project[]>("/workflows"),
+  listArchived: () => request<Project[]>("/workflows/archived"),
   get: (id: string) => request<Project>(`/workflows/${id}`),
   create: (input: CreateProjectInput) =>
     request<Project>("/workflows", {
@@ -61,6 +62,16 @@ export const projectApi = {
     request<Project>(`/workflows/${id}/scope`, {
       method: "PATCH",
       body: JSON.stringify({ originalScope }),
+    }),
+  archive: (id: string) =>
+    request<Project>(`/workflows/${id}/archive`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    }),
+  restore: (id: string) =>
+    request<Project>(`/workflows/${id}/restore`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
     }),
   updateEditor: (
     id: string,

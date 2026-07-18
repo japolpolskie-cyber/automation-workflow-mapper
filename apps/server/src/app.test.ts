@@ -88,6 +88,82 @@ describe("API foundation", () => {
     expect(listed.json().data).toHaveLength(1);
   });
 
+  it("archives a project and removes it from the active project list", async () => {
+    const app = await buildApp(testEnvironment);
+    apps.push(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/workflows",
+      payload: { name: "Completed plan", platform: "n8n" },
+    });
+    const id = created.json().data.id as string;
+
+    const archived = await app.inject({
+      method: "PATCH",
+      url: `/api/workflows/${id}/archive`,
+      payload: {},
+    });
+    const listed = await app.inject({ method: "GET", url: "/api/workflows" });
+    const archivedList = await app.inject({ method: "GET", url: "/api/workflows/archived" });
+    const preserved = await app.inject({ method: "GET", url: `/api/workflows/${id}` });
+
+    expect(archived.statusCode).toBe(200);
+    expect(archived.json().data.status).toBe("archived");
+    expect(listed.json().data).toHaveLength(0);
+    expect(archivedList.json().data).toHaveLength(1);
+    expect(preserved.json().data.status).toBe("archived");
+
+    const restored = await app.inject({
+      method: "PATCH",
+      url: `/api/workflows/${id}/restore`,
+      payload: {},
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().data.status).toBe("draft");
+  });
+
+  it("preserves an explicit numbered workflow sequence through the analyze endpoint", async () => {
+    const app = await buildApp(testEnvironment);
+    apps.push(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/workflows",
+      payload: { name: "Lead Qualification and Outreach Automation", platform: "n8n" },
+    });
+    const id = created.json().data.id as string;
+    await app.inject({
+      method: "PATCH",
+      url: `/api/workflows/${id}/scope`,
+      payload: {
+        originalScope: `Workflow Sequence
+1. Webhook: Receive data
+2. External API: Get company info
+3. Function: Score and prioritize lead
+4. Database: Store lead in SQL
+5. Email: Send notification
+6. LLM: Generate outreach email
+
+Workflow Mapping Rules
+- Create one explicit node for every business step.
+- Add an explicit connection between every related node.`,
+      },
+    });
+
+    const analyzed = await app.inject({
+      method: "POST",
+      url: "/api/workflows/analyze",
+      payload: { projectId: id },
+    });
+
+    expect(analyzed.statusCode).toBe(200);
+    expect(analyzed.json().data.provider).toBe("local");
+    expect(analyzed.json().data.workflow.nodes).toHaveLength(7);
+    expect(analyzed.json().data.workflow.connections).toHaveLength(6);
+    const names = analyzed.json().data.workflow.nodes.map((node: { name: string }) => node.name);
+    expect(names).toContain("LLM: Generate outreach email");
+    expect(names.join(" ")).not.toMatch(/explicit node|explicit connection/i);
+  });
+
   it("extracts a text document through multipart upload", async () => {
     const app = await buildApp(testEnvironment);
     apps.push(app);

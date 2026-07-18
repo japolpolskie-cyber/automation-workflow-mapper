@@ -29,6 +29,8 @@ export class LocalAnalysisProvider implements AnalysisProvider {
 }
 
 function extractOperationalArchitecture(scope: string): { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] } {
+  const explicitSequence = extractExplicitWorkflowSequence(scope);
+  if (explicitSequence) return explicitSequence;
   if (!/^\s*(?:trigger|action)\s*:/im.test(scope) && /\b(?:when|upon)\b/i.test(scope)) return extractProceduralArchitecture(scope);
   const lines = scope.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
   const nodes: WorkflowNode[] = []; const connections: WorkflowConnection[] = []; const branches: WorkflowBranch[] = [];
@@ -51,11 +53,64 @@ function extractOperationalArchitecture(scope: string): { nodes: WorkflowNode[];
   return { nodes, connections, branches };
 }
 
-const processVerb = /^(?:validate|assign|send|notify|move|create|update|add|check|wait|log|search|find|upload|retrieve|approve|reject|archive|process)\b/i;
+function extractExplicitWorkflowSequence(scope: string): { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] } | null {
+  const lines = scope.split(/\r?\n/).map((line) => line.trim());
+  const sequenceStart = lines.findIndex((line) => /^workflow sequence\s*:?\s*$/i.test(line));
+  if (sequenceStart < 0) return null;
+
+  const nodes: WorkflowNode[] = [];
+  const connections: WorkflowConnection[] = [];
+  const branches: WorkflowBranch[] = [];
+  const sectionEnd = /^(?:required integrations|open questions|workflow mapping rules|mapping rules|clarifications|assumptions)\s*:?\s*$/i;
+
+  for (const line of lines.slice(sequenceStart + 1)) {
+    if (sectionEnd.test(line)) break;
+    const step = line.match(/^\d+[.)]\s*(?:([^:—–-]+?)\s*(?::|—|–|-)\s*)?(.+)$/);
+    if (!step) continue;
+
+    const explicitType = step[1]?.trim() ?? '';
+    const detail = step[2]!.trim();
+    const fullText = `${explicitType}: ${detail}`;
+    const isTrigger = nodes.length === 0 && /^(?:webhook|trigger|schedule|form|event)$/i.test(explicitType);
+    const service = explicitType || findService(detail);
+    const category = isTrigger ? 'trigger' : explicitStepCategory(explicitType, detail);
+    const operation = isTrigger ? triggerOperation(fullText) : explicitStepOperation(explicitType, detail);
+    const node = makeNode(category, sentenceTitle(fullText), service || null, operation, fullText);
+
+    if (nodes.length) connections.push(connect(nodes.at(-1)!.id, node.id));
+    nodes.push(node);
+  }
+
+  return nodes.length ? { nodes, connections, branches } : null;
+}
+
+function explicitStepCategory(type: string, detail: string): WorkflowNode['category'] {
+  const value = `${type} ${detail}`;
+  if (/external api|webhook|http|api request/i.test(value)) return 'api_request';
+  if (/database|sql|data store/i.test(value)) return 'database';
+  if (/\bemail\b/i.test(value)) return 'email';
+  if (/notification|notify|alert/i.test(value)) return 'notification';
+  if (/wait|delay/i.test(value)) return 'delay';
+  if (/condition|if\b|decision/i.test(value)) return 'condition';
+  return 'action';
+}
+
+function explicitStepOperation(type: string, detail: string): string {
+  const value = `${type} ${detail}`;
+  if (/external api|api request/i.test(value)) return /get|retrieve|find|search/i.test(detail) ? 'Retrieve data' : 'Call API';
+  if (/database|sql/i.test(value)) return /store|insert|create|save/i.test(detail) ? 'Create record' : 'Query records';
+  if (/\bemail\b/i.test(value)) return 'Send email';
+  if (/notification|notify|alert/i.test(value)) return 'Send notification';
+  if (/llm|language model/i.test(value)) return 'Generate text';
+  if (/function|code/i.test(value)) return 'Execute function';
+  return actionOperation(detail);
+}
+
+const processVerb = /^(?:validate|assign|send|notify|move|create|update|add|check|wait|log|search|find|upload|retrieve|approve|reject|archive|process|generate|close|continue|share|remove|export|mention|pause|retry)\b/i;
 const splitActions = (text: string) => text
   .replace(/[.]+$/, '')
-  .split(/\s+and\s+(?=(?:validate|assign|send|notify|move|create|update|add|check|wait|log|search|find|upload|retrieve|approve|reject|archive|process)\b)/i)
-  .map((item) => item.trim()).filter(Boolean);
+  .split(/\s+and\s+(?=(?:automatically\s+)?(?:validate|assign|send|notify|move|create|update|add|check|wait|log|search|find|upload|retrieve|approve|reject|archive|process|generate|close|continue|share|remove|export|mention|pause|retry)\b)/i)
+  .map((item) => item.trim().replace(/^automatically\s+/i, '')).filter(Boolean);
 
 function extractProceduralArchitecture(scope: string): { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] } {
   const statements = scope.split(/\r?\n|(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
@@ -180,7 +235,7 @@ function actionService(text: string, section: string): string | null {
   if (/text message|\bsms\b/i.test(text)) return 'Messaging provider';
   return null;
 }
-function actionCategory(text: string): WorkflowNode['category'] { return /validate|verify|check whether/i.test(text) ? 'action' : /email/i.test(text) ? 'email' : /text message|\bsms\b/i.test(text) ? 'messaging' : /notify/i.test(text) ? 'notification' : /wait|once a week|after \d/i.test(text) ? 'delay' : /if |whether|responded\?/i.test(text) ? 'condition' : /sheet|database|record/i.test(text) ? 'database' : 'action'; }
+function actionCategory(text: string): WorkflowNode['category'] { return /validate|verify|check whether/i.test(text) ? 'action' : /email/i.test(text) ? 'email' : /text message|\bsms\b/i.test(text) ? 'messaging' : /notify/i.test(text) ? 'notification' : /wait|once a week|after \d/i.test(text) ? 'delay' : /^(?:if|whether)\b|responded\?/i.test(text) ? 'condition' : /sheet|database|record/i.test(text) ? 'database' : 'action'; }
 function actionTitle(text: string): string {
   if (/create a folder/i.test(text)) return 'Create lead folder in Google Drive';
   if (/create a subtask/i.test(text)) return 'Create Social Media Content subtask in Asana';
@@ -191,7 +246,7 @@ function actionTitle(text: string): string {
   if (/follow-up|follow up/i.test(text)) return 'Send lead follow-up message';
   return sentenceTitle(text);
 }
-function actionOperation(text: string): string { return /validate|verify/i.test(text) ? 'Validate data' : /folder/i.test(text) ? 'Create folder' : /subtask/i.test(text) ? 'Create subtask' : /email/i.test(text) ? 'Send email' : /text message|sms/i.test(text) ? 'Send message' : /link/i.test(text) ? 'Update task description' : /create/i.test(text) ? 'Create record' : /update/i.test(text) ? 'Update record' : 'Perform action'; }
+function actionOperation(text: string): string { return /validate|verify/i.test(text) ? 'Validate data' : /folder/i.test(text) ? 'Create folder' : /subtask/i.test(text) ? 'Create subtask' : /email/i.test(text) ? 'Send email' : /text message|sms/i.test(text) ? 'Send message' : /link/i.test(text) ? 'Update task description' : /generate/i.test(text) ? 'Generate document' : /retry/i.test(text) ? 'Retry operation' : /create/i.test(text) ? 'Create record' : /update/i.test(text) ? 'Update record' : 'Perform action'; }
 function triggerTitle(text: string, service: string | null): string { const column = text.match(/["“']([^"”']+)["”']/)?.[1]; return column ? `${service || 'Lead'} — ${column} status reached` : sentenceTitle(text.replace(/^when\s+/i, '')); }
 function triggerOperation(text: string): string { return /column|status/i.test(text) ? 'Task status changed' : /schedule|every|weekly/i.test(text) ? 'Scheduled event' : 'Receive event'; }
 function sentenceTitle(text: string): string { const cleaned = text.replace(/^automatically\s+/i, '').replace(/[.]+$/, '').trim(); return `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`.slice(0, 120); }

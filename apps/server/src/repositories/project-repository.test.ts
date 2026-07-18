@@ -39,4 +39,23 @@ describe('ProjectRepository workflow-set persistence', () => {
     expect(reloaded.workflowSet.nodeReferences[0]!.referencedByWorkflowIds).toContain(secondWorkflowId);
     expect(reloaded.workflow.nodes.filter((node) => node.id === firstReference.resourceId)).toHaveLength(1);
   });
+
+  it('archives a project without deleting its workflow history', () => {
+    const database = createDatabase(':memory:'); databases.push(database);
+    const repository = new ProjectRepository(database);
+    const project = repository.create({ name: 'Old workflow', clientName: '', description: '', platform: 'n8n' });
+
+    const archived = repository.archive(project.id);
+
+    expect(archived?.status).toBe('archived');
+    expect(repository.list()).toHaveLength(0);
+    expect(repository.findById(project.id)?.status).toBe('archived');
+    const version = database.prepare("SELECT event_type FROM project_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1").get(project.id) as { event_type: string };
+    expect(version.event_type).toBe('project_archived');
+
+    const restored = repository.restore(project.id);
+    expect(restored?.status).toBe('draft');
+    expect(repository.list()).toHaveLength(1);
+    expect(repository.listArchived()).toHaveLength(0);
+  });
 });

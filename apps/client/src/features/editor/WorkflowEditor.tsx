@@ -91,11 +91,13 @@ const palette: Array<{ category: WorkflowNode["category"]; label: string }> = [
 export function WorkflowEditor({
   project,
   onBack,
+  onHome,
   onSaved,
   onTemplateSaved,
 }: {
   project: Project;
   onBack: () => void;
+  onHome: () => void;
   onSaved: (project: Project) => void;
   onTemplateSaved: (template: CustomWorkflowTemplate) => void;
 }) {
@@ -350,9 +352,14 @@ export function WorkflowEditor({
       className={`editor-shell ${layoutDirection === "TB" ? "layout-vertical" : "layout-horizontal"} ${workflows.length > 1 ? "has-workflow-selector" : ""}`}
     >
       <header className="editor-topbar sticky-global-header">
-        <button className="back-button" onClick={onBack}>
-          <ArrowLeft size={17} /> Scope
-        </button>
+        <div className="editor-navigation">
+          <button className="back-button" onClick={onBack}>
+            <ArrowLeft size={17} /> Scope
+          </button>
+          <button className="back-button" onClick={onHome}>
+            <LayoutDashboard size={16} /> Dashboard
+          </button>
+        </div>
         <div className="editor-project">
           <PlatformMark platform={targetPlatform} compact />
           <div>

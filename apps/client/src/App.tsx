@@ -6,6 +6,7 @@ import type {
   Project,
 } from "@awm/shared";
 import {
+  Archive,
   Bell,
   BookOpen,
   Boxes,
@@ -17,6 +18,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   Plus,
+  RotateCcw,
   Search,
   Settings,
   ShieldCheck,
@@ -37,6 +39,8 @@ import type { WorkflowTemplate } from "./data/workflow-templates";
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -67,6 +71,10 @@ export default function App() {
         ),
       )
       .finally(() => setLoading(false));
+    projectApi
+      .listArchived()
+      .then(setArchivedProjects)
+      .catch(() => setError("Archived projects could not be loaded."));
   }, []);
   useEffect(() => {
     customTemplateApi
@@ -80,14 +88,14 @@ export default function App() {
   }, []);
   const visible = useMemo(
     () =>
-      projects.filter(
+      (showArchived ? archivedProjects : projects).filter(
         (project) =>
           (platform === "all" || project.platform === platform) &&
           `${project.name} ${project.clientName}`
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),
-    [projects, platform, query],
+    [archivedProjects, projects, platform, query, showArchived],
   );
   const create = async (input: CreateProjectInput) => {
     setCreating(true);
@@ -118,6 +126,47 @@ export default function App() {
     setProjects((current) =>
       current.map((item) => (item.id === updated.id ? updated : item)),
     );
+  };
+  const archiveProject = async (project: Project) => {
+    if (
+      !window.confirm(
+        `Archive "${project.name}"? It will be removed from Your projects, while its workflow and history remain saved.`,
+      )
+    )
+      return;
+    setError("");
+    try {
+      await projectApi.archive(project.id);
+      setProjects((current) =>
+        current.filter((item) => item.id !== project.id),
+      );
+      setArchivedProjects((current) => [
+        { ...project, status: "archived" },
+        ...current,
+      ]);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The project could not be archived.",
+      );
+    }
+  };
+  const restoreProject = async (project: Project) => {
+    setError("");
+    try {
+      const restored = await projectApi.restore(project.id);
+      setArchivedProjects((current) =>
+        current.filter((item) => item.id !== project.id),
+      );
+      setProjects((current) => [restored, ...current]);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The project could not be restored.",
+      );
+    }
   };
   const useCustomTemplate = async (template: CustomWorkflowTemplate) => {
     setTemplateBusyId(template.id);
@@ -174,6 +223,11 @@ export default function App() {
       <WorkflowEditor
         project={editorProject}
         onBack={() => setEditorProject(null)}
+        onHome={() => {
+          setEditorProject(null);
+          setSelectedProject(null);
+          setShowArchived(false);
+        }}
         onSaved={saveProjectState}
         onTemplateSaved={(template) =>
           setCustomTemplates((current) => [template, ...current])
@@ -214,12 +268,16 @@ export default function App() {
         </button>
         <nav aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          <a className="nav-item active" href="#dashboard">
+          <a className={`nav-item ${showArchived ? "" : "active"}`} href="#dashboard" onClick={() => setShowArchived(false)}>
             <LayoutDashboard size={18} /> Dashboard
           </a>
-          <a className="nav-item" href="#projects">
+          <a className="nav-item" href="#projects" onClick={() => setShowArchived(false)}>
             <FolderKanban size={18} /> All projects{" "}
             <span>{projects.length}</span>
+          </a>
+          <a className={`nav-item ${showArchived ? "active" : ""}`} href="#projects" onClick={() => setShowArchived(true)}>
+            <Archive size={18} /> Archived projects{" "}
+            <span>{archivedProjects.length}</span>
           </a>
           <span
             className="nav-item disabled"
@@ -340,8 +398,8 @@ export default function App() {
           <section className="projects-section" id="projects">
             <div className="section-head">
               <div>
-                <h2>Your projects</h2>
-                <p>Workflow plans and client architectures</p>
+                <h2>{showArchived ? "Archived projects" : "Your projects"}</h2>
+                <p>{showArchived ? "Preserved workflow plans hidden from the active workspace" : "Workflow plans and client architectures"}</p>
               </div>
               <div className="filters">
                 <div className="search-box">
@@ -389,12 +447,13 @@ export default function App() {
             ) : visible.length ? (
               <div className="project-grid">
                 {visible.map((project) => (
-                  <button
-                    type="button"
-                    className="project-card"
-                    key={project.id}
-                    onClick={() => setSelectedProject(project)}
-                  >
+                  <article className="project-card" key={project.id}>
+                    <button
+                      type="button"
+                      className="project-card-open"
+                      aria-label={`Open ${project.name}`}
+                      onClick={() => setSelectedProject(project)}
+                    />
                     <div className="card-top">
                       <PlatformMark platform={project.platform} compact />
                       <span className={`project-status ${project.status}`}>
@@ -426,7 +485,28 @@ export default function App() {
                         )}
                       </time>
                     </div>
-                  </button>
+                    {showArchived ? (
+                      <button
+                        type="button"
+                        className="project-archive"
+                        aria-label={`Restore ${project.name}`}
+                        title="Restore project"
+                        onClick={() => void restoreProject(project)}
+                      >
+                        <RotateCcw size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="project-archive"
+                        aria-label={`Archive ${project.name}`}
+                        title="Archive project"
+                        onClick={() => void archiveProject(project)}
+                      >
+                        <Archive size={15} />
+                      </button>
+                    )}
+                  </article>
                 ))}
               </div>
             ) : (
@@ -437,14 +517,18 @@ export default function App() {
                 <h3>
                   {query || platform !== "all"
                     ? "No matching projects"
+                    : showArchived
+                      ? "No archived projects"
                     : "Your first workflow starts here"}
                 </h3>
                 <p>
                   {query || platform !== "all"
                     ? "Try adjusting the search or platform filter."
+                    : showArchived
+                      ? "Projects you archive will appear here and can be restored at any time."
                     : "Create a project, choose a platform, and turn a scope of work into a reviewable draft plan."}
                 </p>
-                {!query && platform === "all" && (
+                {!showArchived && !query && platform === "all" && (
                   <button
                     className="button primary"
                     onClick={() => {

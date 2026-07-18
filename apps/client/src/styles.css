@@ -402,6 +402,7 @@ h1 em {
   gap: 15px;
 }
 .project-card {
+  position: relative;
   min-height: 187px;
   padding: 19px;
   border: 1px solid var(--line);
@@ -412,6 +413,43 @@ h1 em {
   justify-content: space-between;
   transition: 0.18s ease;
 }
+.project-card-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.project-card-open:focus-visible {
+  outline: 2px solid var(--color-focus, #2d9d72);
+  outline-offset: 2px;
+}
+.project-archive {
+  position: absolute;
+  right: 14px;
+  bottom: 11px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--color-surface, white);
+  color: var(--color-text-muted, #69746e);
+  cursor: pointer;
+}
+.project-archive:hover,
+.project-archive:focus-visible {
+  border-color: var(--color-accent, #177b59);
+  color: var(--color-accent, #177b59);
+}
+.project-archive:focus-visible {
+  outline: 2px solid var(--color-focus, #2d9d72);
+  outline-offset: 2px;
+}
 .project-card:not(.skeleton):hover {
   border-color: #bdccc4;
   box-shadow: 0 9px 24px #15251d10;
@@ -419,6 +457,7 @@ h1 em {
 }
 .card-top,
 .card-meta {
+  padding-right: 34px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1225,6 +1264,11 @@ h1 em {
   display: flex;
   align-items: center;
   gap: 9px;
+}
+.editor-navigation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .editor-project > div {
   display: flex;
