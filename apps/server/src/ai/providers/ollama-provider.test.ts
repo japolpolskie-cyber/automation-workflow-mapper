@@ -26,6 +26,9 @@ describe('OllamaAnalysisProvider', () => {
     expect(body.messages[0].content).toContain('Never invent a platform-specific trigger');
     expect(body.messages[1].content).toContain('"minContains":1');
     expect(body.messages[1].content).toContain('"maxContains":1');
+    expect(body.messages[1].content).toContain('PLATFORM-SPECIFIC RETRIEVED KNOWLEDGE START');
+    expect(body.messages[1].content).toContain('Selected platform: n8n');
+    expect(body.messages[1].content).not.toContain('Looping by Zapier');
   });
 
   it('does not fall back to an unconfigured cloud service', async () => {

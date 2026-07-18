@@ -46,9 +46,18 @@ function enforceConditionBranches(workflow: CanonicalWorkflow): CanonicalWorkflo
   const nodes = [...workflow.nodes]; const connections = [...workflow.connections];
   for (const condition of nodes.filter((node) => ['condition', 'filter'].includes(node.category))) {
     const outgoing = connections.filter((edge) => edge.sourceNodeId === condition.id && edge.routeType !== 'error');
-    if (outgoing[0]) Object.assign(outgoing[0], { label: outgoing[0].label || condition.decisionRule?.trueLabel || 'TRUE', branchLabel: outgoing[0].branchLabel || condition.decisionRule?.trueLabel || 'TRUE', routeType: 'conditional', style: 'conditional' });
-    if (outgoing[1]) Object.assign(outgoing[1], { label: outgoing[1].label || condition.decisionRule?.falseLabel || 'FALSE', branchLabel: outgoing[1].branchLabel || condition.decisionRule?.falseLabel || 'FALSE', routeType: 'conditional', style: 'failure' });
-    for (const label of outgoing.length === 0 ? ['TRUE', 'FALSE'] as const : outgoing.length === 1 ? ['FALSE'] as const : []) {
+    const trueLabel = condition.decisionRule?.trueLabel || 'TRUE';
+    const falseLabel = condition.decisionRule?.falseLabel || 'FALSE';
+    const isGeneric = (connection: WorkflowConnection) => !connection.branchLabel || ['SUCCESS', 'NEXT'].includes(connection.branchLabel);
+    const explicitLabels = new Set(outgoing.filter((connection) => !isGeneric(connection)).map((connection) => (connection.branchLabel || connection.label).toUpperCase()));
+    const availableLabels = [trueLabel, falseLabel].filter((label) => !explicitLabels.has(label.toUpperCase()));
+    for (const [index, connection] of outgoing.filter(isGeneric).entries()) {
+      const label = availableLabels[index];
+      if (!label) continue;
+      Object.assign(connection, { label, branchLabel: label, routeType: 'conditional', style: label.toUpperCase() === falseLabel.toUpperCase() ? 'failure' : 'conditional' });
+    }
+    const labels = new Set(outgoing.map((connection) => (connection.branchLabel || connection.label).toUpperCase()));
+    for (const label of [trueLabel, falseLabel].filter((candidate) => !labels.has(candidate))) {
       const end = architectureNode('end', `${label === 'TRUE' ? 'Condition met' : 'Condition not met'} — End`, null, 'Complete branch', 'Finish this decision branch with a defined outcome.');
       nodes.push(end); connections.push(edge(condition.id, end.id, label, 'conditional', label === 'FALSE' ? 'failure' : 'conditional'));
     }

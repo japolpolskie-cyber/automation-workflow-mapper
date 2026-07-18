@@ -69,6 +69,68 @@ describe('AnalysisService output boundary', () => {
     expect(result.graphValidation.valid).toBe(true);
   });
 
+  it('rejects a two-node Ollama result for an explicit multi-step sequence', async () => {
+    const candidate = structuredClone(leadQualificationWorkflow);
+    const retained = new Set(candidate.nodes.slice(0, 2).map((node) => node.id));
+    candidate.nodes = candidate.nodes.slice(0, 2);
+    candidate.connections = candidate.connections.filter((edge) => retained.has(edge.sourceNodeId) && retained.has(edge.targetNodeId));
+    candidate.branches = [];
+    candidate.errorHandling = [];
+    candidate.clarificationQuestions = [];
+    candidate.risks = [];
+    const provider: AnalysisProvider = { name: 'ollama', async analyze() { return candidate; }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
+    const database = createDatabase(':memory:'); databases.push(database);
+    const repository = new ProjectRepository(database);
+    const project = repository.create({ name: 'Lead qualification', clientName: '', description: '', platform: 'n8n' });
+    repository.updateScope(project.id, `Workflow Sequence
+1. Webhook: Receive lead data
+2. External API: Retrieve company details
+3. Function: Score the lead
+4. Database: Store the lead
+5. Email: Notify sales
+6. LLM: Generate outreach email
+
+Required Integrations
+- Webhook
+- External API`);
+
+    const result = await new AnalysisService(repository, provider).analyze(project.id);
+
+    expect(result.provider).toBe('local');
+    expect(result.workflow.nodes.filter((node) => !['start', 'end', 'note', 'group'].includes(node.category)).length).toBeGreaterThanOrEqual(6);
+    expect(result.workflow.warnings.join(' ')).toMatch(/preserved only 2 of 6 explicit workflow steps/i);
+  });
+
+  it('uses deterministic conceptual analysis for a large multi-workflow portfolio', async () => {
+    let providerCalled = false;
+    const provider: AnalysisProvider = { name: 'ollama', async analyze() { providerCalled = true; throw new Error('Large portfolio should not be sent as one model request.'); }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
+    const database = createDatabase(':memory:'); databases.push(database);
+    const repository = new ProjectRepository(database);
+    const project = repository.create({ name: 'Property operations', clientName: '', description: '', platform: 'make' });
+    const section = (name: string, body: string) => `\n${name}\n\n${body}\n`;
+    const scope = (`Property operations
+${section('Inquiry Management', 'When an inquiry arrives, create a contact and notify Slack.')}
+${section('Viewing Management', 'When a viewing is booked, create a calendar event and send an email.')}
+${section('Maintenance Management', 'When a request arrives, create a task and notify the manager.')}
+${section('Rent Collection', 'When rent is due, retrieve payment details and send a reminder.')}
+${section('Owner Reporting', 'When reporting begins, retrieve each property and email the owner.')}`).padEnd(10_500, ' supporting operational detail');
+    repository.updateScope(project.id, scope);
+
+    const result = await new AnalysisService(repository, provider).analyze(project.id);
+    const persisted = repository.findById(project.id)!;
+
+    expect(providerCalled).toBe(false);
+    expect(result.provider).toBe('local');
+    expect(result.workflow.nodes.length).toBeGreaterThanOrEqual(4);
+    expect(result.workflow.nodes.length).toBeLessThanOrEqual(10);
+    expect(persisted.workflowSet.workflows).toHaveLength(1);
+    expect(persisted.workflowSet.workflows.length).toBeLessThan(5);
+    expect(result.workflow.nodes.some((node) => node.category === 'trigger' && node.name.includes('Leasing & Prospect Management'))).toBe(true);
+    expect(result.workflow.nodes.some((node) => node.category === 'trigger' && node.name === 'Inquiry Management')).toBe(false);
+    expect(result.workflow.warnings.join(' ')).toMatch(/large multi-workflow portfolio/i);
+    expect(result.workflow.warnings.join(' ')).toMatch(/semantic compression reduced/i);
+  });
+
   it('preserves a detailed multiline graph through analysis, persistence, and reload', async () => {
     const database = createDatabase(':memory:'); databases.push(database);
     const repository = new ProjectRepository(database);

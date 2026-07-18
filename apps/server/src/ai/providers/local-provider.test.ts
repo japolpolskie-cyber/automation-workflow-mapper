@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CanonicalWorkflow } from '@awm/shared';
+import { compileAutomationArchitecture, createWorkflowSetFromGraph, validateWorkflowGraph, type CanonicalWorkflow } from '@awm/shared';
 import { LocalAnalysisProvider } from './local-provider.js';
 
 const scope = `Make Expert for Asana CRM Automation
@@ -137,5 +137,78 @@ Once the proposal is ready, notify the salesperson in Slack.`;
     ]));
     const qualification = workflow.nodes.find((node) => /Not Qualified/i.test(node.name))!;
     expect(workflow.connections.filter((edge) => edge.sourceNodeId === qualification.id).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
+  });
+
+  it.each([
+    ['make', /Iterator/i, 'Make Flow Control', 'Iterator'],
+    ['zapier', /Looping by Zapier/i, 'Looping by Zapier', 'Create Loop From Line Items'],
+    ['n8n', /Split Out/i, 'n8n', 'Split Out'],
+  ] as const)('adds the native %s collection iterator only for explicit collection processing', async (platform, expectedName, service, operation) => {
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: 'When Gmail receives a message, retrieve the attachments. Upload each attachment to Google Drive. Notify Slack when processing is complete.',
+      projectName: 'Attachment intake',
+      platform,
+    }) as CanonicalWorkflow;
+    const compiled = compileAutomationArchitecture(workflow);
+    const iterator = compiled.nodes.find((node) => node.category === 'loop');
+
+    expect(iterator).toMatchObject({ name: expect.stringMatching(expectedName), service, operation });
+    expect(compiled.connections.filter((edge) => edge.sourceNodeId === iterator?.id).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['LOOP', 'DONE']));
+    expect(validateWorkflowGraph(compiled).valid).toBe(true);
+  });
+
+  it('does not iterate scalar fields from one webform submission', async () => {
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: 'When a webform is submitted, retrieve the name and email. Add the submission to one Google Sheets row.',
+      projectName: 'Webform intake',
+      platform: 'make',
+    }) as CanonicalWorkflow;
+
+    expect(workflow.nodes.some((node) => node.category === 'loop')).toBe(false);
+  });
+
+  it('adds a router and default route only when more than two destinations are explicit', async () => {
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: 'When a request arrives, validate it. Route requests by priority to High, Medium, or Low. Notify Slack.',
+      projectName: 'Priority routing',
+      platform: 'zapier',
+    }) as CanonicalWorkflow;
+    const compiled = compileAutomationArchitecture(workflow);
+    const router = compiled.nodes.find((node) => node.category === 'router');
+    const labels = compiled.connections.filter((edge) => edge.sourceNodeId === router?.id).map((edge) => edge.label);
+
+    expect(labels).toEqual(expect.arrayContaining(['HIGH', 'MEDIUM', 'LOW', 'DEFAULT']));
+    expect(compiled.nodes.some((node) => node.category === 'merge')).toBe(true);
+    expect(validateWorkflowGraph(compiled).valid).toBe(true);
+  });
+
+  it('groups a large requirements portfolio into conceptual business capabilities', async () => {
+    const section = (name: string, body: string) => `\n${name}\n\n${body}\n`;
+    const scope = (`Property operations portfolio
+${section('Inquiry Management', 'Whenever an inquiry arrives, create the contact. If the property is unavailable, send alternatives. Otherwise notify the leasing agent.')}
+${section('Viewing Management', 'When a viewing is booked, create a calendar event. Send a reminder after 24 hours. If cancelled, notify the agent.')}
+${section('Maintenance Management', 'Whenever a maintenance request arrives, create a ticket. If it is urgent, notify Slack. Otherwise assign the standard queue.')}
+${section('Rent Collection', 'When rent is due, check whether payment was received. If unpaid, send a reminder. If paid, log the receipt.')}
+${section('Owner Reporting', 'Every month, retrieve property results. For each property, create a report and send it to the owner.')}`).padEnd(10_500, ' supporting operational detail');
+
+    const workflow = await new LocalAnalysisProvider().analyze({ scope, projectName: 'Property operations', platform: 'make' }) as CanonicalWorkflow;
+    const compiled = compileAutomationArchitecture(workflow);
+
+    const triggers = compiled.nodes.filter((node) => node.category === 'trigger');
+    const workflowSet = createWorkflowSetFromGraph(compiled);
+    expect(triggers.length).toBeGreaterThanOrEqual(2);
+    expect(triggers.length).toBeLessThan(5);
+    expect(workflowSet.workflows.length).toBe(triggers.length);
+    expect(workflowSet.workflows.some((item) => item.name.includes('Leasing & Prospect Management'))).toBe(true);
+    expect(triggers.some((node) => node.name === 'Inquiry Management')).toBe(false);
+    expect(compiled.nodes.some((node) =>
+      (node.configuration.compoundOperation === true && Array.isArray(node.configuration.groupedActions))
+      || Array.isArray(node.configuration.branchActions))).toBe(true);
+    expect(workflow.warnings.join(' ')).toMatch(/semantic compression reduced/i);
+    const ownerByNode = new Map(workflowSet.nodeReferences.map((reference) => [reference.resourceId, reference.owningWorkflowId]));
+    const stepCounts = workflowSet.workflows.map((entry) => compiled.nodes.filter((node) =>
+      ownerByNode.get(node.id) === entry.id && !['start', 'trigger', 'end', 'note', 'group'].includes(node.category)).length);
+    expect(stepCounts.filter((count) => count < 6).length / stepCounts.length).toBeLessThanOrEqual(0.3);
+    expect(validateWorkflowGraph(compiled).valid).toBe(true);
   });
 });

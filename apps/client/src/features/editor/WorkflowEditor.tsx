@@ -5,6 +5,7 @@ import {
   MiniMap,
   Panel,
   ReactFlow,
+  type ReactFlowInstance,
   type NodeMouseHandler,
 } from "@xyflow/react";
 import {
@@ -116,6 +117,8 @@ export function WorkflowEditor({
     project.platform,
   );
   const [selectedWorkflowId, setSelectedWorkflowId] = useState("");
+  const [flowInstance, setFlowInstance] =
+    useState<ReactFlowInstance<EditorNode> | null>(null);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
   const nodeTypes = useMemo(() => ({ workflow: WorkflowCanvasNode }), []);
@@ -215,7 +218,6 @@ export function WorkflowEditor({
     const direction = project.platform === "zapier" ? "TB" : "LR";
     store.initialize(project);
     setLayoutDirection(direction);
-    store.autoLayout(direction);
   }, [project.id]);
   useEffect(() => {
     if (!workflows.some((item) => item.id === selectedWorkflowId))
@@ -224,11 +226,25 @@ export function WorkflowEditor({
   useEffect(() => {
     store.selectNode(null);
   }, [selectedWorkflowId]);
+  useEffect(() => {
+    if (!flowInstance || view !== "automation" || !activeWorkflow.nodes.length)
+      return;
+    const frame = requestAnimationFrame(() => {
+      void flowInstance.fitView({ padding: 0.22, duration: 250 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [flowInstance, activeSlice.id, activeWorkflow.nodes.length, view]);
+  const layoutAndCenterActiveWorkflow = (direction: "LR" | "TB") => {
+    store.autoLayout(direction, activeDomainIds);
+    requestAnimationFrame(() => {
+      void flowInstance?.fitView({ padding: 0.22, duration: 250 });
+    });
+  };
   const changePlatform = (platform: Platform) => {
     const direction = platform === "zapier" ? "TB" : "LR";
     setTargetPlatform(platform);
     setLayoutDirection(direction);
-    store.autoLayout(direction);
+    layoutAndCenterActiveWorkflow(direction);
   };
   const selectNode: NodeMouseHandler<EditorNode> = (_, node) =>
     store.selectNode(node.id);
@@ -503,6 +519,7 @@ export function WorkflowEditor({
               }}
               onNodeClick={selectNode}
               onPaneClick={() => store.selectNode(null)}
+              onInit={setFlowInstance}
               fitView
               fitViewOptions={{ padding: 0.22 }}
               snapToGrid
@@ -541,7 +558,9 @@ export function WorkflowEditor({
                   </select>
                   <button
                     className="canvas-tool"
-                    onClick={() => store.autoLayout(layoutDirection)}
+                    onClick={() =>
+                      layoutAndCenterActiveWorkflow(layoutDirection)
+                    }
                   >
                     <LayoutDashboard size={15} /> Auto-layout
                   </button>

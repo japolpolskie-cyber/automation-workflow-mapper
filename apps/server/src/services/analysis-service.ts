@@ -2,12 +2,13 @@ import { aiWorkflowOutputSchema, compileAutomationArchitecture, inferWorkflowCon
 import { parseJsonWithRepair } from '../ai/repair/json-repair.js';
 import { repairWorkflowCandidate } from '../ai/repair/workflow-repair.js';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
-import { LocalAnalysisProvider } from '../ai/providers/local-provider.js';
+import { isLargeWorkflowPortfolio, LocalAnalysisProvider } from '../ai/providers/local-provider.js';
 import { AnalysisPipeline } from '../analysis/analysis-pipeline.js';
 import type { ProjectRepository } from '../repositories/project-repository.js';
 import type { ScopeIntelligenceService } from '../analysis/scope-intelligence.js';
 import { PlannerShadowService } from '../planner/planner-shadow-service.js';
 import { UnifiedPlannerRuntime, type PlannerRuntime } from '../planner/planner-runtime-service.js';
+import { countExplicitWorkflowSteps } from '../ai/prompts/workflow-analysis.js';
 
 export class AnalysisError extends Error {
   public constructor(public readonly code: string, message: string, public readonly statusCode = 422) { super(message); this.name = 'AnalysisError'; }
@@ -31,8 +32,12 @@ export class AnalysisService {
       providerUsed = 'local'; fallbackReason = reason;
       raw = await new LocalAnalysisProvider().analyze(input);
     };
-    try { raw = await this.provider.analyze(input); }
-    catch (error) { await useFreeFallback(error instanceof Error ? error.message : 'The configured AI provider failed.'); }
+    if (this.provider.name === 'ollama' && isLargeWorkflowPortfolio(project.originalScope)) {
+      await useFreeFallback('Large multi-workflow portfolio detected. Deterministic section analysis was used to avoid local-model context and output truncation.');
+    } else {
+      try { raw = await this.provider.analyze(input); }
+      catch (error) { await useFreeFallback(error instanceof Error ? error.message : 'The configured AI provider failed.'); }
+    }
     if (typeof raw === 'string') {
       try { raw = parseJsonWithRepair(raw); }
       catch (error) { await useFreeFallback(error instanceof Error ? error.message : 'AI output could not be repaired.'); }
@@ -49,6 +54,13 @@ export class AnalysisService {
       await useFreeFallback(reason); parsed = aiWorkflowOutputSchema.safeParse(raw);
     }
     if (!parsed.success) throw new AnalysisError('AI_SCHEMA_VALIDATION_FAILED', 'The free local fallback could not produce a valid workflow.');
+    const explicitStepCount = countExplicitWorkflowSteps(project.originalScope);
+    const representedSteps = parsed.data.nodes.filter((node) => !['start', 'end', 'note', 'group'].includes(node.category)).length;
+    if (providerUsed !== 'local' && explicitStepCount >= 4 && representedSteps < explicitStepCount) {
+      await useFreeFallback(`Generated workflow preserved only ${representedSteps} of ${explicitStepCount} explicit workflow steps.`);
+      parsed = aiWorkflowOutputSchema.safeParse(raw);
+      if (!parsed.success) throw new AnalysisError('AI_SCHEMA_VALIDATION_FAILED', 'The free local fallback could not preserve the explicit workflow sequence.');
+    }
     let prepared = prepareWorkflowForPersistence(parsed.data, providerUsed === 'ollama');
     parsed.data = prepared.workflow;
     let validation = prepared.validation;
@@ -120,11 +132,7 @@ function prepareWorkflowForPersistence(input: CanonicalWorkflow, requireSingleEn
     }
   }
 
-  const graphErrors = validation.issues.filter((issue) => issue.severity === 'error');
-  const missingOnlyEntry = entries.length === 0
-    && graphErrors.length === 1
-    && graphErrors[0]?.code === 'TRIGGER_REQUIRED';
-  if (missingOnlyEntry) {
+  if (entries.length === 0) {
     const repaired = addCanonicalStart(workflow);
     if (repaired) {
       workflow = compileAutomationArchitecture(repaired);

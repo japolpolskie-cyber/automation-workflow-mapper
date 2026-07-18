@@ -37,4 +37,47 @@ describe('automation architecture compiler', () => {
     }
     expect(validateWorkflowGraph(compileAutomationArchitecture(workflow)).valid).toBe(true);
   });
+
+  it('turns a generic condition continuation into TRUE and connects a FALSE outcome', () => {
+    const workflow = structuredClone(leadQualificationWorkflow);
+    const condition = workflow.nodes.find((node) => node.category === 'condition')!;
+    const originalTargetId = workflow.connections.find((edge) => edge.sourceNodeId === condition.id)!.targetNodeId;
+    const target = workflow.nodes.find((node) => node.id === originalTargetId)!;
+    workflow.connections = workflow.connections.filter((edge) => edge.sourceNodeId !== condition.id);
+    workflow.connections.push({
+      ...workflow.connections[0]!,
+      id: crypto.randomUUID(),
+      sourceNodeId: condition.id,
+      targetNodeId: target.id,
+      label: 'SUCCESS',
+      branchLabel: 'SUCCESS',
+      routeType: 'success',
+      style: 'success',
+    });
+
+    const compiled = compileAutomationArchitecture(workflow);
+    const decisionEdges = compiled.connections.filter((edge) => edge.sourceNodeId === condition.id);
+
+    expect(decisionEdges.map((edge) => edge.branchLabel).sort()).toEqual(['FALSE', 'TRUE']);
+    expect(validateWorkflowGraph(compiled).valid).toBe(true);
+  });
+
+  it('does not duplicate an explicit FALSE label when another continuation is generic', () => {
+    const workflow = structuredClone(leadQualificationWorkflow);
+    const condition = workflow.nodes.find((node) => node.category === 'condition')!;
+    const target = workflow.nodes.find((node) => node.id === workflow.connections.find((edge) => edge.sourceNodeId === condition.id)!.targetNodeId)!;
+    const alternate = { ...structuredClone(target), id: crypto.randomUUID(), name: 'Continue review' };
+    workflow.nodes.push(alternate);
+    workflow.connections = workflow.connections.filter((edge) => edge.sourceNodeId !== condition.id);
+    workflow.connections.push(
+      { ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: condition.id, targetNodeId: target.id, label: 'FALSE', branchLabel: 'FALSE', routeType: 'conditional', style: 'failure' },
+      { ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: condition.id, targetNodeId: alternate.id, label: '', branchLabel: null, routeType: 'success', style: 'default' },
+    );
+
+    const compiled = compileAutomationArchitecture(workflow);
+    const labels = compiled.connections.filter((edge) => edge.sourceNodeId === condition.id).map((edge) => edge.branchLabel);
+
+    expect(labels.sort()).toEqual(['FALSE', 'TRUE']);
+    expect(validateWorkflowGraph(compiled).valid).toBe(true);
+  });
 });

@@ -46,7 +46,12 @@ describe('K4 planner boundary', () => {
     expect(prompt.characterCount).toBe(prompt.system.length + prompt.user.length + prompt.sectionCharacterCounts['Output Schema']!);
   });
 
-  it('does not alter the existing production prompt', () => {
-    expect(buildWorkflowAnalysisPrompt({ scope: 'Create an Asana task.', projectName: 'CRM', platform: 'n8n' })).toBe('Project: CRM\nPreferred implementation platform: n8n\nThe canonical architecture itself must remain platform-neutral.\n\nUNTRUSTED SCOPE OF WORK START\nCreate an Asana task.\nUNTRUSTED SCOPE OF WORK END\n\nDesign a professional automation architecture. Include assumptions and clarification questions where business facts are missing. Return only the workflow JSON.');
+  it('adds isolated platform knowledge without leaking planner metrics', () => {
+    const prompt = buildWorkflowAnalysisPrompt({ scope: 'Create an Asana task.', projectName: 'CRM', platform: 'n8n' });
+    expect(prompt).toContain('Selected platform: n8n');
+    expect(prompt).toContain('Create an Asana task.');
+    expect(prompt).not.toMatch(/"confidence"|"coverage"|"reliability"|"weight"/);
+    expect(prompt).not.toContain('Selected platform: make');
+    expect(prompt).not.toContain('Selected platform: zapier');
   });
 });

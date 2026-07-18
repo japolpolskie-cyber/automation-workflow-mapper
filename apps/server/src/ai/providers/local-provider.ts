@@ -17,21 +17,40 @@ export class LocalAnalysisProvider implements AnalysisProvider {
       return { ...structuredClone(leadQualificationWorkflow), id: crypto.randomUUID(), name: input.projectName, targetPlatform: input.platform, createdAt: now, updatedAt: now };
     }
     const now = new Date().toISOString();
-    const { nodes, connections, branches } = extractOperationalArchitecture(input.scope);
+    const { nodes, connections, branches, compressionReport } = extractOperationalArchitecture(input.scope, input.platform);
     if (!nodes.length) nodes.push(makeNode('trigger', 'Workflow trigger to be confirmed', null, 'Receive event', 'Start the automation when the agreed business event occurs.'));
     const systems = [...new Set(nodes.map((node) => node.service).filter((value): value is string => Boolean(value)))].map((name) => ({ name, category: 'application' }));
     const missingInformation = [nodes.some((node) => node.category === 'trigger' && !node.service) ? 'Application that provides the trigger' : '', /text messages|sms/i.test(input.scope) && !/twilio|clicksend/i.test(input.scope) ? 'Approved SMS provider and sender' : '', /email/i.test(input.scope) && !/gmail|outlook|smtp/i.test(input.scope) ? 'Approved email provider and sender' : '', !/\b(error|fail|retry|fallback)\b/i.test(input.scope) ? 'Required failure behavior' : ''].filter(Boolean);
     const clarificationQuestions = missingInformation.map((missing) => ({ id: crypto.randomUUID(), question: `Please confirm: ${missing}.`, category: /provider|application/i.test(missing) ? 'system' as const : 'error_handling' as const, required: true, answer: null, relatedNodeId: null }));
-    const workflow: CanonicalWorkflow = { schemaVersion: '2.0', id: crypto.randomUUID(), name: input.projectName, summary: summarize(input.scope), objective: summarize(input.scope), targetPlatform: input.platform, confidence: nodes.length > 2 ? 0.68 : 0.45, actors: [], systems, nodes, connections, branches, errorHandling: [], clarificationQuestions, risks: [], complexity: branches.length || nodes.length >= 6 ? 'moderate' : 'simple', assumptions: [], missingInformation, warnings: ['Free deterministic fallback extracted supported explicit process steps. Review application choices and unresolved business rules before implementation.'], recommendations: ['Confirm messaging providers where the scope permits email or SMS alternatives.'], completionCriteria: [], estimatedExecutionTime: '', createdAt: now, updatedAt: now };
+    const compressionWarning = compressionReport
+      ? `Semantic compression reduced ${compressionReport.initialNodeCount} draft nodes to ${compressionReport.finalNodeCount} visible nodes across ${compressionReport.mergedNodeGroups.length} compound operation groups.`
+      : '';
+    const workflow: CanonicalWorkflow = { schemaVersion: '2.0', id: crypto.randomUUID(), name: input.projectName, summary: summarize(input.scope), objective: summarize(input.scope), targetPlatform: input.platform, confidence: nodes.length > 2 ? 0.68 : 0.45, actors: [], systems, nodes, connections, branches, errorHandling: [], clarificationQuestions, risks: [], complexity: branches.length || nodes.length >= 6 ? 'moderate' : 'simple', assumptions: [], missingInformation, warnings: ['Free deterministic fallback extracted supported explicit process steps. Review application choices and unresolved business rules before implementation.', compressionWarning].filter(Boolean), recommendations: ['Confirm messaging providers where the scope permits email or SMS alternatives.'], completionCriteria: [], estimatedExecutionTime: '', createdAt: now, updatedAt: now };
     return workflow;
   }
   public async getStatus() { return { provider: this.name, available: true, models: ['deterministic-local-preview'], message: 'Local preview is ready.' }; }
 }
 
-function extractOperationalArchitecture(scope: string): { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] } {
+interface CompressionReport {
+  initialNodeCount: number;
+  finalNodeCount: number;
+  mergedNodeGroups: Array<{ compoundNodeId: string; section: string; mergedNodeIds: string[] }>;
+  preservedStandaloneNodes: Array<{ nodeId: string; reason: string }>;
+}
+
+interface ExtractedArchitecture {
+  nodes: WorkflowNode[];
+  connections: WorkflowConnection[];
+  branches: WorkflowBranch[];
+  compressionReport?: CompressionReport;
+}
+
+function extractOperationalArchitecture(scope: string, platform: AnalysisProviderInput['platform']): ExtractedArchitecture {
+  const portfolio = extractPortfolioArchitecture(scope, platform);
+  if (portfolio) return portfolio;
   const explicitSequence = extractExplicitWorkflowSequence(scope);
   if (explicitSequence) return explicitSequence;
-  if (!/^\s*(?:trigger|action)\s*:/im.test(scope) && /\b(?:when|upon)\b/i.test(scope)) return extractProceduralArchitecture(scope);
+  if (!/^\s*(?:trigger|action)\s*:/im.test(scope) && /\b(?:when|whenever|upon)\b/i.test(scope)) return addEvidenceBasedIterators(extractProceduralArchitecture(scope), platform);
   const lines = scope.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
   const nodes: WorkflowNode[] = []; const connections: WorkflowConnection[] = []; const branches: WorkflowBranch[] = [];
   let previous: WorkflowNode | null = null; let section = '';
@@ -51,6 +70,372 @@ function extractOperationalArchitecture(scope: string): { nodes: WorkflowNode[];
     nodes.push(node); if (previous) connections.push(connect(previous.id, node.id)); previous = node;
   }
   return { nodes, connections, branches };
+}
+
+export function isLargeWorkflowPortfolio(scope: string): boolean {
+  return scope.length >= 10_000 && portfolioSections(scope).length >= 4;
+}
+
+function portfolioSections(scope: string): Array<{ title: string; body: string }> {
+  const lines = scope.split(/\r?\n/);
+  const headings: Array<{ index: number; title: string }> = [];
+  for (let index = 1; index < lines.length - 1; index += 1) {
+    const title = lines[index]!.trim();
+    if (!title || lines[index - 1]!.trim() || lines[index + 1]!.trim()) continue;
+    if (title.length > 70 || /[:.!?]$/.test(title) || !/^[A-Z][A-Za-z0-9 &'/-]+$/.test(title)) continue;
+    if (/^(?:Hi|General Requirements|Important Workflows)$/i.test(title)) continue;
+    headings.push({ index, title });
+  }
+  return headings.map((heading, position) => ({
+    title: heading.title,
+    body: lines.slice(heading.index + 1, headings[position + 1]?.index ?? lines.length).join('\n').trim(),
+  })).filter((section) => section.body.length >= 40);
+}
+
+interface PortfolioCapability {
+  key: string;
+  title: string;
+  sections: Array<{ title: string; body: string }>;
+}
+
+const propertyCapability = (title: string): Pick<PortfolioCapability, 'key' | 'title'> | null => {
+  if (/\b(?:inquir(?:y|ies)|prospects?|lead qualification|viewings?|post-viewing)\b/i.test(title)) return { key: 'leasing-prospects', title: 'Leasing & Prospect Management' };
+  if (/\b(?:rental application|screening|multiple applicants?)\b/i.test(title)) return { key: 'application-screening', title: 'Application Screening & Decision' };
+  if (/\b(?:application approval|conditional approval|lease signing|deposit|tenant onboarding|move-in)\b/i.test(title)) return { key: 'tenant-onboarding', title: 'Lease & Tenant Onboarding' };
+  if (/\b(?:maintenance|contractor)\b/i.test(title)) return { key: 'maintenance', title: 'Maintenance Operations' };
+  if (/\b(?:rent collection|partial\b.*\bpayments?|failed payments?|payment collection)\b/i.test(title)) return { key: 'rent-payments', title: 'Rent & Payment Operations' };
+  if (/\b(?:renewals?|move-out|offboarding)\b/i.test(title)) return { key: 'renewal-offboarding', title: 'Renewal & Move-Out' };
+  if (/\b(?:owner reporting|vacancy|portfolio reporting)\b/i.test(title)) return { key: 'owner-operations', title: 'Owner & Vacancy Operations' };
+  if (/\b(?:complaints?|escalations?|duplicate|audit|error handling|governance)\b/i.test(title)) return { key: 'risk-governance', title: 'Risk, Data Integrity & Automation Governance' };
+  return null;
+};
+
+const generalCapability = (title: string): Pick<PortfolioCapability, 'key' | 'title'> | null => {
+  if (/\b(?:lead|prospect|sales|marketing|campaign|acquisition)\b/i.test(title)) return { key: 'customer-acquisition', title: 'Customer Acquisition & Sales' };
+  if (/\b(?:application|assessment|screening|qualification|approval|decision)\b/i.test(title)) return { key: 'assessment-decision', title: 'Assessment & Decision Management' };
+  if (/\b(?:onboarding|implementation|fulfillment|delivery|activation)\b/i.test(title)) return { key: 'onboarding-delivery', title: 'Onboarding & Service Delivery' };
+  if (/\b(?:support|maintenance|ticket|request|case|incident)\b/i.test(title)) return { key: 'service-operations', title: 'Service & Support Operations' };
+  if (/\b(?:invoice|payment|billing|collection|finance)\b/i.test(title)) return { key: 'payment-processing', title: 'Payment & Finance Operations' };
+  if (/\b(?:renewal|retention|offboarding|closure|cancellation)\b/i.test(title)) return { key: 'retention-offboarding', title: 'Retention & Offboarding' };
+  if (/\b(?:report|monitor|analytics|inventory|vacancy)\b/i.test(title)) return { key: 'reporting-monitoring', title: 'Reporting & Monitoring' };
+  if (/\b(?:complaint|escalation|duplicate|audit|error|governance|compliance)\b/i.test(title)) return { key: 'risk-governance', title: 'Risk, Compliance & Automation Governance' };
+  return null;
+};
+
+function conceptualPortfolioCapabilities(scope: string): PortfolioCapability[] {
+  const sections = portfolioSections(scope);
+  const propertyContext = /\b(?:property|tenant|lease|rental)\b/i.test(scope);
+  const capabilities: PortfolioCapability[] = [];
+  const byKey = new Map<string, PortfolioCapability>();
+
+  sections.forEach((section, index) => {
+    const classified = (propertyContext ? propertyCapability(section.title) : null)
+      ?? generalCapability(section.title)
+      ?? { key: `integrated-operations-${Math.floor(index / 3)}`, title: `Integrated Business Operations ${Math.floor(index / 3) + 1}` };
+    let capability = byKey.get(classified.key);
+    if (!capability) {
+      capability = { ...classified, sections: [] };
+      capabilities.push(capability);
+      byKey.set(classified.key, capability);
+    }
+    capability.sections.push(section);
+  });
+  return capabilities;
+}
+
+function buildPortfolioCapability(capability: PortfolioCapability, platform: AnalysisProviderInput['platform']) {
+  const groupedRequirements = capability.sections
+    .map((section) => `${section.title}\n${section.body}`)
+    .join('\n\n');
+  const architecture = addEvidenceBasedIterators(
+    extractProceduralArchitecture(`When the ${capability.title} workflow begins, start the documented process.\n${groupedRequirements}`),
+    platform,
+  );
+  const entry = architecture.nodes.find((node) => node.category === 'trigger');
+  if (entry) {
+    entry.name = capability.title;
+    entry.description = `Start the complete ${capability.title.toLowerCase()} lifecycle.`;
+    entry.purpose = entry.description;
+    entry.operation = 'Start business capability';
+  }
+  return architecture;
+}
+
+const meaningfulPortfolioSteps = (architecture: ReturnType<typeof buildPortfolioCapability>) =>
+  architecture.nodes.filter((node) => !['start', 'trigger', 'end', 'note', 'group'].includes(node.category)).length;
+
+function applyPortfolioQualityGate(capabilities: PortfolioCapability[], platform: AnalysisProviderInput['platform']) {
+  const candidates = capabilities.map((capability) => ({ capability, architecture: buildPortfolioCapability(capability, platform) }))
+    .filter(({ architecture }) => architecture.nodes.length >= 2);
+
+  while (candidates.length > 1 && candidates.filter(({ architecture }) => meaningfulPortfolioSteps(architecture) < 6).length / candidates.length > 0.3) {
+    const smallIndex = candidates.findIndex(({ architecture }) => meaningfulPortfolioSteps(architecture) < 6);
+    if (smallIndex < 0) break;
+    const previousIsSmall = smallIndex > 0 && meaningfulPortfolioSteps(candidates[smallIndex - 1]!.architecture) < 6;
+    const nextIsSmall = smallIndex < candidates.length - 1 && meaningfulPortfolioSteps(candidates[smallIndex + 1]!.architecture) < 6;
+    const neighborIndex = nextIsSmall ? smallIndex + 1 : previousIsSmall ? smallIndex - 1 : smallIndex === 0 ? 1 : smallIndex - 1;
+    const firstIndex = Math.min(smallIndex, neighborIndex);
+    const secondIndex = Math.max(smallIndex, neighborIndex);
+    const first = candidates[firstIndex]!.capability;
+    const second = candidates[secondIndex]!.capability;
+    const merged: PortfolioCapability = {
+      key: `${first.key}-${second.key}`,
+      title: `${first.title} & ${second.title}`,
+      sections: [...first.sections, ...second.sections],
+    };
+    candidates.splice(firstIndex, 2, { capability: merged, architecture: buildPortfolioCapability(merged, platform) });
+  }
+  return candidates;
+}
+
+function extractPortfolioArchitecture(scope: string, platform: AnalysisProviderInput['platform']): ExtractedArchitecture | null {
+  if (!isLargeWorkflowPortfolio(scope)) return null;
+  const nodes: WorkflowNode[] = []; const connections: WorkflowConnection[] = []; const branches: WorkflowBranch[] = [];
+  const reports: CompressionReport[] = [];
+  for (const { capability, architecture } of applyPortfolioQualityGate(conceptualPortfolioCapabilities(scope), platform)) {
+    const compressed = compressCapabilityArchitecture(architecture, capability);
+    nodes.push(...compressed.nodes);
+    connections.push(...compressed.connections);
+    branches.push(...compressed.branches);
+    reports.push(compressed.compressionReport);
+  }
+  if (!nodes.length) return null;
+  const compressionReport: CompressionReport = {
+    initialNodeCount: reports.reduce((total, report) => total + report.initialNodeCount, 0),
+    finalNodeCount: nodes.length,
+    mergedNodeGroups: reports.flatMap((report) => report.mergedNodeGroups),
+    preservedStandaloneNodes: reports.flatMap((report) => report.preservedStandaloneNodes),
+  };
+  validateSemanticCompression({ nodes, connections, branches }, compressionReport);
+  return { nodes, connections, branches, compressionReport };
+}
+
+function validateSemanticCompression(
+  architecture: { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] },
+  report: CompressionReport,
+) {
+  const lowLevelItem = /\b(?:field|subfolder|recipient|document item|checklist item|template task|audit[- ]log write|retry attempt)\b/i;
+  const ungroupedLowLevel = architecture.nodes.filter((node) =>
+    !node.configuration.compoundOperation && lowLevelItem.test(`${node.name} ${node.description}`));
+  if (architecture.nodes.length && ungroupedLowLevel.length / architecture.nodes.length > 0.25) {
+    throw new Error('Semantic compression failed: more than 25% of visible nodes remain low-level implementation items.');
+  }
+
+  const bySource = new Map<string, WorkflowConnection[]>();
+  for (const edge of architecture.connections) bySource.set(edge.sourceNodeId, [...(bySource.get(edge.sourceNodeId) ?? []), edge]);
+  for (const edges of bySource.values()) {
+    const unlabeledTargets = edges
+      .filter((edge) => !edge.branchLabel && !edge.label && edge.routeType !== 'error')
+      .map((edge) => architecture.nodes.find((node) => node.id === edge.targetNodeId))
+      .filter((node): node is WorkflowNode => Boolean(node) && !isSemanticBoundary(node!));
+    if (unlabeledTargets.length > 1) {
+      throw new Error('Semantic compression failed: sibling implementation nodes share a predecessor without a meaningful branch boundary.');
+    }
+  }
+
+  if (report.finalNodeCount > 100 && report.preservedStandaloneNodes.length < report.finalNodeCount - 100) {
+    throw new Error('Semantic compression failed: the project exceeds 100 visible nodes without enough preserved-boundary explanations.');
+  }
+}
+
+const semanticBoundaryCategories = new Set<WorkflowNode['category']>([
+  'start', 'trigger', 'webhook', 'condition', 'filter', 'router', 'delay',
+  'human_approval', 'retry', 'error_handler', 'loop', 'merge',
+  'end',
+]);
+
+const isSemanticBoundary = (node: WorkflowNode) =>
+  semanticBoundaryCategories.has(node.category)
+  || (node.category === 'api_request' && /\b(?:receive|wait|callback|poll|webhook|external event)\b/i.test(`${node.name} ${node.description} ${node.operation}`));
+
+function sectionForNode(node: WorkflowNode, capability: PortfolioCapability) {
+  return capability.sections.find((section) =>
+    Boolean(node.description) && section.body.toLowerCase().includes(node.description.toLowerCase()))?.title ?? capability.title;
+}
+
+function compoundOperationName(section: string, nodes: WorkflowNode[]) {
+  if (nodes.every((node) => ['notification', 'email', 'messaging'].includes(node.category))) return 'Send Stakeholder Notifications';
+  if (/onboarding/i.test(section)) return `Set Up ${section}`;
+  if (/move-out/i.test(section)) return 'Set Up Move-Out Operations';
+  if (/folder|workspace/i.test(nodes.map((node) => `${node.name} ${node.description}`).join(' '))) return `Set Up ${section}`;
+  return `Complete ${section}`;
+}
+
+function compressCapabilityArchitecture(
+  architecture: { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] },
+  capability: PortfolioCapability,
+): ExtractedArchitecture & { compressionReport: CompressionReport } {
+  let nodes = [...architecture.nodes];
+  let connections = [...architecture.connections];
+  let branches = [...architecture.branches];
+  const initialNodeCount = nodes.length;
+  const mergedNodeGroups: CompressionReport['mergedNodeGroups'] = [];
+  const processed = new Set<string>();
+  const nodeById = () => new Map(nodes.map((node) => [node.id, node]));
+
+  for (const candidate of [...nodes]) {
+    if (processed.has(candidate.id) || isSemanticBoundary(candidate)) continue;
+    const section = sectionForNode(candidate, capability);
+    const chain = [candidate];
+    processed.add(candidate.id);
+    let current = candidate;
+    while (true) {
+      const outgoing = connections.filter((edge) => edge.sourceNodeId === current.id && edge.routeType !== 'error');
+      if (outgoing.length !== 1 || outgoing[0]!.branchLabel || outgoing[0]!.style === 'conditional') break;
+      const target = nodeById().get(outgoing[0]!.targetNodeId);
+      if (!target || processed.has(target.id) || isSemanticBoundary(target)) break;
+      const incoming = connections.filter((edge) => edge.targetNodeId === target.id && edge.routeType !== 'error');
+      if (incoming.length !== 1 || sectionForNode(target, capability) !== section) break;
+      chain.push(target);
+      processed.add(target.id);
+      current = target;
+    }
+    if (chain.length < 2) continue;
+
+    const chainIds = new Set(chain.map((node) => node.id));
+    const compoundId = chain[0]!.id;
+    const groupedActions = chain.map((node) => ({
+      name: node.name,
+      application: node.service,
+      operation: node.operation,
+      description: node.description,
+    }));
+    const services = [...new Set(chain.map((node) => node.service).filter((service): service is string => Boolean(service)))];
+    const compound: WorkflowNode = {
+      ...chain[0]!,
+      name: compoundOperationName(section, chain),
+      description: `Complete ${section.toLowerCase()} as one coordinated business operation.`,
+      purpose: `Deliver the ${section.toLowerCase()} outcome without exposing its internal checklist as separate canvas nodes.`,
+      service: services.length === 1 ? services[0]! : null,
+      operation: 'Execute compound business operation',
+      credentials: [...new Set(chain.flatMap((node) => node.credentials))],
+      configuration: { ...chain[0]!.configuration, compoundOperation: true, groupedActions },
+      notes: [chain[0]!.notes, `${groupedActions.length} implementation actions are grouped in this node.`].filter(Boolean).join('\n'),
+      outputs: chain.at(-1)!.outputs,
+      riskLevel: chain.some((node) => node.riskLevel === 'high') ? 'high' : chain.some((node) => node.riskLevel === 'medium') ? 'medium' : 'low',
+    };
+
+    nodes = nodes.filter((node) => !chainIds.has(node.id) || node.id === compoundId).map((node) => node.id === compoundId ? compound : node);
+    const remapped = connections
+      .filter((edge) => !(chainIds.has(edge.sourceNodeId) && chainIds.has(edge.targetNodeId)))
+      .map((edge) => ({
+        ...edge,
+        sourceNodeId: chainIds.has(edge.sourceNodeId) ? compoundId : edge.sourceNodeId,
+        targetNodeId: chainIds.has(edge.targetNodeId) ? compoundId : edge.targetNodeId,
+      }));
+    connections = [...new Map(remapped.filter((edge) => edge.sourceNodeId !== edge.targetNodeId)
+      .map((edge) => [`${edge.sourceNodeId}:${edge.targetNodeId}:${edge.branchLabel ?? ''}:${edge.routeType}`, edge])).values()];
+    branches = branches.map((branch) => ({
+      ...branch,
+      sourceNodeId: chainIds.has(branch.sourceNodeId) ? compoundId : branch.sourceNodeId,
+      destinationNodeId: branch.destinationNodeId && chainIds.has(branch.destinationNodeId) ? compoundId : branch.destinationNodeId,
+    }));
+    mergedNodeGroups.push({ compoundNodeId: compoundId, section, mergedNodeIds: [...chainIds] });
+  }
+
+  const sharedEnd = makeNode(
+    'end',
+    `${capability.title} Complete`,
+    null,
+    'Complete business capability',
+    `Finish the ${capability.title.toLowerCase()} lifecycle with a defined business outcome.`,
+  );
+  const completionEdges: WorkflowConnection[] = [];
+  for (const node of nodes) {
+    const outgoing = connections.filter((edge) => edge.sourceNodeId === node.id && edge.routeType !== 'error');
+    if (node.category === 'condition' || node.category === 'filter') {
+      const labels = new Set(outgoing.map((edge) => (edge.branchLabel || edge.label).toUpperCase()));
+      const missingLabels = (['TRUE', 'FALSE'] as const).filter((label) => !labels.has(label));
+      for (const label of missingLabels.slice(0, Math.max(0, 2 - outgoing.length))) {
+        completionEdges.push(connect(node.id, sharedEnd.id, label, label, label));
+      }
+    } else if (node.category !== 'end' && outgoing.length === 0) {
+      completionEdges.push(connect(node.id, sharedEnd.id, 'Completed'));
+    }
+  }
+  if (completionEdges.length) {
+    nodes.push(sharedEnd);
+    connections.push(...completionEdges);
+  }
+
+  const redundantEnds = new Set(nodes.filter((node) => node.category === 'end' && node.id !== sharedEnd.id).map((node) => node.id));
+  if (redundantEnds.size) {
+    if (!nodes.some((node) => node.id === sharedEnd.id)) nodes.push(sharedEnd);
+    nodes = nodes.filter((node) => !redundantEnds.has(node.id));
+    connections = [...new Map(connections
+      .map((edge) => ({
+        ...edge,
+        sourceNodeId: redundantEnds.has(edge.sourceNodeId) ? sharedEnd.id : edge.sourceNodeId,
+        targetNodeId: redundantEnds.has(edge.targetNodeId) ? sharedEnd.id : edge.targetNodeId,
+      }))
+      .filter((edge) => edge.sourceNodeId !== edge.targetNodeId)
+      .map((edge) => [`${edge.sourceNodeId}:${edge.targetNodeId}:${edge.branchLabel ?? ''}:${edge.routeType}`, edge])).values()];
+    branches = branches.map((branch) => ({
+      ...branch,
+      sourceNodeId: redundantEnds.has(branch.sourceNodeId) ? sharedEnd.id : branch.sourceNodeId,
+      destinationNodeId: branch.destinationNodeId && redundantEnds.has(branch.destinationNodeId) ? sharedEnd.id : branch.destinationNodeId,
+    }));
+    mergedNodeGroups.push({
+      compoundNodeId: sharedEnd.id,
+      section: capability.title,
+      mergedNodeIds: [...redundantEnds],
+    });
+  }
+
+  const lowLevelBranchAction = /\b(?:send|notify|update|log|upload|move|request|remind|create (?:a )?task|pause|close|generate|assign|complete|set up)\b/i;
+  for (const decision of nodes.filter((node) => node.category === 'condition' || node.category === 'filter')) {
+    for (const decisionEdge of [...connections.filter((edge) => edge.sourceNodeId === decision.id && edge.routeType !== 'error')]) {
+      const target = nodes.find((node) => node.id === decisionEdge.targetNodeId);
+      if (!target || isSemanticBoundary(target) || !lowLevelBranchAction.test(`${target.name} ${target.description}`)) continue;
+      const incoming = connections.filter((edge) => edge.targetNodeId === target.id && edge.routeType !== 'error');
+      const outgoing = connections.filter((edge) => edge.sourceNodeId === target.id && edge.routeType !== 'error');
+      if (incoming.length !== 1 || outgoing.length !== 1) continue;
+      const groupedActions = Array.isArray(target.configuration.groupedActions)
+        ? target.configuration.groupedActions
+        : [{ name: target.name, application: target.service, operation: target.operation, description: target.description }];
+      const existingBranchActions = Array.isArray(decision.configuration.branchActions) ? decision.configuration.branchActions : [];
+      decision.configuration = {
+        ...decision.configuration,
+        branchActions: [...existingBranchActions, {
+          branch: decisionEdge.branchLabel || decisionEdge.label || 'Outcome',
+          actions: groupedActions,
+        }],
+      };
+      decision.notes = [decision.notes, `The ${decisionEdge.branchLabel || decisionEdge.label || 'outcome'} implementation actions are stored in this decision's branch metadata.`].filter(Boolean).join('\n');
+      connections = connections
+        .filter((edge) => edge.id !== outgoing[0]!.id)
+        .map((edge) => edge.id === decisionEdge.id ? { ...edge, targetNodeId: outgoing[0]!.targetNodeId } : edge);
+      branches = branches.map((branch) => branch.destinationNodeId === target.id
+        ? { ...branch, destinationNodeId: outgoing[0]!.targetNodeId }
+        : branch);
+      nodes = nodes.filter((node) => node.id !== target.id);
+      mergedNodeGroups.push({
+        compoundNodeId: decision.id,
+        section: sectionForNode(decision, capability),
+        mergedNodeIds: [target.id],
+      });
+    }
+  }
+
+  const preservedStandaloneNodes = nodes
+    .filter(isSemanticBoundary)
+    .map((node) => ({
+      nodeId: node.id,
+      reason: node.category === 'condition' || node.category === 'filter' || node.category === 'router'
+        ? 'Preserved as an explicit business decision or route boundary.'
+        : node.category === 'delay' ? 'Preserved as an explicit timing boundary.'
+          : node.category === 'human_approval' ? 'Preserved as a human decision boundary.'
+            : node.category === 'retry' || node.category === 'error_handler' ? 'Preserved as an independently recoverable failure boundary.'
+              : node.category === 'loop' ? 'Preserved as a collection or repetition boundary.'
+                : node.category === 'api_request' || node.category === 'webhook' ? 'Preserved as an external event dependency.'
+                  : 'Preserved as a workflow entry, merge, or completion boundary.',
+    }));
+  return {
+    nodes,
+    connections,
+    branches,
+    compressionReport: { initialNodeCount, finalNodeCount: nodes.length, mergedNodeGroups, preservedStandaloneNodes },
+  };
 }
 
 function extractExplicitWorkflowSequence(scope: string): { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] } | null {
@@ -154,13 +539,44 @@ function extractProceduralArchitecture(scope: string): { nodes: WorkflowNode[]; 
   };
 
   for (const statement of statements) {
-    const trigger = statement.match(/^(?:when|upon)\s+(.+?)(?:[,.]|$)/i);
+    const trigger = statement.match(/^(?:when|whenever|upon)\s+(.+?)(?:[,.]|$)/i);
     if (trigger && !nodes.length) {
       const detail = trigger[1]!.trim(); const service = findService(detail);
       append(makeNode('trigger', triggerTitle(detail, service), service, triggerOperation(detail), statement));
       const remainder = statement.slice(trigger[0].length).trim();
       if (remainder) tails = appendActions(remainder, tails);
       continue;
+    }
+    if (trigger) {
+      const remainder = statement.slice(trigger[0].length).trim();
+      if (remainder) tails = appendActions(remainder, tails);
+      continue;
+    }
+    const route = statement.match(/^route\s+(.+?)\s+(?:by|based on)\s+(.+?)\s+to\s+(.+)$/i);
+    if (route) {
+      closeDecision();
+      const routeField = route[2]!.trim();
+      const destinations = route[3]!.replace(/[.]+$/, '').split(/\s*,\s*|\s+or\s+/i).map((item) => item.trim().replace(/^(?:or|and)\s+/i, '')).filter(Boolean);
+      if (destinations.length > 2) {
+        const router = append(makeNode('router', `Route by ${routeField}`, null, 'Route records', statement));
+        const routeTails: WorkflowNode[] = [];
+        for (const destination of destinations) {
+          const action = makeNode('action', `Handle ${destination} route`, null, 'Perform routed action', `${route[1]!.trim()} where ${routeField} is ${destination}.`);
+          nodes.push(action);
+          connections.push({ ...connect(router.id, action.id), label: destination.toUpperCase(), routeType: 'conditional', style: 'conditional' });
+          branches.push({ id: crypto.randomUUID(), sourceNodeId: router.id, name: destination, condition: { combinator: 'and', rules: [{ field: routeField, operator: 'equals', value: destination }] }, destinationNodeId: action.id, isDefault: false });
+          routeTails.push(action);
+        }
+        const fallback = makeNode('action', 'Handle unmatched route', null, 'Review unmatched route', `Handle a ${routeField} value that does not match a named route.`);
+        nodes.push(fallback);
+        connections.push(connect(router.id, fallback.id, 'DEFAULT', 'DEFAULT'));
+        branches.push({ id: crypto.randomUUID(), sourceNodeId: router.id, name: 'DEFAULT', condition: { combinator: 'and', rules: [{ field: routeField, operator: 'not_exists', value: null }] }, destinationNodeId: fallback.id, isDefault: true });
+        const merge = makeNode('merge', `Merge ${routeField} routes`, null, 'Merge routes', `Rejoin all ${routeField} routes before continuing.`);
+        nodes.push(merge);
+        for (const tail of [...routeTails, fallback]) connections.push(connect(tail.id, merge.id));
+        tails = [merge];
+        continue;
+      }
     }
     const timed = statement.match(/^after\s+([^,]+),\s*(.+)$/i);
     if (timed) {
@@ -197,6 +613,52 @@ function extractProceduralArchitecture(scope: string): { nodes: WorkflowNode[]; 
     for (const terminal of terminals) tails.push(terminal);
   }
   return { nodes, connections, branches };
+}
+
+function addEvidenceBasedIterators(
+  architecture: { nodes: WorkflowNode[]; connections: WorkflowConnection[]; branches: WorkflowBranch[] },
+  platform: AnalysisProviderInput['platform'],
+) {
+  const nodes = [...architecture.nodes];
+  let connections = [...architecture.connections];
+  const branches = architecture.branches.map((branch) => ({ ...branch }));
+  const candidates = nodes.filter((node) =>
+    !['trigger', 'condition', 'router', 'loop', 'merge', 'end'].includes(node.category)
+    && /\b(?:for each|each (?:task|record|item|attachment|recipient|post|file)|every (?:task|record|item|attachment|recipient|post|file))\b/i.test(node.description),
+  );
+
+  for (const item of candidates) {
+    const incoming = connections.filter((connection) => connection.targetNodeId === item.id && connection.routeType !== 'error');
+    if (incoming.length !== 1) continue;
+    const outgoing = connections.filter((connection) => connection.sourceNodeId === item.id && connection.routeType !== 'error');
+    const presentation = collectionIteratorPresentation(platform, item.description);
+    const iterator = makeNode('loop', `${presentation.label} — ${item.name}`, presentation.service, presentation.operation, `Process each collection item for: ${item.description}`);
+    nodes.push(iterator);
+    connections = connections.map((connection) => {
+      if (connection.id === incoming[0]!.id) return { ...connection, targetNodeId: iterator.id };
+      if (outgoing.some((candidate) => candidate.id === connection.id)) return { ...connection, sourceNodeId: iterator.id, label: 'DONE', branchLabel: 'DONE', routeType: 'success', style: 'success' };
+      return connection;
+    });
+    connections.push(connect(iterator.id, item.id, 'LOOP', 'LOOP'));
+    connections.push(connect(item.id, iterator.id, 'LOOP', 'LOOP'));
+    if (!outgoing.length) {
+      const end = makeNode('end', `${item.name} — Completed`, null, 'Complete workflow', 'All collection items have been processed.');
+      nodes.push(end);
+      connections.push(connect(iterator.id, end.id, 'DONE', 'DONE'));
+    }
+    for (const branch of branches) if (branch.destinationNodeId === item.id) branch.destinationNodeId = iterator.id;
+  }
+
+  return { nodes, connections, branches };
+}
+
+function collectionIteratorPresentation(platform: AnalysisProviderInput['platform'], evidence: string) {
+  if (platform === 'make') return { label: 'Iterator', service: 'Make Flow Control', operation: 'Iterator' };
+  if (platform === 'zapier') return { label: 'Looping by Zapier', service: 'Looping by Zapier', operation: 'Create Loop From Line Items' };
+  if (/\b(?:batch|batches|batch size|one at a time)\b/i.test(evidence)) {
+    return { label: 'Loop Over Items', service: 'n8n', operation: 'Loop Over Items' };
+  }
+  return { label: 'Split Out', service: 'n8n', operation: 'Split Out' };
 }
 
 function addTerminalBranch(decision: WorkflowNode, label: 'TRUE' | 'FALSE', condition: string, nodes: WorkflowNode[], connections: WorkflowConnection[], branches: WorkflowBranch[]) {
