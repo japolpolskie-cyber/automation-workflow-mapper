@@ -10,6 +10,7 @@ export const zapierCatalog = [
   definition('formatter', 'Formatter by Zapier', 'transformation', 'Formatter by Zapier', ['Text', 'Numbers', 'Date / Time', 'Utilities'], null, ['Input', 'Transform']),
   definition('delay', 'Delay by Zapier', 'delay', 'Delay by Zapier', ['Delay For', 'Delay Until', 'Delay After Queue'], null, ['Duration or date']),
   definition('looping', 'Looping by Zapier', 'loop', 'Looping by Zapier', ['Create Loop From Line Items', 'Create Loop From Text', 'Create Loop From Numbers'], null, ['Line items, text, or numeric range'], [], ['Downstream actions consume tasks for every loop iteration. Formatter may prepare line items but does not perform iteration.']),
+  definition('digest', 'Digest by Zapier', 'aggregator', 'Digest by Zapier', ['Append Entry and Schedule Digest', 'Release Existing Digest'], null, ['Digest name', 'Entry'], ['Released digest'], ['Digest buffers text entries; it is not a general-purpose array aggregation primitive.']),
   definition('webhook', 'Webhooks by Zapier', 'api_request', 'Webhooks by Zapier', ['GET', 'POST', 'PUT', 'Custom Request'], null, ['URL', 'Method'], ['Response body'], ['Review authentication and rate limits.']),
   definition('notification', 'Notification action', 'notification', 'Connected messaging app', ['Send Message', 'Send Email'], 'Messaging app connection'),
   definition('approval', 'Manual approval pattern', 'human_approval', 'Approval app', ['Request Approval'], 'Approval app connection', ['Approver', 'Request details']),

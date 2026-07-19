@@ -40,12 +40,12 @@ describe('unified planner runtime modes', () => {
     expect(result.v23PlatformTranslation?.selectedPlatform).toBe('n8n');
   });
 
-  it('creates a V2.3B Make artifact and leaves Zapier untranslated', async () => {
+  it('creates platform-specific V2.3B and V2.3C artifacts', async () => {
     const result = await new UnifiedPlannerRuntime('mock', null, null).execute(provider, scope, 'make', analysis, leadQualificationWorkflow);
     expect(result.v22ConceptualGraph).toBeDefined();
     expect(result.v23PlatformTranslation).toMatchObject({ version: '2.3B', selectedPlatform: 'make', shadowMode: true });
     const zapier = await new UnifiedPlannerRuntime('mock', null, null).execute(provider, scope, 'zapier', analysis, leadQualificationWorkflow);
-    expect(zapier.v23PlatformTranslation).toBeUndefined();
+    expect(zapier.v23PlatformTranslation).toMatchObject({ version: '2.3C', selectedPlatform: 'zapier', shadowMode: true });
   });
 
   it('prefers the P4 deterministic compiler in distributed mode', async () => {
