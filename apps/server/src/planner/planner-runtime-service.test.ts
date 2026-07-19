@@ -28,6 +28,7 @@ describe('unified planner runtime modes', () => {
     expect(compare).toHaveBeenCalledOnce(); expect(result.plannerShadow).toEqual(comparison);
     expect(result.v21Analysis).toMatchObject({ version: '2.1', shadowMode: true });
     expect(result.v22ConceptualGraph).toMatchObject({ graph: { version: '2.2', shadowMode: true, legacyK41Compatible: true }, validation: { valid: true } });
+    expect(result.v23PlatformTranslation).toMatchObject({ version: '2.3A', shadowMode: true, selectedPlatform: 'n8n', diagnostics: { valid: true } });
   });
 
   it('supports deterministic mock mode without invoking AI', async () => {
@@ -35,6 +36,13 @@ describe('unified planner runtime modes', () => {
     expect(result.plannerShadow?.status).toBe('completed');
     expect(result.v21Analysis?.requirementAnalysis.applications.some((item) => item.value === 'Asana')).toBe(true);
     expect(result.v22ConceptualGraph?.validation.valid).toBe(true);
+    expect(result.v23PlatformTranslation?.selectedPlatform).toBe('n8n');
+  });
+
+  it('does not create a V2.3A artifact for platforms without an approved translator', async () => {
+    const result = await new UnifiedPlannerRuntime('mock', null, null).execute(provider, scope, 'make', analysis, leadQualificationWorkflow);
+    expect(result.v22ConceptualGraph).toBeDefined();
+    expect(result.v23PlatformTranslation).toBeUndefined();
   });
 
   it('prefers the P4 deterministic compiler in distributed mode', async () => {

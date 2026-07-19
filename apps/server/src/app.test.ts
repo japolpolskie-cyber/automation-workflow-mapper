@@ -400,11 +400,17 @@ Workflow Mapping Rules
       graph: { version: "2.2", shadowMode: true },
       validation: { valid: true },
     });
+    expect(analyzed.json().data.v23PlatformTranslation).toMatchObject({
+      version: "2.3A",
+      shadowMode: true,
+      selectedPlatform: "n8n",
+    });
     const persisted = (
       await app.inject({ method: "GET", url: `/api/workflows/${id}` })
     ).json().data;
     expect("plannerShadow" in persisted.workflow).toBe(false);
     expect("v22ConceptualGraph" in persisted.workflow).toBe(false);
+    expect("v23PlatformTranslation" in persisted.workflow).toBe(false);
   });
 
   it("saves, edits, uses, and deletes a personal workflow template", async () => {

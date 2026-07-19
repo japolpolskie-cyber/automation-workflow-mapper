@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { detectedProcessSummarySchema } from './detected-process.js';
 import { v21AnalysisArtifactsSchema } from './v2-analysis-contracts.js';
 import { v22ConceptualGraphResultSchema } from './v2-conceptual-graph.js';
+import { platformTranslationResultSchema } from './v2-platform-translation.js';
 import { plannerShadowComparisonSchema } from './planner.js';
 
 export const platformSchema = z.enum(['zapier', 'make', 'n8n']);
@@ -272,7 +273,8 @@ export const workflowAnalysisResultSchema = z.object({
   detectedProcess: detectedProcessSummarySchema.optional(),
   plannerShadow: plannerShadowComparisonSchema.optional(),
   v21Analysis: v21AnalysisArtifactsSchema.optional(),
-  v22ConceptualGraph: v22ConceptualGraphResultSchema.optional()
+  v22ConceptualGraph: v22ConceptualGraphResultSchema.optional(),
+  v23PlatformTranslation: platformTranslationResultSchema.optional()
 });
 export const analysisProviderStatusSchema = z.object({ provider: z.enum(['local', 'openai', 'ollama']), available: z.boolean(), models: z.array(z.string()), message: z.string() });
 

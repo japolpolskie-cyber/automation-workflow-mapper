@@ -87,8 +87,9 @@ export class AnalysisService {
     const plannerShadow = plannerResult.plannerShadow;
     const v21Analysis = plannerResult.v21Analysis;
     const v22ConceptualGraph = plannerResult.v22ConceptualGraph;
+    const v23PlatformTranslation = plannerResult.v23PlatformTranslation;
     this.repository.updateWorkflow(project.id, parsed.data);
-    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}) });
+    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}), ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}) });
   }
 }
 

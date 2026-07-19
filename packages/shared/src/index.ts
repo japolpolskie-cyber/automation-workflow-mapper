@@ -25,3 +25,4 @@ export * from "./stage-d-grounding.js";
 export * from "./custom-template.js";
 export * from "./v2-analysis-contracts.js";
 export * from "./v2-conceptual-graph.js";
+export * from "./v2-platform-translation.js";

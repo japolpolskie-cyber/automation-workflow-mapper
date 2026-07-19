@@ -42,6 +42,8 @@ export const n8nCatalog = [
   definition('wait', 'Wait node', 'delay', 'n8n', ['After time interval', 'At specified time', 'On webhook call'], null),
   definition('split_out', 'Split Out node', 'loop', 'n8n', ['Split Out'], null, ['List field'], ['One item per list element']),
   definition('loop', 'Loop Over Items node', 'loop', 'n8n', ['Loop Over Items'], null, ['Batch size'], ['Batched item flow'], ['Use Split Out when the requirement is only to turn an array field into individual items.']),
+  definition('merge', 'Merge node', 'merge', 'n8n', ['Append', 'Combine', 'Choose Branch'], null, ['Mode'], ['Merged items'], ['Wait-for-all synchronization depends on the selected Merge mode and input topology.']),
+  definition('aggregate', 'Aggregate node', 'aggregator', 'n8n', ['Aggregate Individual Fields', 'Aggregate All Item Data'], null, ['Fields or item data'], ['Aggregated item']),
   definition('http_request', 'HTTP Request node', 'api_request', 'n8n', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], 'Header/OAuth credential', ['URL', 'Method'], ['Body', 'Status code'], ['Review pagination, authentication, and rate limits.']),
   definition('notification', 'Messaging node', 'notification', 'Connected messaging app', ['Send message', 'Send email'], 'App credential'),
   definition('approval', 'Human approval pattern', 'human_approval', 'Wait + messaging nodes', ['Send request and wait for response'], 'Messaging credential'),
