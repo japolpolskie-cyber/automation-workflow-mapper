@@ -2,7 +2,7 @@ import { aiWorkflowOutputSchema, compileAutomationArchitecture, inferWorkflowCon
 import { parseJsonWithRepair } from '../ai/repair/json-repair.js';
 import { repairWorkflowCandidate } from '../ai/repair/workflow-repair.js';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
-import { isLargeWorkflowPortfolio, LocalAnalysisProvider } from '../ai/providers/local-provider.js';
+import { shouldPartitionWorkflowScope, LocalAnalysisProvider } from '../ai/providers/local-provider.js';
 import { AnalysisPipeline } from '../analysis/analysis-pipeline.js';
 import type { ProjectRepository } from '../repositories/project-repository.js';
 import type { ScopeIntelligenceService } from '../analysis/scope-intelligence.js';
@@ -17,14 +17,19 @@ export class AnalysisError extends Error {
 export class AnalysisService {
   public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null)) {}
   public getProviderStatus() { return this.provider.getStatus(); }
-  public async analyze(projectId: string): Promise<WorkflowAnalysisResult> {
-    return this.pipeline.run(() => this.analyzeCurrent(projectId));
+  public async analyze(projectId: string, workflowMode: 'auto' | 'single' = 'auto'): Promise<WorkflowAnalysisResult> {
+    return this.pipeline.run(() => this.analyzeCurrent(projectId, workflowMode));
   }
-  private async analyzeCurrent(projectId: string): Promise<WorkflowAnalysisResult> {
+  private async analyzeCurrent(projectId: string, workflowMode: 'auto' | 'single'): Promise<WorkflowAnalysisResult> {
     const project = this.repository.findById(projectId);
     if (!project) throw new AnalysisError('PROJECT_NOT_FOUND', 'The workflow project was not found.', 404);
     if (!project.originalScope.trim()) throw new AnalysisError('SCOPE_REQUIRED', 'Add and save a Scope of Work before analysis.', 400);
-    const input = { scope: project.originalScope, projectName: project.name, platform: project.platform };
+    const input = {
+      scope: project.originalScope,
+      projectName: project.name,
+      platform: project.platform,
+      ...(workflowMode === 'single' ? { workflowMode } : {}),
+    };
     const detectedProcess = this.scopeIntelligence?.analyze(project.originalScope);
     let raw: unknown; let providerUsed: 'local' | 'openai' | 'ollama' = this.provider.name; let fallbackReason = '';
     const useFreeFallback = async (reason: string) => {
@@ -32,8 +37,8 @@ export class AnalysisService {
       providerUsed = 'local'; fallbackReason = reason;
       raw = await new LocalAnalysisProvider().analyze(input);
     };
-    if (this.provider.name === 'ollama' && isLargeWorkflowPortfolio(project.originalScope)) {
-      await useFreeFallback('Large multi-workflow portfolio detected. Deterministic section analysis was used to avoid local-model context and output truncation.');
+    if (this.provider.name === 'ollama' && shouldPartitionWorkflowScope(project.originalScope, workflowMode === 'single')) {
+      await useFreeFallback('Large multi-workflow portfolio or multiple independent workflow triggers detected. Deterministic capability analysis was used to preserve separate execution boundaries.');
     } else {
       try { raw = await this.provider.analyze(input); }
       catch (error) { await useFreeFallback(error instanceof Error ? error.message : 'The configured AI provider failed.'); }
@@ -80,8 +85,9 @@ export class AnalysisService {
     if (fallbackReason) parsed.data.warnings.push(`Free deterministic fallback used because the configured AI result could not be accepted: ${fallbackReason}`);
     const plannerResult = detectedProcess && this.plannerRuntime ? await this.plannerRuntime.execute(this.provider, project.originalScope, project.platform, detectedProcess, parsed.data) : {};
     const plannerShadow = plannerResult.plannerShadow;
+    const v21Analysis = plannerResult.v21Analysis;
     this.repository.updateWorkflow(project.id, parsed.data);
-    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}) });
+    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}) });
   }
 }
 

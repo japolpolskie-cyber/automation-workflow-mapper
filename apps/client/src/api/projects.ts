@@ -83,10 +83,10 @@ export const projectApi = {
       method: "PATCH",
       body: JSON.stringify({ workflow, workflowSet, visualGraph }),
     }),
-  analyze: (projectId: string) =>
+  analyze: (projectId: string, workflowMode: "auto" | "single" = "auto") =>
     request<WorkflowAnalysisResult>("/workflows/analyze", {
       method: "POST",
-      body: JSON.stringify({ projectId }),
+      body: JSON.stringify({ projectId, workflowMode }),
     }),
   convert: (projectId: string, platform: Platform) =>
     request<PlatformBuildPlan>("/workflows/convert", {

@@ -1,6 +1,11 @@
 import type { CanonicalWorkflow, Platform } from '@awm/shared';
 
-export interface AnalysisProviderInput { scope: string; projectName: string; platform: Platform }
+export interface AnalysisProviderInput {
+  scope: string;
+  projectName: string;
+  platform: Platform;
+  workflowMode?: 'auto' | 'single';
+}
 export interface GroundedPlannerRequest {
   system: string;
   user: string;

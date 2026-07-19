@@ -58,6 +58,14 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
     setError('');
     if (nextText !== text) setAnalysis(null);
   };
+  const startNewWorkflow = () => {
+    setText('');
+    setDocument(null);
+    setAnalysis(null);
+    setSaved(false);
+    setError('');
+    setAnalysisPhase('idle');
+  };
 
   const processFile = async (file: File) => {
     setError(''); setSaved(false);
@@ -75,12 +83,13 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The scope could not be saved.'); }
     finally { setSaving(false); }
   };
-  const analyze = async () => {
+  const analyze = async (replaceExisting = false, workflowMode: 'auto' | 'single' = 'auto') => {
+    if (replaceExisting) setAnalysis(null);
     setAnalyzing(true); setAnalysisPhase('saving'); setError(''); setSaved(false);
     try {
       await projectApi.updateScope(project.id, text);
       setAnalysisPhase('generating');
-      const result = await projectApi.analyze(project.id);
+      const result = await projectApi.analyze(project.id, workflowMode);
       setAnalysisPhase('processing');
       setAnalysis(result);
       const updated = await projectApi.get(project.id); onSaved(updated); setSaved(true);
@@ -109,12 +118,12 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
       {friendlyError && <div className="scope-error enhanced-feedback" role="alert"><AlertCircle size={18} /><div><strong>{friendlyError.title}</strong><p>{friendlyError.detail}</p></div></div>}
       {saved && !analyzing && <div className="scope-success" role="status"><Check size={17} /><div><strong>Your progress is saved</strong><p>You can continue editing, analyze the requirements, or return later.</p></div></div>}
       {analyzing && <div className="analysis-progress sticky-workspace-toolbar" role="status"><LoaderCircle className="spin" size={18} /><div className="analysis-progress-content"><div className="analysis-progress-heading"><strong>{analysisProgress.stage}</strong><b>{analysisProgress.percent}%</b></div><div className="analysis-progress-track" aria-label={`Estimated analysis progress ${analysisProgress.percent}%`}><span style={{ width: `${analysisProgress.percent}%` }} /></div><small>Estimated progress · {analysisSeconds}s elapsed. Local AI timing varies, and progress pauses while the model is still generating.</small></div></div>}
-      {analysis ? <section className="analysis-results"><div className="draft-plan-notice" role="note"><Info size={18} /><div><strong>Draft plan ready for review</strong><p>This notice does not block editing. Change the requirements to start a new analysis, or use Regenerate analysis below to update this draft.</p></div></div><header className="sticky-workspace-toolbar"><div><span className="analysis-icon"><Bot size={20} /></span><div><p className="eyebrow">Analysis complete · {analysis.analyzedAt === project.updatedAt ? 'Saved analysis' : analysis.provider === 'local' ? 'Local preview' : analysis.provider === 'ollama' ? 'Free local AI' : 'OpenAI provider'}</p><h2>{analysis.workflow.name}</h2><p>{analysis.workflow.summary || analysis.workflow.objective}</p></div></div><strong>{Math.round((analysis.workflow.confidence ?? 0) * 100)}% confidence</strong></header>
+      {analysis ? <section className="analysis-results"><div className="draft-plan-notice" role="note"><Info size={18} /><div><strong>Choose how to continue</strong><p>Use the saved workflow, regenerate it from the requirements currently shown above, or start with an empty requirements editor for a different workflow.</p></div></div><header className="sticky-workspace-toolbar"><div><span className="analysis-icon"><Bot size={20} /></span><div><p className="eyebrow">Analysis complete · {analysis.analyzedAt === project.updatedAt ? 'Saved analysis' : analysis.provider === 'local' ? 'Local preview' : analysis.provider === 'ollama' ? 'Free local AI' : 'OpenAI provider'}</p><h2>{analysis.workflow.name}</h2><p>{analysis.workflow.summary || analysis.workflow.objective}</p></div></div><strong>{Math.round((analysis.workflow.confidence ?? 0) * 100)}% confidence</strong></header>
         <div className="analysis-metrics"><article><Layers3 size={17} /><div><strong>{analysis.workflow.nodes.length}</strong><span>Workflow steps</span></div></article><article><GitBranch size={17} /><div><strong>{analysis.workflow.branches.length}</strong><span>Branches</span></div></article><article><KeyRound size={17} /><div><strong>{new Set(analysis.workflow.nodes.flatMap((node) => node.credentials)).size}</strong><span>Credentials</span></div></article><article><Sparkles size={17} /><div><strong className="capitalize">{analysis.workflow.complexity}</strong><span>Complexity</span></div></article></div>
         {analysis.detectedProcess && <DetectedProcessSummary summary={analysis.detectedProcess} />}
         {analysis.workflow.clarificationQuestions.length > 0 && <div className="clarifications"><h3>More information will improve this plan</h3><p>These are business decisions—not technical errors. Add the answers to your requirements, then regenerate the analysis.</p>{analysis.workflow.clarificationQuestions.map((question, index) => <div className="question" key={question.id}><span>{index + 1}</span><div><strong>{question.question}</strong><small>Missing detail · {question.category.replace('_', ' ')}</small></div></div>)}</div>}
-        <footer className="sticky-analysis-actions"><span>{analysis.graphValidation.valid ? <Check size={15} /> : <AlertCircle size={15} />} Graph structure validated</span><div className="analysis-actions"><button className="button secondary" disabled={analyzing} onClick={() => void analyze()}>{analyzing ? 'Analyzing…' : 'Regenerate analysis'}</button>{onOpenBuilder && <button className="button primary" onClick={onOpenBuilder}>Open workflow builder</button>}</div></footer>
-      </section> : <section className="analysis-next sticky-workspace-toolbar"><div><span>Next step</span><h3>Analyze requirements</h3><p>Generate a reviewable workflow draft and identify missing business information. Nothing is deployed automatically.{providerStatus ? ` ${providerStatus.message}` : ''}</p></div><button className="button primary" disabled={analyzing || !text.trim() || providerStatus?.available === false} onClick={() => void analyze()}>{analyzing ? <><LoaderCircle className="spin" size={16} />Analyzing…</> : 'Analyze requirements'}</button></section>}
+        <footer className="sticky-analysis-actions"><span>{analysis.graphValidation.valid ? <Check size={15} /> : <AlertCircle size={15} />} Graph structure validated</span><div className="analysis-actions"><button className="button secondary" disabled={analyzing} onClick={startNewWorkflow}>Start new workflow</button><button className="button secondary" disabled={analyzing || !text.trim()} onClick={() => void analyze(true, 'single')}>{analyzing ? 'Analyzing…' : 'Generate as single workflow'}</button><button className="button secondary" disabled={analyzing || !text.trim()} onClick={() => void analyze(true)}>{analyzing ? 'Analyzing…' : 'Regenerate automatically'}</button>{onOpenBuilder && <button className="button primary" onClick={onOpenBuilder}>Use existing workflow</button>}</div></footer>
+      </section> : <section className="analysis-next sticky-workspace-toolbar"><div><span>Next step</span><h3>Analyze requirements</h3><p>Generate a reviewable workflow draft and identify missing business information. One independent trigger produces one workflow; multiple independent triggers may produce separate workflow tabs. Nothing is deployed automatically.{providerStatus ? ` ${providerStatus.message}` : ''}</p></div><div className="analysis-actions"><button className="button secondary" disabled={analyzing || !text.trim() || providerStatus?.available === false} onClick={() => void analyze(false, 'single')}>{analyzing ? 'Analyzing…' : 'Generate as single workflow'}</button><button className="button primary" disabled={analyzing || !text.trim() || providerStatus?.available === false} onClick={() => void analyze()}>{analyzing ? <><LoaderCircle className="spin" size={16} />Analyzing…</> : 'Analyze automatically'}</button></div></section>}
     </main>
   </div>;
 }

@@ -237,6 +237,7 @@ export default function App() {
   if (selectedProject)
     return (
       <ScopeWorkspace
+        key={selectedProject.id}
         project={selectedProject}
         onBack={() => setSelectedProject(null)}
         onSaved={saveProjectState}

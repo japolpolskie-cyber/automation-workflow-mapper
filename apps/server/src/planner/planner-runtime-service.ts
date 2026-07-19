@@ -5,17 +5,20 @@ import {
   type PlannerFailureCategory,
   type PlannerShadowComparison,
   type Platform,
+  type V21AnalysisArtifacts,
 } from '@awm/shared';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
 import type { Environment } from '../config/environment.js';
 import type { P3ShadowExperimentService } from '../distributed-planner/p3-shadow-experiment.js';
 import type { PlannerShadowService } from './planner-shadow-service.js';
 import type { P4DeterministicPlannerService } from './p4-deterministic-planner-service.js';
+import { V21AnalysisService } from './v2-analysis-service.js';
 
 export type PlannerRuntimeMode = 'production' | 'shadow' | 'distributed' | 'mock';
 
 export interface PlannerRuntimeResult {
   plannerShadow?: PlannerShadowComparison;
+  v21Analysis?: V21AnalysisArtifacts;
 }
 
 export interface PlannerRuntime {
@@ -52,14 +55,16 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     private readonly shadowRuntime: PlannerShadowService | null,
     private readonly distributedRuntime: P3ShadowExperimentService | null,
     private readonly deterministicRuntime: P4DeterministicPlannerService | null = null,
+    private readonly v21AnalysisService = new V21AnalysisService(),
   ) {}
 
   public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
     if (this.mode === 'production') return {};
-    if (this.mode === 'mock') return { plannerShadow: emptyComparison('completed', null, 0, null) };
+    const v21Analysis = this.v21AnalysisService.analyze(objective, analysis);
+    if (this.mode === 'mock') return { plannerShadow: emptyComparison('completed', null, 0, null), v21Analysis };
     if (this.mode === 'shadow') {
-      if (!this.shadowRuntime) return {};
-      return { plannerShadow: await this.shadowRuntime.compare(provider, objective, platform, analysis, productionWorkflow, signal) };
+      if (!this.shadowRuntime) return { v21Analysis };
+      return { plannerShadow: await this.shadowRuntime.compare(provider, objective, platform, analysis, productionWorkflow, signal), v21Analysis };
     }
     if (this.deterministicRuntime) {
       const started = performance.now();
@@ -75,9 +80,9 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
       comparison.metrics.validationLatencyMs = result.metrics.compilerLatencyMs;
       comparison.metrics.retryCount = result.metrics.retryCount;
       comparison.differences.preservedClarifications = result.intent?.unresolvedQuestions.map((item) => item.clarificationId) ?? [];
-      return { plannerShadow: plannerShadowComparisonSchema.parse(comparison) };
+      return { plannerShadow: plannerShadowComparisonSchema.parse(comparison), v21Analysis };
     }
-    if (!this.distributedRuntime) return { plannerShadow: emptyComparison('failed', 'Distributed planner runtime is not configured.', 0, 'unknown_provider_error') };
+    if (!this.distributedRuntime) return { plannerShadow: emptyComparison('failed', 'Distributed planner runtime is not configured.', 0, 'unknown_provider_error'), v21Analysis };
     const started = performance.now();
     const result = await this.distributedRuntime.run(objective, platform, analysis, productionWorkflow, signal);
     const attempts = result.report.stages.reduce((total, stage) => total + Math.max(0, stage.attempts - 1), 0);
@@ -90,6 +95,6 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     comparison.metrics.generatedOutputCharacters = [...result.metrics.stageA, ...result.metrics.stageB].reduce((sum, item) => sum + item.outputCharacters, 0);
     comparison.metrics.retryCount = attempts;
     comparison.differences.preservedClarifications = result.intent?.unresolvedQuestions.map((item) => item.clarificationId) ?? [];
-    return { plannerShadow: plannerShadowComparisonSchema.parse(comparison) };
+    return { plannerShadow: plannerShadowComparisonSchema.parse(comparison), v21Analysis };
   }
 }

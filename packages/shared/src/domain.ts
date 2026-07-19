@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { detectedProcessSummarySchema } from './detected-process.js';
+import { v21AnalysisArtifactsSchema } from './v2-analysis-contracts.js';
 import { plannerShadowComparisonSchema } from './planner.js';
 
 export const platformSchema = z.enum(['zapier', 'make', 'n8n']);
@@ -256,7 +257,10 @@ export const extractedDocumentSchema = z.object({
   warnings: z.array(z.string())
 });
 
-export const analyzeWorkflowRequestSchema = z.object({ projectId: z.string().uuid() }).strict();
+export const analyzeWorkflowRequestSchema = z.object({
+  projectId: z.string().uuid(),
+  workflowMode: z.enum(['auto', 'single']).default('auto'),
+}).strict();
 export const convertWorkflowRequestSchema = z.object({ projectId: z.string().uuid(), platform: platformSchema }).strict();
 export const saveWorkflowEditorSchema = z.object({ workflow: canonicalWorkflowSchema, workflowSet: workflowSetSchema.optional(), visualGraph: visualGraphSchema }).strict();
 export const workflowAnalysisResultSchema = z.object({
@@ -265,7 +269,8 @@ export const workflowAnalysisResultSchema = z.object({
   provider: z.enum(['local', 'openai', 'ollama']),
   analyzedAt: z.string().datetime(),
   detectedProcess: detectedProcessSummarySchema.optional(),
-  plannerShadow: plannerShadowComparisonSchema.optional()
+  plannerShadow: plannerShadowComparisonSchema.optional(),
+  v21Analysis: v21AnalysisArtifactsSchema.optional()
 });
 export const analysisProviderStatusSchema = z.object({ provider: z.enum(['local', 'openai', 'ollama']), available: z.boolean(), models: z.array(z.string()), message: z.string() });
 

@@ -17,7 +17,7 @@ export class LocalAnalysisProvider implements AnalysisProvider {
       return { ...structuredClone(leadQualificationWorkflow), id: crypto.randomUUID(), name: input.projectName, targetPlatform: input.platform, createdAt: now, updatedAt: now };
     }
     const now = new Date().toISOString();
-    const { nodes, connections, branches, compressionReport } = extractOperationalArchitecture(input.scope, input.platform);
+    const { nodes, connections, branches, compressionReport } = extractOperationalArchitecture(input.scope, input.platform, input.workflowMode === 'single');
     if (!nodes.length) nodes.push(makeNode('trigger', 'Workflow trigger to be confirmed', null, 'Receive event', 'Start the automation when the agreed business event occurs.'));
     const systems = [...new Set(nodes.map((node) => node.service).filter((value): value is string => Boolean(value)))].map((name) => ({ name, category: 'application' }));
     const missingInformation = [nodes.some((node) => node.category === 'trigger' && !node.service) ? 'Application that provides the trigger' : '', /text messages|sms/i.test(input.scope) && !/twilio|clicksend/i.test(input.scope) ? 'Approved SMS provider and sender' : '', /email/i.test(input.scope) && !/gmail|outlook|smtp/i.test(input.scope) ? 'Approved email provider and sender' : '', !/\b(error|fail|retry|fallback)\b/i.test(input.scope) ? 'Required failure behavior' : ''].filter(Boolean);
@@ -45,8 +45,8 @@ interface ExtractedArchitecture {
   compressionReport?: CompressionReport;
 }
 
-function extractOperationalArchitecture(scope: string, platform: AnalysisProviderInput['platform']): ExtractedArchitecture {
-  const portfolio = extractPortfolioArchitecture(scope, platform);
+function extractOperationalArchitecture(scope: string, platform: AnalysisProviderInput['platform'], forceSingleWorkflow = false): ExtractedArchitecture {
+  const portfolio = extractPortfolioArchitecture(scope, platform, forceSingleWorkflow);
   if (portfolio) return portfolio;
   const explicitSequence = extractExplicitWorkflowSequence(scope);
   if (explicitSequence) return explicitSequence;
@@ -73,15 +73,15 @@ function extractOperationalArchitecture(scope: string, platform: AnalysisProvide
 }
 
 export function isLargeWorkflowPortfolio(scope: string): boolean {
-  return scope.length >= 10_000 && portfolioSections(scope).length >= 4;
+  return scope.length >= 10_000 && portfolioSections(scope).length >= 4 && countIndependentWorkflowTriggers(scope) > 1;
 }
 
 function portfolioSections(scope: string): Array<{ title: string; body: string }> {
   const lines = scope.split(/\r?\n/);
   const headings: Array<{ index: number; title: string }> = [];
-  for (let index = 1; index < lines.length - 1; index += 1) {
+  for (let index = 0; index < lines.length - 1; index += 1) {
     const title = lines[index]!.trim();
-    if (!title || lines[index - 1]!.trim() || lines[index + 1]!.trim()) continue;
+    if (!title || (index > 0 && lines[index - 1]!.trim()) || lines[index + 1]!.trim()) continue;
     if (title.length > 70 || /[:.!?]$/.test(title) || !/^[A-Z][A-Za-z0-9 &'/-]+$/.test(title)) continue;
     if (/^(?:Hi|General Requirements|Important Workflows)$/i.test(title)) continue;
     headings.push({ index, title });
@@ -90,6 +90,45 @@ function portfolioSections(scope: string): Array<{ title: string; body: string }
     title: heading.title,
     body: lines.slice(heading.index + 1, headings[position + 1]?.index ?? lines.length).join('\n').trim(),
   })).filter((section) => section.body.length >= 40);
+}
+
+export function countIndependentWorkflowTriggers(scope: string): number {
+  const lines = scope.split(/\r?\n/).map((line) => line.trim());
+  const explicitTriggers: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const inline = lines[index]!.match(/^trigger\s*:\s*(.+)$/i);
+    if (inline) explicitTriggers.push(inline[1]!.trim());
+    else if (/^trigger\s*:?\s*$/i.test(lines[index]!)) {
+      const next = lines.slice(index + 1).find(Boolean);
+      if (next) explicitTriggers.push(next);
+    }
+  }
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (explicitTriggers.length) return new Set(explicitTriggers.map(normalize).filter(Boolean)).size;
+
+  const sectionTriggers = portfolioSections(scope).flatMap((section) => {
+    const firstStatement = section.body.split(/\r?\n|(?<=[.!?])\s+/).map((item) => item.trim()).find(Boolean) ?? '';
+    const hasEvent = /^(?:when|whenever|upon|on receipt of|on submission of)\s+\S|^every\s+(?:business\s+day|weekday|day|week|month|quarter|year)\b/i.test(firstStatement);
+    return hasEvent ? [`${section.title}: ${firstStatement}`] : [];
+  });
+  if (sectionTriggers.length) return new Set(sectionTriggers.map(normalize)).size;
+
+  const documentTriggers = lines.flatMap((line) => {
+    const hasEvent = /^(?:when|whenever|upon|on receipt of|on submission of)\s+\S|^every\s+(?:business\s+day|weekday|day|week|month|quarter|year)\b/i.test(line);
+    return hasEvent ? [line] : [];
+  });
+  return Math.max(1, new Set(documentTriggers.map(normalize).filter(Boolean)).size);
+}
+
+export function requestsSingleWorkflow(scope: string) {
+  return /\b(?:create|build|generate|produce|keep|use|remain|as)\s+(?:this\s+as\s+|a\s+)?single workflow\b|\b(?:one|single)\s+(?:complete\s+|complex\s+)?workflow\b|\bdo not\s+(?:split|separate).{0,40}\b(?:workflow|tabs?)\b|\bwithout\s+(?:separate\s+)?(?:workflow\s+)?tabs?\b/i.test(scope);
+}
+
+export function shouldPartitionWorkflowScope(scope: string, forceSingleWorkflow = false) {
+  return !forceSingleWorkflow
+    && !requestsSingleWorkflow(scope)
+    && portfolioSections(scope).length >= 2
+    && countIndependentWorkflowTriggers(scope) > 1;
 }
 
 interface PortfolioCapability {
@@ -188,8 +227,8 @@ function applyPortfolioQualityGate(capabilities: PortfolioCapability[], platform
   return candidates;
 }
 
-function extractPortfolioArchitecture(scope: string, platform: AnalysisProviderInput['platform']): ExtractedArchitecture | null {
-  if (!isLargeWorkflowPortfolio(scope)) return null;
+function extractPortfolioArchitecture(scope: string, platform: AnalysisProviderInput['platform'], forceSingleWorkflow = false): ExtractedArchitecture | null {
+  if (!shouldPartitionWorkflowScope(scope, forceSingleWorkflow)) return null;
   const nodes: WorkflowNode[] = []; const connections: WorkflowConnection[] = []; const branches: WorkflowBranch[] = [];
   const reports: CompressionReport[] = [];
   for (const { capability, architecture } of applyPortfolioQualityGate(conceptualPortfolioCapabilities(scope), platform)) {

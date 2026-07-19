@@ -23,3 +23,4 @@ export * from "./semantic-role.js";
 export * from "./stage-c-grounding.js";
 export * from "./stage-d-grounding.js";
 export * from "./custom-template.js";
+export * from "./v2-analysis-contracts.js";

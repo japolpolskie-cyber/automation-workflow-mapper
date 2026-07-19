@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { compileAutomationArchitecture, createWorkflowSetFromGraph, validateWorkflowGraph, type CanonicalWorkflow } from '@awm/shared';
-import { LocalAnalysisProvider } from './local-provider.js';
+import {
+  countIndependentWorkflowTriggers,
+  isLargeWorkflowPortfolio,
+  LocalAnalysisProvider,
+  requestsSingleWorkflow,
+  shouldPartitionWorkflowScope,
+} from './local-provider.js';
 
 const scope = `Make Expert for Asana CRM Automation
 We are seeking a skilled Make.com expert to help us streamline our CRM processes in Asana.
@@ -210,5 +216,72 @@ ${section('Owner Reporting', 'Every month, retrieve property results. For each p
       ownerByNode.get(node.id) === entry.id && !['start', 'trigger', 'end', 'note', 'group'].includes(node.category)).length);
     expect(stepCounts.filter((count) => count < 6).length / stepCounts.length).toBeLessThanOrEqual(0.3);
     expect(validateWorkflowGraph(compiled).valid).toBe(true);
+  });
+
+  it('keeps a large headed scope as one workflow when only one trigger is explicit', async () => {
+    const scope = (`Trigger: When a signed request enters the operations queue.
+
+Intake
+
+Validate the request and retrieve the customer record.
+
+Preparation
+
+Create the workspace and prepare the standard project template.
+
+Approval
+
+Request manager approval and record the decision.
+
+Delivery
+
+Send the completed package and notify the account owner.`).padEnd(10_500, ' Additional implementation guidance belongs to the same triggered process.');
+
+    expect(countIndependentWorkflowTriggers(scope)).toBe(1);
+    expect(isLargeWorkflowPortfolio(scope)).toBe(false);
+    const workflow = await new LocalAnalysisProvider().analyze({ scope, projectName: 'Single complex workflow', platform: 'make' }) as CanonicalWorkflow;
+    expect(workflow.nodes.filter((node) => node.category === 'trigger')).toHaveLength(1);
+  });
+
+  it('partitions a scope only when it contains multiple independent triggers', () => {
+    const scope = `Lead Intake
+
+When a website form is submitted, enrich the lead and notify sales.
+
+Invoice Follow-up
+
+Every weekday, find overdue invoices and send payment reminders.`;
+
+    expect(countIndependentWorkflowTriggers(scope)).toBe(2);
+    expect(shouldPartitionWorkflowScope(scope)).toBe(true);
+  });
+
+  it('honors an explicit single-workflow requirement over multiple trigger-like sections', () => {
+    const scope = `Create this as a single workflow without separate tabs.
+
+Lead Intake
+
+When a website form is submitted, enrich the lead and notify sales.
+
+Invoice Follow-up
+
+Every weekday, find overdue invoices and send payment reminders.`;
+
+    expect(requestsSingleWorkflow(scope)).toBe(true);
+    expect(countIndependentWorkflowTriggers(scope)).toBe(2);
+    expect(shouldPartitionWorkflowScope(scope)).toBe(false);
+  });
+
+  it('allows the caller to force one workflow without altering the requirements text', () => {
+    const scope = `Lead Intake
+
+When a website form is submitted, enrich the lead and notify sales.
+
+Invoice Follow-up
+
+Every weekday, find overdue invoices and send payment reminders.`;
+
+    expect(shouldPartitionWorkflowScope(scope)).toBe(true);
+    expect(shouldPartitionWorkflowScope(scope, true)).toBe(false);
   });
 });

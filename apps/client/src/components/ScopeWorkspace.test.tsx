@@ -18,7 +18,8 @@ describe('ScopeWorkspace', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: { provider: 'local', available: true, models: ['preview'], message: 'ready' }, error: null, meta: { requestId: 'test' } }) }));
     render(<ScopeWorkspace project={project} onBack={vi.fn()} onSaved={vi.fn()} onOpenBuilder={undefined} />);
     expect(screen.getByRole('banner')).toHaveClass('sticky-global-header');
-    expect(screen.getByRole('button', { name: 'Analyze requirements' }).closest('section')).toHaveClass('sticky-workspace-toolbar');
+    expect(screen.getByRole('button', { name: 'Analyze automatically' }).closest('section')).toHaveClass('sticky-workspace-toolbar');
+    expect(screen.getByRole('button', { name: 'Generate as single workflow' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Scope of Work text'), { target: { value: 'When a lead arrives, notify sales.' } });
     expect(screen.getByText('6 words')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save scope' })).toBeEnabled();
@@ -36,12 +37,34 @@ describe('ScopeWorkspace', () => {
     };
     render(<ScopeWorkspace project={analyzedProject} onBack={vi.fn()} onSaved={vi.fn()} onOpenBuilder={vi.fn()} />);
 
-    expect(screen.getByText('Draft plan ready for review')).toBeInTheDocument();
+    expect(screen.getByText('Choose how to continue')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start new workflow' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Generate as single workflow' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Regenerate automatically' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Use existing workflow' })).toBeEnabled();
     expect(screen.getByText('Workflow steps').previousElementSibling).toHaveTextContent(String(analyzedProject.workflow.nodes.length));
     expect(screen.getByText('Branches').previousElementSibling).toHaveTextContent(String(analyzedProject.workflow.branches.length));
     fireEvent.change(screen.getByLabelText('Scope of Work text'), { target: { value: 'When an invoice arrives, request finance approval.' } });
 
-    expect(screen.queryByText('Draft plan ready for review')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Analyze requirements' })).toBeEnabled();
+    expect(screen.queryByText('Choose how to continue')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze automatically' })).toBeEnabled();
+  });
+
+  it('starts a different workflow without reusing the saved requirements or analysis', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: { provider: 'local', available: true, models: ['preview'], message: 'ready' }, error: null, meta: { requestId: 'test' } }) }));
+    const analyzedProject: Project = {
+      ...project,
+      originalScope: 'When a lead arrives, qualify it.',
+      workflow: leadQualificationWorkflow,
+      workflowSet: createWorkflowSetFromGraph(leadQualificationWorkflow),
+      visualGraph: projectWorkflowToVisualGraph(leadQualificationWorkflow),
+    };
+    render(<ScopeWorkspace project={analyzedProject} onBack={vi.fn()} onSaved={vi.fn()} onOpenBuilder={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start new workflow' }));
+
+    expect(screen.getByLabelText('Scope of Work text')).toHaveValue('');
+    expect(screen.queryByText('Choose how to continue')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze automatically' })).toBeDisabled();
   });
 });
