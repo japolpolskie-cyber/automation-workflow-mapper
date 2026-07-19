@@ -90,8 +90,9 @@ export class AnalysisService {
     const v23PlatformTranslation = plannerResult.v23PlatformTranslation;
     const v24GraphCritique = plannerResult.v24GraphCritique;
     const v24GraphRepair = plannerResult.v24GraphRepair;
+    const v25AcceptanceMatrix = plannerResult.v25AcceptanceMatrix;
     this.repository.updateWorkflow(project.id, parsed.data);
-    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}), ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), ...(v24GraphCritique ? { v24GraphCritique } : {}), ...(v24GraphRepair ? { v24GraphRepair } : {}) });
+    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}), ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), ...(v24GraphCritique ? { v24GraphCritique } : {}), ...(v24GraphRepair ? { v24GraphRepair } : {}), ...(v25AcceptanceMatrix ? { v25AcceptanceMatrix } : {}) });
   }
 }
 

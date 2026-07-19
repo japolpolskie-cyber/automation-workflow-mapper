@@ -10,6 +10,7 @@ import {
   type PlatformTranslationResult,
   type GraphCritiqueBundle,
   type GraphRepairBundle,
+  type AcceptanceMatrix,
 } from '@awm/shared';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
 import type { Environment } from '../config/environment.js';
@@ -24,6 +25,7 @@ import { ZapierConceptualTranslator } from './zapier-translator.js';
 import { PlatformTranslatorRegistry } from './platform-translator.js';
 import { GraphCritic } from './graph-critic.js';
 import { SafeGraphRepairService } from './safe-graph-repair.js';
+import { AcceptanceMatrixService } from './acceptance-matrix-service.js';
 
 export type PlannerRuntimeMode = 'production' | 'shadow' | 'distributed' | 'mock';
 
@@ -34,6 +36,7 @@ export interface PlannerRuntimeResult {
   v23PlatformTranslation?: PlatformTranslationResult;
   v24GraphCritique?: GraphCritiqueBundle;
   v24GraphRepair?: GraphRepairBundle;
+  v25AcceptanceMatrix?: AcceptanceMatrix;
 }
 
 export interface PlannerRuntime {
@@ -75,6 +78,7 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     private readonly translatorRegistry = new PlatformTranslatorRegistry([new N8nConceptualTranslator(), new MakeConceptualTranslator(), new ZapierConceptualTranslator()]),
     private readonly graphCritic = new GraphCritic(),
     private readonly graphRepair = new SafeGraphRepairService(graphCritic),
+    private readonly acceptanceMatrix = new AcceptanceMatrixService(graphCritic, graphRepair),
   ) {}
 
   public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
@@ -88,7 +92,13 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
       ...(v23PlatformTranslation ? { platform: this.graphCritic.critiquePlatform(v22ConceptualGraph.graph, v23PlatformTranslation) } : {}),
     };
     const v24GraphRepair = this.graphRepair.repair(v21Analysis, v22ConceptualGraph.graph, v23PlatformTranslation);
-    const artifacts = { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique, v24GraphRepair };
+    const translations = {
+      n8n: this.translatorRegistry.get('n8n')!.translate(v22ConceptualGraph.graph),
+      make: this.translatorRegistry.get('make')!.translate(v22ConceptualGraph.graph),
+      zapier: this.translatorRegistry.get('zapier')!.translate(v22ConceptualGraph.graph),
+    };
+    const v25AcceptanceMatrix = this.acceptanceMatrix.evaluate(v21Analysis, v22ConceptualGraph.graph, translations);
+    const artifacts = { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique, v24GraphRepair, v25AcceptanceMatrix };
     if (this.mode === 'mock') return { plannerShadow: emptyComparison('completed', null, 0, null), ...artifacts };
     if (this.mode === 'shadow') {
       if (!this.shadowRuntime) return artifacts;

@@ -5,6 +5,7 @@ import { v22ConceptualGraphResultSchema } from './v2-conceptual-graph.js';
 import { platformTranslationResultSchema } from './v2-platform-translation.js';
 import { graphCritiqueBundleSchema } from './v2-graph-critique.js';
 import { graphRepairBundleSchema } from './v2-graph-repair.js';
+import { acceptanceMatrixSchema } from './v2-acceptance-matrix.js';
 import { plannerShadowComparisonSchema } from './planner.js';
 
 export const platformSchema = z.enum(['zapier', 'make', 'n8n']);
@@ -278,7 +279,8 @@ export const workflowAnalysisResultSchema = z.object({
   v22ConceptualGraph: v22ConceptualGraphResultSchema.optional(),
   v23PlatformTranslation: platformTranslationResultSchema.optional(),
   v24GraphCritique: graphCritiqueBundleSchema.optional(),
-  v24GraphRepair: graphRepairBundleSchema.optional()
+  v24GraphRepair: graphRepairBundleSchema.optional(),
+  v25AcceptanceMatrix: acceptanceMatrixSchema.optional()
 });
 export const analysisProviderStatusSchema = z.object({ provider: z.enum(['local', 'openai', 'ollama']), available: z.boolean(), models: z.array(z.string()), message: z.string() });
 

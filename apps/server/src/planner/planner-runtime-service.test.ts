@@ -38,6 +38,15 @@ describe('unified planner runtime modes', () => {
       conceptual: { report: { version: '2.4B', shadowMode: true, graphKind: 'conceptual' } },
       platform: { report: { version: '2.4B', shadowMode: true, graphKind: 'platform', platform: 'n8n' } },
     });
+    expect(result.v25AcceptanceMatrix).toMatchObject({
+      version: '2.5',
+      shadowMode: true,
+      platforms: {
+        n8n: { platform: 'n8n' },
+        make: { platform: 'make' },
+        zapier: { platform: 'zapier' },
+      },
+    });
   });
 
   it('supports deterministic mock mode without invoking AI', async () => {
@@ -48,6 +57,7 @@ describe('unified planner runtime modes', () => {
     expect(result.v23PlatformTranslation?.selectedPlatform).toBe('n8n');
     expect(result.v24GraphCritique?.conceptual.version).toBe('2.4A');
     expect(result.v24GraphRepair?.conceptual.report.version).toBe('2.4B');
+    expect(result.v25AcceptanceMatrix?.version).toBe('2.5');
   });
 
   it('creates platform-specific V2.3B and V2.3C artifacts', async () => {
