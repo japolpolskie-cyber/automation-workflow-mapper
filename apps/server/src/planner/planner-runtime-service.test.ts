@@ -27,12 +27,14 @@ describe('unified planner runtime modes', () => {
     const result = await new UnifiedPlannerRuntime('shadow', { compare } as never, null).execute(provider, scope, 'n8n', analysis, leadQualificationWorkflow);
     expect(compare).toHaveBeenCalledOnce(); expect(result.plannerShadow).toEqual(comparison);
     expect(result.v21Analysis).toMatchObject({ version: '2.1', shadowMode: true });
+    expect(result.v22ConceptualGraph).toMatchObject({ graph: { version: '2.2', shadowMode: true, legacyK41Compatible: true }, validation: { valid: true } });
   });
 
   it('supports deterministic mock mode without invoking AI', async () => {
     const result = await new UnifiedPlannerRuntime('mock', null, null).execute(provider, scope, 'n8n', analysis, leadQualificationWorkflow);
     expect(result.plannerShadow?.status).toBe('completed');
     expect(result.v21Analysis?.requirementAnalysis.applications.some((item) => item.value === 'Asana')).toBe(true);
+    expect(result.v22ConceptualGraph?.validation.valid).toBe(true);
   });
 
   it('prefers the P4 deterministic compiler in distributed mode', async () => {

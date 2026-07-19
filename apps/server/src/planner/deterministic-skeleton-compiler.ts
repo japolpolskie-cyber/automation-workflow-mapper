@@ -1,5 +1,6 @@
-import { structuredWorkflowPlanSchema, type P3BusinessIntentOutput, type PlannerContext, type StructuredWorkflowPlan } from '@awm/shared';
-import { validatePlannerGraph, type PlannerGraphIssue } from './planner-graph-validator.js';
+import { structuredWorkflowPlanSchema, v22ConceptualGraphResultSchema, type P3BusinessIntentOutput, type PlannerContext, type StructuredWorkflowPlan, type V21AnalysisArtifacts, type V22ConceptualGraphResult } from '@awm/shared';
+import { validatePlannerGraph, validateV22ConceptualGraph, type PlannerGraphIssue } from './planner-graph-validator.js';
+import { V22ConceptualGraphBuilder } from './v2-conceptual-graph-builder.js';
 
 type Node = StructuredWorkflowPlan['nodes'][number];
 type Edge = StructuredWorkflowPlan['edges'][number];
@@ -64,6 +65,12 @@ class GraphBuilder {
 }
 
 export class DeterministicSkeletonCompiler {
+  public compileV22(artifacts: V21AnalysisArtifacts): V22ConceptualGraphResult {
+    const graph = new V22ConceptualGraphBuilder().build(artifacts);
+    const issues = validateV22ConceptualGraph(graph);
+    return v22ConceptualGraphResultSchema.parse({ graph, validation: { valid: issues.length === 0, issues } });
+  }
+
   public compile(context: PlannerContext, intent: P3BusinessIntentOutput | null = null): SkeletonCompilationResult {
     const started = performance.now();
     const graph = new GraphBuilder(context);

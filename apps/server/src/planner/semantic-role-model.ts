@@ -46,6 +46,18 @@ export const semanticRoleDefinitions: Readonly<Record<PlannerSemanticRole, Seman
   'successful-end': role('successful-end', ['end'], ['single', 'unknown'], ['none'], 1, 'none', [], true),
   'blocked-end': role('blocked-end', ['end'], ['single', 'unknown'], ['none'], 1, 'none', [], true),
   'escalation-end': role('escalation-end', ['end', 'notification'], ['single', 'unknown'], ['none'], 1, 'none', [], true),
+  'parallel-split': role('parallel-split', ['multi-route-decision'], ['single', 'unknown'], ['branches'], 1, 'at least two parallel branches', ['parallel-branch']),
+  'conditional-parallel-routing': role('conditional-parallel-routing', ['multi-route-decision'], ['single', 'unknown'], ['branches'], 1, 'at least two non-exclusive branches', ['conditional-branch']),
+  'merge-all': role('merge-all', ['merge'], ['branches'], ['single', 'unknown'], 2, 'one continuation after all inputs', ['continuation']),
+  'merge-any': role('merge-any', ['merge'], ['branches'], ['single', 'unknown'], 2, 'one continuation after a qualifying input', ['continuation']),
+  'human-review': role('human-review', ['manual-review'], ['single', 'unknown'], ['branches', 'single'], 1, 'wait for a human response', ['continuation'], false, { requiredClarificationCategories: ['approval'] }),
+  approval: role('approval', ['human-approval'], ['single', 'unknown'], ['branches', 'single'], 1, 'wait for approval outcomes', ['continuation', 'approved', 'rejected'], false, { requiredClarificationCategories: ['approval'] }),
+  'event-wait': role('event-wait', ['delay'], ['single', 'unknown'], ['single', 'unknown'], 1, 'resume or timeout', ['resume', 'timeout']),
+  'resume-point': role('resume-point', ['data-transformation'], ['single', 'unknown'], ['single', 'unknown'], 1, 'one continuation', ['continuation', 'resume']),
+  'loop-until': role('loop-until', ['loop'], ['single', 'unknown'], ['single', 'unknown'], 1, 'body, loop-back and exit', ['loop-entry', 'loop-back', 'loop-exit']),
+  'error-handler': role('error-handler', ['error-handler'], ['single', 'unknown'], ['single', 'unknown'], 1, 'handled or terminal', ['handled', 'continuation', 'flow']),
+  'sub-workflow': role('sub-workflow', ['sub-workflow'], ['single', 'collection', 'unknown'], ['single', 'collection', 'unknown'], 1, 'one sub-workflow return', ['subworkflow-return']),
+  'meaningful-end': role('meaningful-end', ['end'], ['single', 'unknown'], ['none'], 1, 'none', [], true),
 };
 
 const hasFact = (context: PlannerContext, value: string) => context.facts.some((fact) => fact.value === value);

@@ -86,8 +86,9 @@ export class AnalysisService {
     const plannerResult = detectedProcess && this.plannerRuntime ? await this.plannerRuntime.execute(this.provider, project.originalScope, project.platform, detectedProcess, parsed.data) : {};
     const plannerShadow = plannerResult.plannerShadow;
     const v21Analysis = plannerResult.v21Analysis;
+    const v22ConceptualGraph = plannerResult.v22ConceptualGraph;
     this.repository.updateWorkflow(project.id, parsed.data);
-    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}) });
+    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}) });
   }
 }
 

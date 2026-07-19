@@ -5,7 +5,10 @@ export const plannerSemanticRoles = [
   'binary-decision', 'multi-route-decision', 'collection-iterator', 'business-loop',
   'technical-retry', 'branch-merge', 'item-aggregator', 'delay-boundary',
   'notification', 'logging', 'manual-review', 'successful-end', 'blocked-end',
-  'escalation-end',
+  'escalation-end', 'parallel-split', 'conditional-parallel-routing',
+  'merge-all', 'merge-any', 'human-review', 'approval', 'event-wait',
+  'resume-point', 'loop-until', 'error-handler', 'sub-workflow',
+  'meaningful-end',
 ] as const;
 
 export const plannerSemanticRoleSchema = z.enum(plannerSemanticRoles);
@@ -18,6 +21,9 @@ export type PlannerDataShape = z.infer<typeof plannerDataShapeSchema>;
 export const plannerEdgeRoles = [
   'flow', 'true', 'false', 'route', 'fallback', 'loop-entry', 'loop-back',
   'loop-exit', 'retry', 'retry-exhausted', 'merge-input', 'continuation',
+  'parallel-branch', 'conditional-branch', 'approved', 'rejected', 'resume',
+  'timeout', 'item', 'item-result', 'iteration-complete', 'error',
+  'handled', 'subworkflow-return',
 ] as const;
 export const plannerEdgeRoleSchema = z.enum(plannerEdgeRoles);
 export type PlannerEdgeRole = z.infer<typeof plannerEdgeRoleSchema>;

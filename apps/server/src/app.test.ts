@@ -396,10 +396,15 @@ Workflow Mapping Rules
       status: "completed",
       groundedPlan: null,
     });
+    expect(analyzed.json().data.v22ConceptualGraph).toMatchObject({
+      graph: { version: "2.2", shadowMode: true },
+      validation: { valid: true },
+    });
     const persisted = (
       await app.inject({ method: "GET", url: `/api/workflows/${id}` })
     ).json().data;
     expect("plannerShadow" in persisted.workflow).toBe(false);
+    expect("v22ConceptualGraph" in persisted.workflow).toBe(false);
   });
 
   it("saves, edits, uses, and deletes a personal workflow template", async () => {

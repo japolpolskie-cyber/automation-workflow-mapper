@@ -1,4 +1,5 @@
 import type { PlannerContext, StructuredWorkflowPlan } from '@awm/shared';
+export { validateV22ConceptualGraph } from './v2-conceptual-graph-validator.js';
 
 export interface PlannerGraphIssue { code: string; message: string }
 
