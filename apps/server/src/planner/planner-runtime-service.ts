@@ -41,6 +41,7 @@ export interface PlannerRuntimeResult {
 
 export interface PlannerRuntime {
   readonly mode: PlannerRuntimeMode;
+  buildV2Artifacts(objective: string, platform: Platform, analysis: DetectedProcessSummary): PlannerRuntimeResult;
   execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult>;
 }
 
@@ -81,8 +82,7 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     private readonly acceptanceMatrix = new AcceptanceMatrixService(graphCritic, graphRepair),
   ) {}
 
-  public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
-    if (this.mode === 'production') return {};
+  public buildV2Artifacts(objective: string, platform: Platform, analysis: DetectedProcessSummary): PlannerRuntimeResult {
     const v21Analysis = this.v21AnalysisService.analyze(objective, analysis);
     const v22ConceptualGraph = this.skeletonCompiler.compileV22(v21Analysis);
     const translator = this.translatorRegistry.get(platform);
@@ -98,7 +98,12 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
       zapier: this.translatorRegistry.get('zapier')!.translate(v22ConceptualGraph.graph),
     };
     const v25AcceptanceMatrix = this.acceptanceMatrix.evaluate(v21Analysis, v22ConceptualGraph.graph, translations);
-    const artifacts = { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique, v24GraphRepair, v25AcceptanceMatrix };
+    return { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique, v24GraphRepair, v25AcceptanceMatrix };
+  }
+
+  public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
+    if (this.mode === 'production') return {};
+    const artifacts = this.buildV2Artifacts(objective, platform, analysis);
     if (this.mode === 'mock') return { plannerShadow: emptyComparison('completed', null, 0, null), ...artifacts };
     if (this.mode === 'shadow') {
       if (!this.shadowRuntime) return artifacts;

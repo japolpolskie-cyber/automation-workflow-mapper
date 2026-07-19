@@ -7,20 +7,21 @@ import { AnalysisPipeline } from '../analysis/analysis-pipeline.js';
 import type { ProjectRepository } from '../repositories/project-repository.js';
 import type { ScopeIntelligenceService } from '../analysis/scope-intelligence.js';
 import { PlannerShadowService } from '../planner/planner-shadow-service.js';
-import { UnifiedPlannerRuntime, type PlannerRuntime } from '../planner/planner-runtime-service.js';
+import { UnifiedPlannerRuntime, type PlannerRuntime, type PlannerRuntimeResult } from '../planner/planner-runtime-service.js';
 import { countExplicitWorkflowSteps } from '../ai/prompts/workflow-analysis.js';
+import { V2PromotionService } from '../planner/v2-promotion-service.js';
 
 export class AnalysisError extends Error {
   public constructor(public readonly code: string, message: string, public readonly statusCode = 422) { super(message); this.name = 'AnalysisError'; }
 }
 
 export class AnalysisService {
-  public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null)) {}
+  public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null), private readonly promotion = new V2PromotionService({ mode: 'disabled', allowPassWithWarnings: false })) {}
   public getProviderStatus() { return this.provider.getStatus(); }
-  public async analyze(projectId: string, workflowMode: 'auto' | 'single' = 'auto'): Promise<WorkflowAnalysisResult> {
-    return this.pipeline.run(() => this.analyzeCurrent(projectId, workflowMode));
+  public async analyze(projectId: string, workflowMode: 'auto' | 'single' = 'auto', requestCorrelationId: string | null = null): Promise<WorkflowAnalysisResult> {
+    return this.pipeline.run(() => this.analyzeCurrent(projectId, workflowMode, requestCorrelationId));
   }
-  private async analyzeCurrent(projectId: string, workflowMode: 'auto' | 'single'): Promise<WorkflowAnalysisResult> {
+  private async analyzeCurrent(projectId: string, workflowMode: 'auto' | 'single', requestCorrelationId: string | null): Promise<WorkflowAnalysisResult> {
     const project = this.repository.findById(projectId);
     if (!project) throw new AnalysisError('PROJECT_NOT_FOUND', 'The workflow project was not found.', 404);
     if (!project.originalScope.trim()) throw new AnalysisError('SCOPE_REQUIRED', 'Add and save a Scope of Work before analysis.', 400);
@@ -31,6 +32,25 @@ export class AnalysisService {
       ...(workflowMode === 'single' ? { workflowMode } : {}),
     };
     const detectedProcess = this.scopeIntelligence?.analyze(project.originalScope);
+    let enabledV2Failure: { reason: string; elapsed: number } | null = null;
+    if (this.promotion.mode === 'enabled' && detectedProcess && this.plannerRuntime) {
+      const started = performance.now();
+      try {
+        const artifacts = this.plannerRuntime.buildV2Artifacts(project.originalScope, project.platform, detectedProcess);
+        const promoted = this.promotion.evaluate(artifacts, project.name, project.originalScope, project.platform, requestCorrelationId, performance.now() - started, 'not-run');
+        if (promoted.candidate) {
+          const prepared = prepareWorkflowForPersistence(promoted.candidate, false);
+          if (prepared.validation.valid && !prepared.boundaryError) {
+            this.repository.updateWorkflow(project.id, prepared.workflow);
+            return workflowAnalysisResultSchema.parse({ workflow: prepared.workflow, graphValidation: { valid: true, errorCount: 0, warningCount: prepared.validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: this.provider.name, analyzedAt: new Date().toISOString(), detectedProcess });
+          }
+        }
+      } catch (error) {
+        enabledV2Failure = { reason: error instanceof Error ? error.message : 'V2 candidate construction failed.', elapsed: performance.now() - started };
+        // Enabled mode always falls through to the unchanged provider path.
+      }
+    }
+    const providerStarted = performance.now();
     let raw: unknown; let providerUsed: 'local' | 'openai' | 'ollama' = this.provider.name; let fallbackReason = '';
     const useFreeFallback = async (reason: string) => {
       if (providerUsed === 'local') throw new AnalysisError('LOCAL_ANALYSIS_FAILED', reason, 422);
@@ -83,7 +103,28 @@ export class AnalysisService {
       throw new AnalysisError('AI_GRAPH_VALIDATION_FAILED', `Generated workflow graph is invalid: ${reason}`);
     }
     if (fallbackReason) parsed.data.warnings.push(`Free deterministic fallback used because the configured AI result could not be accepted: ${fallbackReason}`);
-    const plannerResult = detectedProcess && this.plannerRuntime ? await this.plannerRuntime.execute(this.provider, project.originalScope, project.platform, detectedProcess, parsed.data) : {};
+    const providerElapsed = performance.now() - providerStarted;
+    if (enabledV2Failure) this.promotion.recordFailure(project.platform, requestCorrelationId, enabledV2Failure.reason, enabledV2Failure.elapsed, 'available', providerElapsed);
+    let plannerResult: PlannerRuntimeResult = {};
+    if (detectedProcess && this.plannerRuntime && ['compare', 'guarded'].includes(this.promotion.mode)) {
+      try {
+        const started = performance.now();
+        const artifacts = this.plannerRuntime.buildV2Artifacts(project.originalScope, project.platform, detectedProcess);
+        const promoted = this.promotion.evaluate(artifacts, project.name, project.originalScope, project.platform, requestCorrelationId, performance.now() - started, 'available', providerElapsed);
+        if (promoted.candidate && this.promotion.mode === 'guarded') {
+          const promotedPrepared = prepareWorkflowForPersistence(promoted.candidate, false);
+          if (promotedPrepared.validation.valid && !promotedPrepared.boundaryError) {
+            parsed.data = promotedPrepared.workflow;
+            validation = promotedPrepared.validation;
+          }
+        }
+      } catch (error) {
+        this.promotion.recordFailure(project.platform, requestCorrelationId, error instanceof Error ? error.message : 'V2 candidate construction failed.', 0, 'available', providerElapsed);
+        // Compare and guarded modes retain the already validated provider candidate.
+      }
+    } else if (detectedProcess && this.plannerRuntime && this.promotion.mode === 'disabled') {
+      plannerResult = await this.plannerRuntime.execute(this.provider, project.originalScope, project.platform, detectedProcess, parsed.data);
+    }
     const plannerShadow = plannerResult.plannerShadow;
     const v21Analysis = plannerResult.v21Analysis;
     const v22ConceptualGraph = plannerResult.v22ConceptualGraph;

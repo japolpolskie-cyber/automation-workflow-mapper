@@ -36,6 +36,7 @@ import { StageDGroundingService } from "./planner/stage-d-grounding-service.js";
 import { CustomTemplateRepository } from "./repositories/custom-template-repository.js";
 import { CustomTemplateService } from "./services/custom-template-service.js";
 import { customTemplateRoutes } from "./routes/custom-templates.js";
+import { V2PromotionService } from "./planner/v2-promotion-service.js";
 
 export async function buildApp(environment: Environment) {
   const app = Fastify({
@@ -130,6 +131,23 @@ export async function buildApp(environment: Environment) {
     stageCGrounding,
     stageDGrounding,
   );
+  const promotion = new V2PromotionService(
+    {
+      mode: environment.PLANNER_V2_PROMOTION_MODE,
+      allowPassWithWarnings: environment.PLANNER_V2_ALLOW_PASS_WITH_WARNINGS,
+    },
+    undefined,
+    (decision) => app.log.info({
+      promotionMode: decision.configuredMode,
+      selectedSource: decision.authoritativeSource,
+      gateResult: decision.failedGates.length ? "failed" : "passed",
+      fallbackReason: decision.fallbackReason,
+      selectedPlatform: decision.selectedPlatform,
+      acceptanceResult: decision.acceptanceResult,
+      elapsedMilliseconds: decision.timing.totalMilliseconds,
+      requestCorrelationId: decision.requestCorrelationId,
+    }, "Planner V2 promotion decision"),
+  );
   await app.register(
     analysisRoutes(
       new AnalysisService(
@@ -143,6 +161,7 @@ export async function buildApp(environment: Environment) {
           distributedRuntime,
           deterministicRuntime,
         ),
+        promotion,
       ),
     ),
     { prefix: "/api" },
