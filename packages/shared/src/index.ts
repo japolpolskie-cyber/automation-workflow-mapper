@@ -27,3 +27,4 @@ export * from "./v2-analysis-contracts.js";
 export * from "./v2-conceptual-graph.js";
 export * from "./v2-platform-translation.js";
 export * from "./v2-graph-critique.js";
+export * from "./v2-graph-repair.js";

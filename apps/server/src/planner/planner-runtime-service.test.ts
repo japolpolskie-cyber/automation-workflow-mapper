@@ -34,6 +34,10 @@ describe('unified planner runtime modes', () => {
       conceptual: { version: '2.4A', shadowMode: true, graphKind: 'conceptual' },
       platform: { version: '2.4A', shadowMode: true, graphKind: 'platform', platform: 'n8n' },
     });
+    expect(result.v24GraphRepair).toMatchObject({
+      conceptual: { report: { version: '2.4B', shadowMode: true, graphKind: 'conceptual' } },
+      platform: { report: { version: '2.4B', shadowMode: true, graphKind: 'platform', platform: 'n8n' } },
+    });
   });
 
   it('supports deterministic mock mode without invoking AI', async () => {
@@ -43,6 +47,7 @@ describe('unified planner runtime modes', () => {
     expect(result.v22ConceptualGraph?.validation.valid).toBe(true);
     expect(result.v23PlatformTranslation?.selectedPlatform).toBe('n8n');
     expect(result.v24GraphCritique?.conceptual.version).toBe('2.4A');
+    expect(result.v24GraphRepair?.conceptual.report.version).toBe('2.4B');
   });
 
   it('creates platform-specific V2.3B and V2.3C artifacts', async () => {

@@ -9,6 +9,7 @@ import {
   type V22ConceptualGraphResult,
   type PlatformTranslationResult,
   type GraphCritiqueBundle,
+  type GraphRepairBundle,
 } from '@awm/shared';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
 import type { Environment } from '../config/environment.js';
@@ -22,6 +23,7 @@ import { MakeConceptualTranslator } from './make-translator.js';
 import { ZapierConceptualTranslator } from './zapier-translator.js';
 import { PlatformTranslatorRegistry } from './platform-translator.js';
 import { GraphCritic } from './graph-critic.js';
+import { SafeGraphRepairService } from './safe-graph-repair.js';
 
 export type PlannerRuntimeMode = 'production' | 'shadow' | 'distributed' | 'mock';
 
@@ -31,6 +33,7 @@ export interface PlannerRuntimeResult {
   v22ConceptualGraph?: V22ConceptualGraphResult;
   v23PlatformTranslation?: PlatformTranslationResult;
   v24GraphCritique?: GraphCritiqueBundle;
+  v24GraphRepair?: GraphRepairBundle;
 }
 
 export interface PlannerRuntime {
@@ -71,6 +74,7 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     private readonly skeletonCompiler = new DeterministicSkeletonCompiler(),
     private readonly translatorRegistry = new PlatformTranslatorRegistry([new N8nConceptualTranslator(), new MakeConceptualTranslator(), new ZapierConceptualTranslator()]),
     private readonly graphCritic = new GraphCritic(),
+    private readonly graphRepair = new SafeGraphRepairService(graphCritic),
   ) {}
 
   public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
@@ -83,7 +87,8 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
       conceptual: this.graphCritic.critiqueConceptual(v22ConceptualGraph.graph),
       ...(v23PlatformTranslation ? { platform: this.graphCritic.critiquePlatform(v22ConceptualGraph.graph, v23PlatformTranslation) } : {}),
     };
-    const artifacts = { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique };
+    const v24GraphRepair = this.graphRepair.repair(v21Analysis, v22ConceptualGraph.graph, v23PlatformTranslation);
+    const artifacts = { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique, v24GraphRepair };
     if (this.mode === 'mock') return { plannerShadow: emptyComparison('completed', null, 0, null), ...artifacts };
     if (this.mode === 'shadow') {
       if (!this.shadowRuntime) return artifacts;

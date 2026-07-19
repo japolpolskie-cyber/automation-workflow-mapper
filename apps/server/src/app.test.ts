@@ -409,6 +409,10 @@ Workflow Mapping Rules
       conceptual: { version: "2.4A", graphKind: "conceptual" },
       platform: { version: "2.4A", graphKind: "platform", platform: "n8n" },
     });
+    expect(analyzed.json().data.v24GraphRepair).toMatchObject({
+      conceptual: { report: { version: "2.4B", graphKind: "conceptual" } },
+      platform: { report: { version: "2.4B", graphKind: "platform", platform: "n8n" } },
+    });
     const persisted = (
       await app.inject({ method: "GET", url: `/api/workflows/${id}` })
     ).json().data;
@@ -416,6 +420,7 @@ Workflow Mapping Rules
     expect("v22ConceptualGraph" in persisted.workflow).toBe(false);
     expect("v23PlatformTranslation" in persisted.workflow).toBe(false);
     expect("v24GraphCritique" in persisted.workflow).toBe(false);
+    expect("v24GraphRepair" in persisted.workflow).toBe(false);
   });
 
   it("saves, edits, uses, and deletes a personal workflow template", async () => {
