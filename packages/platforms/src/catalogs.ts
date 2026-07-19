@@ -26,10 +26,13 @@ export const makeCatalog = [
   definition('tools', 'Tools transformer', 'transformation', 'Tools', ['Set variable', 'Compose a string', 'Parse data'], null),
   definition('sleep', 'Sleep', 'delay', 'Tools', ['Sleep'], null, ['Duration']),
   definition('iterator', 'Iterator', 'loop', 'Flow control', ['Iterator'], null, ['Array'], ['One bundle per array item'], ['A Router creates conditional branches; an Array aggregator combines bundles. Neither replaces an Iterator.']),
+  definition('array_aggregator', 'Array Aggregator', 'aggregator', 'Flow control', ['Aggregate bundles into an array'], null, ['Source module', 'Aggregated fields'], ['Array']),
+  definition('repeater', 'Repeater', 'loop', 'Tools', ['Repeat a configured number of times'], null, ['Repeats'], ['One bundle per repetition'], ['Use a bounded repeat count; arbitrary route cycles require a state-based design.']),
   definition('http', 'HTTP module', 'api_request', 'HTTP', ['Make a request'], null, ['URL', 'Method'], ['Bundle'], ['Review authentication and operation usage.']),
   definition('notification', 'Messaging module', 'notification', 'Connected messaging app', ['Send a message', 'Send an email'], 'App connection'),
   definition('approval', 'Approval pattern', 'human_approval', 'Connected approval app', ['Create approval request'], 'App connection'),
   definition('error_handler', 'Error handler route', 'error_handler', 'Make error handler', ['Resume', 'Ignore', 'Rollback', 'Commit'], null),
+  definition('call_scenario', 'Call a Scenario', 'sub_workflow', 'Make Scenarios', ['Call a scenario'], 'Make connection', ['Scenario', 'Inputs'], ['Scenario outputs'], ['Scenario inputs and outputs must be explicitly defined.']),
   definition('data_store', 'Data store', 'logger', 'Data store', ['Add/replace a record', 'Search records'], null)
 ] as const;
 

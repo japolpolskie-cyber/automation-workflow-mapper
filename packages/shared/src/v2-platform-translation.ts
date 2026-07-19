@@ -56,7 +56,7 @@ export const implementationUnitSchema = z.object({
 }).strict();
 
 export const platformTranslationResultSchema = z.object({
-  version: z.literal('2.3A'),
+  version: z.enum(['2.3A', '2.3B']),
   shadowMode: z.literal(true),
   selectedPlatform: translationPlatformSchema,
   sourceGraphVersion: z.literal('2.2'),

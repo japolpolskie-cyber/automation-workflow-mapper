@@ -17,6 +17,7 @@ import type { P4DeterministicPlannerService } from './p4-deterministic-planner-s
 import { V21AnalysisService } from './v2-analysis-service.js';
 import { DeterministicSkeletonCompiler } from './deterministic-skeleton-compiler.js';
 import { N8nConceptualTranslator } from './n8n-translator.js';
+import { MakeConceptualTranslator } from './make-translator.js';
 import { PlatformTranslatorRegistry } from './platform-translator.js';
 
 export type PlannerRuntimeMode = 'production' | 'shadow' | 'distributed' | 'mock';
@@ -64,7 +65,7 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     private readonly deterministicRuntime: P4DeterministicPlannerService | null = null,
     private readonly v21AnalysisService = new V21AnalysisService(),
     private readonly skeletonCompiler = new DeterministicSkeletonCompiler(),
-    private readonly translatorRegistry = new PlatformTranslatorRegistry([new N8nConceptualTranslator()]),
+    private readonly translatorRegistry = new PlatformTranslatorRegistry([new N8nConceptualTranslator(), new MakeConceptualTranslator()]),
   ) {}
 
   public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
