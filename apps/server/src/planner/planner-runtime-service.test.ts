@@ -30,6 +30,10 @@ describe('unified planner runtime modes', () => {
     expect(result.v21Analysis).toMatchObject({ version: '2.1', shadowMode: true });
     expect(result.v22ConceptualGraph).toMatchObject({ graph: { version: '2.2', shadowMode: true, legacyK41Compatible: true }, validation: { valid: true } });
     expect(result.v23PlatformTranslation).toMatchObject({ version: '2.3A', shadowMode: true, selectedPlatform: 'n8n', diagnostics: { valid: true } });
+    expect(result.v24GraphCritique).toMatchObject({
+      conceptual: { version: '2.4A', shadowMode: true, graphKind: 'conceptual' },
+      platform: { version: '2.4A', shadowMode: true, graphKind: 'platform', platform: 'n8n' },
+    });
   });
 
   it('supports deterministic mock mode without invoking AI', async () => {
@@ -38,6 +42,7 @@ describe('unified planner runtime modes', () => {
     expect(result.v21Analysis?.requirementAnalysis.applications.some((item) => item.value === 'Asana')).toBe(true);
     expect(result.v22ConceptualGraph?.validation.valid).toBe(true);
     expect(result.v23PlatformTranslation?.selectedPlatform).toBe('n8n');
+    expect(result.v24GraphCritique?.conceptual.version).toBe('2.4A');
   });
 
   it('creates platform-specific V2.3B and V2.3C artifacts', async () => {

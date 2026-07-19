@@ -8,6 +8,7 @@ import {
   type V21AnalysisArtifacts,
   type V22ConceptualGraphResult,
   type PlatformTranslationResult,
+  type GraphCritiqueBundle,
 } from '@awm/shared';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
 import type { Environment } from '../config/environment.js';
@@ -20,6 +21,7 @@ import { N8nConceptualTranslator } from './n8n-translator.js';
 import { MakeConceptualTranslator } from './make-translator.js';
 import { ZapierConceptualTranslator } from './zapier-translator.js';
 import { PlatformTranslatorRegistry } from './platform-translator.js';
+import { GraphCritic } from './graph-critic.js';
 
 export type PlannerRuntimeMode = 'production' | 'shadow' | 'distributed' | 'mock';
 
@@ -28,6 +30,7 @@ export interface PlannerRuntimeResult {
   v21Analysis?: V21AnalysisArtifacts;
   v22ConceptualGraph?: V22ConceptualGraphResult;
   v23PlatformTranslation?: PlatformTranslationResult;
+  v24GraphCritique?: GraphCritiqueBundle;
 }
 
 export interface PlannerRuntime {
@@ -67,6 +70,7 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     private readonly v21AnalysisService = new V21AnalysisService(),
     private readonly skeletonCompiler = new DeterministicSkeletonCompiler(),
     private readonly translatorRegistry = new PlatformTranslatorRegistry([new N8nConceptualTranslator(), new MakeConceptualTranslator(), new ZapierConceptualTranslator()]),
+    private readonly graphCritic = new GraphCritic(),
   ) {}
 
   public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
@@ -75,7 +79,11 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     const v22ConceptualGraph = this.skeletonCompiler.compileV22(v21Analysis);
     const translator = this.translatorRegistry.get(platform);
     const v23PlatformTranslation = translator?.translate(v22ConceptualGraph.graph);
-    const artifacts = { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}) };
+    const v24GraphCritique: GraphCritiqueBundle = {
+      conceptual: this.graphCritic.critiqueConceptual(v22ConceptualGraph.graph),
+      ...(v23PlatformTranslation ? { platform: this.graphCritic.critiquePlatform(v22ConceptualGraph.graph, v23PlatformTranslation) } : {}),
+    };
+    const artifacts = { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique };
     if (this.mode === 'mock') return { plannerShadow: emptyComparison('completed', null, 0, null), ...artifacts };
     if (this.mode === 'shadow') {
       if (!this.shadowRuntime) return artifacts;
