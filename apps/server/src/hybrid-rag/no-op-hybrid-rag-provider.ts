@@ -1,5 +1,5 @@
 import type { RetrievalResult } from "./contracts.js";
-import type { HybridRAGProvider } from "./hybrid-rag-service.js";
+import type { HybridRAGProvider, HybridRAGProviderHealth } from "./hybrid-rag-service.js";
 
 export class NoOpHybridRAGProvider implements HybridRAGProvider {
   public readonly name = "noop";
@@ -14,7 +14,13 @@ export class NoOpHybridRAGProvider implements HybridRAGProvider {
     return { chunks: [] };
   }
 
-  public async health(): Promise<{ initialized: boolean; ready: boolean }> {
-    return { initialized: this.initialized, ready: this.initialized };
+  public async health(): Promise<HybridRAGProviderHealth> {
+    return {
+      initialized: this.initialized,
+      ready: this.initialized,
+      indexedDocumentCount: 0,
+      indexedChunkCount: 0,
+      platformCounts: { n8n: 0, make: 0, zapier: 0 },
+    };
   }
 }

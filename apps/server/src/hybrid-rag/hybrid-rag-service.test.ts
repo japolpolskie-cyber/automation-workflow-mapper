@@ -10,6 +10,9 @@ describe("Hybrid RAG foundation", () => {
     await expect(provider.health()).resolves.toEqual({
       initialized: true,
       ready: true,
+      indexedDocumentCount: 0,
+      indexedChunkCount: 0,
+      platformCounts: { n8n: 0, make: 0, zapier: 0 },
     });
   });
 
@@ -25,6 +28,9 @@ describe("Hybrid RAG foundation", () => {
       ready: true,
       provider: "noop",
       mode: "off",
+      indexedDocumentCount: 0,
+      indexedChunkCount: 0,
+      platformCounts: { n8n: 0, make: 0, zapier: 0 },
     });
   });
 });

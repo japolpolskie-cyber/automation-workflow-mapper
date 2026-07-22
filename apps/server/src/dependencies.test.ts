@@ -17,11 +17,18 @@ describe("application dependency registration", () => {
     expect(app.dependencies.hybridRAGService).toBe(
       dependencies.hybridRAGService,
     );
-    await expect(app.dependencies.hybridRAGService.health()).resolves.toEqual({
+    await expect(app.dependencies.hybridRAGService.health()).resolves.toMatchObject({
       initialized: true,
       ready: true,
-      provider: "noop",
+      provider: "keyword",
       mode: "off",
+      indexedDocumentCount: expect.any(Number),
+      indexedChunkCount: expect.any(Number),
+      platformCounts: {
+        n8n: expect.any(Number),
+        make: expect.any(Number),
+        zapier: expect.any(Number),
+      },
     });
     await app.close();
   });

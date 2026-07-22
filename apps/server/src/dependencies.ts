@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Environment } from "./config/environment.js";
 import { DefaultHybridRAGService, type HybridRAGService } from "./hybrid-rag/hybrid-rag-service.js";
-import { NoOpHybridRAGProvider } from "./hybrid-rag/no-op-hybrid-rag-provider.js";
+import { KeywordHybridRAGProvider } from "./hybrid-rag/keyword-hybrid-rag-provider.js";
 
 export interface ApplicationDependencies {
   hybridRAGService: HybridRAGService;
@@ -18,7 +18,7 @@ export async function createApplicationDependencies(
 ): Promise<ApplicationDependencies> {
   const hybridRAGService = new DefaultHybridRAGService(
     environment.HYBRID_RAG_MODE,
-    new NoOpHybridRAGProvider(),
+    new KeywordHybridRAGProvider(),
   );
   await hybridRAGService.initialize();
   return { hybridRAGService };

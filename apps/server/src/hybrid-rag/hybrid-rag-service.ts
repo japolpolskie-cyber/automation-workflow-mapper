@@ -3,13 +3,22 @@ import type {
   HybridRAGMode,
   RetrievalRequest,
   RetrievalResult,
+  KnowledgePlatform,
 } from "./contracts.js";
+
+export interface HybridRAGProviderHealth {
+  initialized: boolean;
+  ready: boolean;
+  indexedDocumentCount: number;
+  indexedChunkCount: number;
+  platformCounts: Record<KnowledgePlatform, number>;
+}
 
 export interface HybridRAGProvider {
   readonly name: string;
   initialize(): Promise<boolean>;
   retrieve(request: RetrievalRequest): Promise<RetrievalResult>;
-  health(): Promise<{ initialized: boolean; ready: boolean }>;
+  health(): Promise<HybridRAGProviderHealth>;
 }
 
 export interface HybridRAGService {
