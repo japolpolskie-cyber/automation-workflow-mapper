@@ -1953,6 +1953,35 @@ h1 em {
   background: #c79227 !important;
   box-shadow: 0 0 0 1px #c79227;
 }
+
+.workflow-node.category-ai:has(.ai-agent-summary) { min-height: 260px; }
+.ai-agent-summary { display: grid; gap: 4px; margin: 10px 0 4px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface-raised); font-size: 10px; color: var(--color-text-secondary); }
+.ai-agent-summary strong { color: var(--color-text-primary); font-size: 10px; }
+.ai-agent-ports { position: absolute; left: 10px; right: 10px; bottom: -38px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.ai-agent-ports > div { position: relative; display: flex; justify-content: center; }
+.ai-agent-ports button { border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface-raised); color: var(--color-text-secondary); padding: 3px 6px; font: inherit; font-size: 8px; display: inline-flex; gap: 2px; align-items: center; cursor: pointer; white-space: nowrap; }
+.ai-agent-ports button:hover, .ai-agent-ports button:focus-visible { border-color: var(--color-brand); color: var(--color-text-primary); outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }
+.ai-agent-handle { top: 0 !important; bottom: auto !important; width: 9px !important; height: 9px !important; border: 2px solid var(--node-surface) !important; background: var(--color-text-muted) !important; transform: translate(-50%, -55%) !important; }
+.ai-attachment-card { width: 210px; min-height: 104px; padding: 13px 15px; border-style: dashed; border-left-width: 2px; }
+.ai-attachment-card > strong { font-size: 13px; }
+.ai-attachment-card > p, .ai-attachment-card > small { margin: 4px 0 0; display: block; font-size: 10px; }
+.ai-attachment-card.status-configured { border-style: solid; border-color: var(--color-success); }
+.ai-attachment-card.status-invalid { border-color: var(--color-error); }
+.ai-attachment-icon { display: inline-grid; place-items: center; color: var(--color-brand); }
+.ai-attachment-handle { width: 10px !important; height: 10px !important; border: 2px solid var(--node-surface) !important; background: var(--color-text-muted) !important; }
+.ai-attachment-picker-backdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px; background: rgb(5 12 8 / 42%); }
+.ai-attachment-picker { width: min(520px, 100%); max-height: min(680px, 85vh); overflow: hidden; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); box-shadow: var(--shadow-dialog); }
+.ai-attachment-picker > header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--color-border); }
+.ai-attachment-picker h2 { margin: 2px 0 0; font-size: 18px; }
+.ai-attachment-picker header small { color: var(--color-brand); text-transform: uppercase; letter-spacing: .08em; font-size: 10px; font-weight: 700; }
+.ai-attachment-picker-list { display: grid; gap: 8px; padding: 14px; overflow: auto; max-height: 560px; }
+.ai-attachment-picker-list button { display: flex; align-items: center; gap: 12px; text-align: left; border: 1px solid var(--color-border); border-radius: 11px; padding: 11px 12px; background: var(--color-surface-raised); color: var(--color-text-primary); cursor: pointer; }
+.ai-attachment-picker-list button:hover, .ai-attachment-picker-list button:focus-visible { border-color: var(--color-brand); outline: 2px solid var(--color-focus-ring); }
+.ai-attachment-picker-list button > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--color-brand); background: var(--color-brand-soft); }
+.ai-attachment-picker-list button div { display: grid; gap: 3px; }
+.ai-attachment-picker-list button small { color: var(--color-text-muted); }
+.attachment-config-summary { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--color-border); border-radius: 11px; background: var(--color-surface-raised); }
+.attachment-config-summary > small { color: var(--color-brand); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .workflow-node.category-custom {
   border-left-color: #66746d;
 }

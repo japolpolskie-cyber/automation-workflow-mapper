@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CanonicalWorkflow, VisualGraphProjection, WorkflowConnection } from './domain.js';
+import { aiAttachmentPortFor, isAiAttachmentConnection, isAiAttachmentNode, isN8nAiAgent } from './ai-agent-attachments.js';
 
 export const graphIssueSchema = z.object({
   severity: z.enum(['error', 'warning']),
@@ -30,16 +31,31 @@ export function validateWorkflowGraph(workflow: CanonicalWorkflow): GraphValidat
     if (!nodeIds.has(connection.sourceNodeId)) issues.push({ severity: 'error', code: 'MISSING_SOURCE_NODE', message: 'Connection source does not exist.', connectionId: connection.id });
     if (!nodeIds.has(connection.targetNodeId)) issues.push({ severity: 'error', code: 'MISSING_TARGET_NODE', message: 'Connection destination does not exist.', connectionId: connection.id });
     if (connection.sourceNodeId === connection.targetNodeId) issues.push({ severity: 'error', code: 'SELF_CONNECTION', message: 'A node cannot connect directly to itself.', connectionId: connection.id, nodeId: connection.sourceNodeId });
+    if (isAiAttachmentConnection(connection)) {
+      const source = workflow.nodes.find((node) => node.id === connection.sourceNodeId);
+      const target = workflow.nodes.find((node) => node.id === connection.targetNodeId);
+      if (!source || !isAiAttachmentNode(source)) issues.push({ severity: 'error', code: 'INVALID_ATTACHMENT_SOURCE', message: 'AI attachment connections must start at an attachment card.', connectionId: connection.id });
+      if (!target || !isN8nAiAgent(target) || workflow.targetPlatform !== 'n8n') issues.push({ severity: 'error', code: 'ATTACHMENT_PLATFORM_MISMATCH', message: 'AI attachments can connect only to an n8n AI Agent.', connectionId: connection.id });
+      if (source?.attachmentType && connection.connectionKind !== aiAttachmentPortFor(source.attachmentType)) issues.push({ severity: 'error', code: 'INCOMPATIBLE_ATTACHMENT_TYPE', message: 'The attachment type does not match the AI Agent port.', connectionId: connection.id, nodeId: source.id });
+      if (connection.targetPort !== connection.connectionKind) issues.push({ severity: 'error', code: 'INVALID_ATTACHMENT_PORT', message: 'The attachment is connected to an incompatible AI Agent port.', connectionId: connection.id });
+    }
   }
   if (workflow.nodes.length > 0 && !workflow.nodes.some((node) => node.category === 'trigger' || node.category === 'start')) {
     issues.push({ severity: 'error', code: 'TRIGGER_REQUIRED', message: 'The workflow requires a trigger or start node.' });
   }
-  const connected = new Set(workflow.connections.flatMap((connection) => [connection.sourceNodeId, connection.targetNodeId]));
-  const disconnected = workflow.nodes.filter((node) => !connected.has(node.id) && !['note', 'group'].includes(node.category));
+  const executionConnections = workflow.connections.filter((connection) => !isAiAttachmentConnection(connection));
+  const connected = new Set(executionConnections.flatMap((connection) => [connection.sourceNodeId, connection.targetNodeId]));
+  const disconnected = workflow.nodes.filter((node) => !isAiAttachmentNode(node) && !connected.has(node.id) && !['note', 'group'].includes(node.category));
   for (const node of disconnected) issues.push({ severity: 'warning', code: 'DISCONNECTED_NODE', message: `${node.name} is disconnected.`, nodeId: node.id });
   const outgoingByNode = new Map(workflow.nodes.map((node) => [node.id, workflow.connections.filter((edge) => edge.sourceNodeId === node.id)]));
   const incomingByNode = new Map(workflow.nodes.map((node) => [node.id, workflow.connections.filter((edge) => edge.targetNodeId === node.id)]));
   for (const node of workflow.nodes) {
+    if (isAiAttachmentNode(node)) {
+      const edges = workflow.connections.filter((edge) => edge.sourceNodeId === node.id && isAiAttachmentConnection(edge));
+      if (!node.attachmentType || !node.attachmentSubtype || !node.attachmentStatus) issues.push({ severity: 'error', code: 'INVALID_ATTACHMENT_METADATA', message: `${node.name} has incomplete attachment metadata.`, nodeId: node.id });
+      if (!edges.length) issues.push({ severity: 'warning', code: 'ORPHANED_ATTACHMENT', message: `${node.name} is not attached to an AI Agent.`, nodeId: node.id });
+      continue;
+    }
     const outgoing = outgoingByNode.get(node.id) ?? [];
     if (['condition', 'filter'].includes(node.category)) {
       const decisions = outgoing.filter((edge) => edge.routeType !== 'error');
@@ -55,6 +71,14 @@ export function validateWorkflowGraph(workflow: CanonicalWorkflow): GraphValidat
       if (!labels.includes('LOOP') || !labels.includes('DONE')) issues.push({ severity: 'error', code: 'LOOP_EXITS_REQUIRED', message: `${node.name} needs labeled LOOP and DONE routes.`, nodeId: node.id });
     }
   }
+  for (const agent of workflow.nodes.filter(isN8nAiAgent)) {
+    const attached = workflow.connections.filter((edge) => edge.targetNodeId === agent.id && isAiAttachmentConnection(edge));
+    const models = attached.filter((edge) => edge.connectionKind === 'ai-chat-model');
+    const memories = attached.filter((edge) => edge.connectionKind === 'ai-memory');
+    if (!models.length) issues.push({ severity: 'warning', code: 'AI_CHAT_MODEL_REQUIRED', message: `${agent.name} requires one Chat Model attachment.`, nodeId: agent.id });
+    if (models.length > 1) issues.push({ severity: 'error', code: 'DUPLICATE_CHAT_MODEL', message: `${agent.name} can have only one Chat Model.`, nodeId: agent.id });
+    if (memories.length > 1) issues.push({ severity: 'error', code: 'DUPLICATE_MEMORY', message: `${agent.name} can have only one Memory attachment.`, nodeId: agent.id });
+  }
   for (const branch of workflow.branches) {
     if (!nodeIds.has(branch.sourceNodeId)) issues.push({ severity: 'error', code: 'MISSING_BRANCH_SOURCE', message: `${branch.name} references a missing source node.` });
     if (branch.destinationNodeId === null) issues.push({ severity: 'warning', code: 'BRANCH_DESTINATION_REQUIRED', message: `${branch.name} has no destination.` });
@@ -66,7 +90,7 @@ export function validateWorkflowGraph(workflow: CanonicalWorkflow): GraphValidat
 
 function detectUnsupportedCycles(workflow: CanonicalWorkflow, issues: GraphIssue[]): void {
   const adjacency = new Map<string, string[]>();
-  for (const connection of workflow.connections) adjacency.set(connection.sourceNodeId, [...(adjacency.get(connection.sourceNodeId) ?? []), connection.targetNodeId]);
+  for (const connection of workflow.connections.filter((edge) => !isAiAttachmentConnection(edge))) adjacency.set(connection.sourceNodeId, [...(adjacency.get(connection.sourceNodeId) ?? []), connection.targetNodeId]);
   const nodeById = new Map(workflow.nodes.map((node) => [node.id, node]));
   const visited = new Set<string>();
   const active = new Set<string>();
@@ -130,7 +154,7 @@ export function inferWorkflowConnections(workflow: CanonicalWorkflow): Canonical
   if (workflow.connections.length || workflow.nodes.length < 2) return workflow;
   const connections: WorkflowConnection[] = [];
   let previous: CanonicalWorkflow['nodes'][number] | null = null;
-  for (const node of workflow.nodes) {
+  for (const node of workflow.nodes.filter((item) => !isAiAttachmentNode(item))) {
     if (node.category === 'trigger' && previous?.category !== 'start') { previous = node; continue; }
     if (previous) connections.push({ id: crypto.randomUUID(), sourceNodeId: previous.id, targetNodeId: node.id, sourcePort: 'output', targetPort: 'input', label: node.category === 'error_handler' ? 'FAILED' : 'SUCCESS', branchLabel: node.category === 'error_handler' ? 'FAILED' : 'SUCCESS', style: node.category === 'error_handler' ? 'failure' : 'success', condition: null, routeType: node.category === 'error_handler' ? 'error' : 'success', mappings: [] });
     previous = node;

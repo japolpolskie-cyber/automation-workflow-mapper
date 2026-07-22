@@ -38,6 +38,30 @@ describe('workflow graph integrity', () => {
     );
     expect(validateWorkflowGraph(workflow).issues.some((issue) => issue.code === 'INVALID_CYCLE')).toBe(false);
   });
+
+  it('validates n8n AI attachments separately from execution flow', () => {
+    const workflow = structuredClone(leadQualificationWorkflow);
+    workflow.targetPlatform = 'n8n';
+    const agent = { ...workflow.nodes[1]!, id: crypto.randomUUID(), category: 'ai' as const, name: 'Customer Support AI Agent', operation: 'AI Agent', service: 'n8n' };
+    const model = { ...workflow.nodes[1]!, id: crypto.randomUUID(), category: 'ai' as const, nodeKind: 'ai-attachment' as const, attachmentType: 'chat-model' as const, attachmentSubtype: 'openai', attachmentStatus: 'configured' as const, name: 'OpenAI Chat Model' };
+    const connection = { ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: model.id, targetNodeId: agent.id, connectionKind: 'ai-chat-model' as const, sourcePort: 'attachment', targetPort: 'ai-chat-model', label: 'Chat Model', branchLabel: null, routeType: 'default' as const, style: 'default' as const };
+    workflow.nodes.push(agent, model);
+    workflow.connections.push(connection);
+    const result = validateWorkflowGraph(workflow);
+    expect(result.issues.some((issue) => issue.code === 'ORPHANED_ATTACHMENT')).toBe(false);
+    expect(result.issues.some((issue) => issue.nodeId === model.id && issue.code === 'DISCONNECTED_NODE')).toBe(false);
+  });
+
+  it('rejects duplicate models, incompatible ports, and platform mismatch', () => {
+    const workflow = structuredClone(leadQualificationWorkflow);
+    workflow.targetPlatform = 'make';
+    const agent = { ...workflow.nodes[1]!, id: crypto.randomUUID(), category: 'ai' as const, name: 'AI Agent', operation: 'AI Agent', service: 'n8n' };
+    const models = [0, 1].map(() => ({ ...workflow.nodes[1]!, id: crypto.randomUUID(), category: 'ai' as const, nodeKind: 'ai-attachment' as const, attachmentType: 'chat-model' as const, attachmentSubtype: 'openai', attachmentStatus: 'configured' as const, name: 'Chat Model' }));
+    workflow.nodes.push(agent, ...models);
+    workflow.connections.push(...models.map((model) => ({ ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: model.id, targetNodeId: agent.id, connectionKind: 'ai-chat-model' as const, sourcePort: 'attachment', targetPort: 'ai-memory', branchLabel: null, routeType: 'default' as const })));
+    const codes = validateWorkflowGraph(workflow).issues.map((issue) => issue.code);
+    expect(codes).toEqual(expect.arrayContaining(['ATTACHMENT_PLATFORM_MISMATCH', 'INVALID_ATTACHMENT_PORT', 'DUPLICATE_CHAT_MODEL']));
+  });
 });
 
 describe('visual graph projection', () => {

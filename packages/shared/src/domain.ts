@@ -17,6 +17,11 @@ export const nodeCategorySchema = z.enum([
   'logger', 'merge', 'split', 'sub_workflow', 'end', 'note', 'group'
 ]);
 
+export const workflowNodeKindSchema = z.enum(['execution', 'ai-attachment']);
+export const aiAttachmentTypeSchema = z.enum(['chat-model', 'memory', 'tool']);
+export const aiAttachmentStatusSchema = z.enum(['unconfigured', 'configured', 'invalid']);
+export const workflowConnectionKindSchema = z.enum(['execution', 'ai-chat-model', 'ai-memory', 'ai-tool']);
+
 export const branchLabelSchema = z.enum([
   'TRUE', 'FALSE', 'SUCCESS', 'FAILED', 'FOUND', 'NOT FOUND', 'APPROVED', 'REJECTED',
   'PAID', 'UNPAID', 'QUALIFIED', 'NOT QUALIFIED', 'DEFAULT', 'LOOP', 'DONE'
@@ -59,6 +64,10 @@ export const conditionGroupSchema = z.object({
 export const workflowNodeSchema = z.object({
   id: z.string().uuid(),
   category: nodeCategorySchema,
+  nodeKind: workflowNodeKindSchema.optional(),
+  attachmentType: aiAttachmentTypeSchema.optional(),
+  attachmentSubtype: z.string().max(120).optional(),
+  attachmentStatus: aiAttachmentStatusSchema.optional(),
   name: z.string().min(1).max(160),
   description: z.string().max(2_000).default(''),
   service: z.string().max(100).nullable().default(null),
@@ -97,6 +106,7 @@ export const workflowConnectionSchema = z.object({
   id: z.string().uuid(),
   sourceNodeId: z.string().uuid(),
   targetNodeId: z.string().uuid(),
+  connectionKind: workflowConnectionKindSchema.optional(),
   sourcePort: z.string().default('output'),
   targetPort: z.string().default('input'),
   label: z.string().max(120).default(''),

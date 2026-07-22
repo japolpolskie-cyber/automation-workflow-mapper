@@ -1,5 +1,6 @@
 export * from "./api.js";
 export * from "./domain.js";
+export * from "./ai-agent-attachments.js";
 export * from "./fixtures.js";
 export * from "./graph.js";
 export * from "./platform.js";

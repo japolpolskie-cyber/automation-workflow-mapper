@@ -12,11 +12,14 @@ import {
 } from "@xyflow/react";
 import {
   normalizeWorkflowSet,
+  aiAgentAttachmentSummary,
+  isAiAttachmentNode,
   validateWorkflow,
   type CustomTemplateMetadata,
   type CustomTemplateSnapshot,
   type CustomWorkflowTemplate,
   type Platform,
+  type AiAttachmentType,
   type PlatformBuildPlan,
   type Project,
 } from "@awm/shared";
@@ -58,6 +61,8 @@ import {
 import { useEditorStore, type EditorEdge, type EditorNode } from "./editor-store";
 import { manualLibraryFor, type ManualLibraryItem } from "./manual-platform-library";
 import { ManualNodeLibrary } from "./ManualNodeLibrary";
+import { AiAttachmentPicker } from "./AiAttachmentPicker";
+import type { AiAttachmentOption } from "./ai-attachment-options";
 import { branchControlFor, branchNounFor, readEditorBranches } from "./editor-branches";
 import { isEditableEditorTarget } from "./editor-interactions";
 import { ThemeSelector } from "../../theme/ThemeSelector";
@@ -106,6 +111,7 @@ export function WorkflowEditor({
   const [workflowSetDraft, setWorkflowSetDraft] = useState(project.workflowSet);
   const [nodePendingDelete, setNodePendingDelete] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ type: "node" | "edge"; id: string; x: number; y: number } | null>(null);
+  const [attachmentPicker, setAttachmentPicker] = useState<{ agentId: string; type: AiAttachmentType } | null>(null);
   const canvasRef = useRef<HTMLElement | null>(null);
   const nodeTypes = useMemo(() => ({ workflow: WorkflowCanvasNode }), []);
   const currentWorkflow = store.workflow ?? project.workflow;
@@ -195,9 +201,10 @@ export function WorkflowEditor({
                 ? [...new Map(usedRouteHandles.map((branch) => [branch.id, branch])).values()]
                 : [{ id: "route-1", label: `${branchNounFor(targetPlatform)} 1` }])
             : undefined;
+          const attachmentSummary = domain.category === 'ai' ? aiAgentAttachmentSummary(activeWorkflow, domain.id) : undefined;
           return {
             ...node,
-            data: { ...node.data, platform: targetPlatform, productStatus, platformBadges, ...(routeHandles ? { routeHandles } : {}) },
+            data: { ...node.data, platform: targetPlatform, productStatus, platformBadges, ...(routeHandles ? { routeHandles } : {}), ...(attachmentSummary ? { attachmentSummary, onAddAttachment: (agentId: string, type: AiAttachmentType) => setAttachmentPicker({ agentId, type }) } : {}) },
           };
         }),
     [store.nodes, activeDomainIds, activeWorkflow, plan, targetPlatform],
@@ -212,8 +219,11 @@ export function WorkflowEditor({
         (edge) =>
           visibleVisualIds.has(edge.source) &&
           visibleVisualIds.has(edge.target),
-      ).map((edge) => ({ ...edge, selected: edge.id === store.selectedEdgeId, reconnectable: true })),
-    [store.edges, store.selectedEdgeId, visibleVisualIds],
+      ).map((edge) => {
+        const domain = currentWorkflow.connections.find((item) => item.id === edge.data?.domainConnectionId);
+        return { ...edge, selected: edge.id === store.selectedEdgeId, reconnectable: domain?.connectionKind === undefined || domain.connectionKind === 'execution' };
+      }),
+    [store.edges, currentWorkflow.connections, store.selectedEdgeId, visibleVisualIds],
   );
 
   useEffect(() => {
@@ -275,6 +285,14 @@ export function WorkflowEditor({
   const addManualNode = (item: ManualLibraryItem, position = centerCanvasPosition()) => {
     store.addNode(item, position, targetPlatform);
     syncWorkflowSet();
+    setSaved(false);
+  };
+  const addAttachment = (option: AiAttachmentOption) => {
+    if (!attachmentPicker) return;
+    const added = store.addAiAttachment(attachmentPicker.agentId, option);
+    if (!added) { setError(`Only one ${attachmentPicker.type === 'chat-model' ? 'Chat Model' : 'Memory'} can be attached to an AI Agent.`); return; }
+    syncWorkflowSet();
+    setAttachmentPicker(null);
     setSaved(false);
   };
   const dropLibraryItem = (event: ReactDragEvent) => {
@@ -667,7 +685,7 @@ export function WorkflowEditor({
                   ? "Application, operation, credential, and limitation guidance for the selected workflow."
                   : "Resolve blocking readiness items before exporting to a client."}
             </p>
-            <strong>{activeWorkflow.nodes.length} synchronized steps</strong>
+            <strong>{activeWorkflow.nodes.filter((node) => !isAiAttachmentNode(node)).length} synchronized steps</strong>
             <ReadinessBadge readiness={readiness} />
           </aside>
         )}
@@ -686,6 +704,7 @@ export function WorkflowEditor({
           }}
         />
       )}
+      {attachmentPicker && <AiAttachmentPicker type={attachmentPicker.type} onSelect={addAttachment} onClose={() => setAttachmentPicker(null)} />}
       {comparisonOpen && (
         <Suspense
           fallback={

@@ -1,8 +1,8 @@
-import type { CanonicalWorkflow } from '@awm/shared';
+import { isAiAttachmentNode, type CanonicalWorkflow } from '@awm/shared';
 import { ArrowDown, CheckCircle2 } from 'lucide-react';
 
 export function BusinessFlowView({ workflow }: { workflow: CanonicalWorkflow }) {
   const technical = new Set(['retry', 'error_handler', 'logger', 'merge', 'split']);
-  const visible = workflow.nodes.filter((node) => !technical.has(node.category));
+  const visible = workflow.nodes.filter((node) => !isAiAttachmentNode(node) && !technical.has(node.category));
   return <section className="workflow-document-view business-flow-view"><header><span>Layer 1</span><h2>Business flow</h2><p>A client-friendly explanation of what the automation does.</p></header><div className="business-flow-list">{visible.map((node, index) => { const routes = workflow.connections.filter((edge) => edge.targetNodeId === node.id).map((edge) => edge.branchLabel === 'LOOP' ? 'Loop Back' : edge.branchLabel === 'DONE' ? 'Completed' : edge.branchLabel === 'DEFAULT' ? 'Unknown Route' : edge.branchLabel || edge.label).filter((label) => label && label !== 'SUCCESS'); return <div key={node.id}><article className={`business-step category-${node.category}`}><span>{index + 1}</span><div>{routes.length > 0 && <div className="business-routes">{routes.map((route) => <em key={route}>{route}</em>)}</div>}<strong>{node.name}</strong>{node.service && <div className="business-platform-line"><b>{node.service}</b><span>{node.operation || 'Operation unresolved'}</span></div>}<p>{node.purpose || node.description || node.expectedResult}</p>{node.category === 'condition' && node.decisionRule && <small>Decision: {node.decisionRule.decisionQuestion}</small>}</div>{node.category === 'end' && <CheckCircle2 size={18} />}</article>{index < visible.length - 1 && <ArrowDown className="business-arrow" size={18} />}</div>; })}</div></section>;
 }

@@ -1,9 +1,10 @@
 import dagre from '@dagrejs/dagre';
 import { addEdge, applyEdgeChanges, applyNodeChanges, MarkerType, reconnectEdge, type Connection, type Edge, type EdgeChange, type Node, type NodeChange, type XYPosition } from '@xyflow/react';
-import { inferWorkflowConnections, projectWorkflowToVisualGraph, type Platform, type Project, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
+import { aiAttachmentPortFor, isAiAttachmentConnection, isAiAttachmentNode, isN8nAiAgent, inferWorkflowConnections, projectWorkflowToVisualGraph, type AiAgentAttachmentSummary, type AiAttachmentType, type Platform, type Project, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
 import { create } from 'zustand';
 import type { ManualLibraryItem } from './manual-platform-library';
 import { branchControlFor, createEditorBranch, MAX_DYNAMIC_BRANCHES, readEditorBranches, writeEditorBranches } from './editor-branches';
+import type { AiAttachmentOption } from './ai-attachment-options';
 
 export interface EditorNodeData extends Record<string, unknown> {
   domainNodeId: string;
@@ -12,6 +13,8 @@ export interface EditorNodeData extends Record<string, unknown> {
   routeHandles?: Array<{ id: string; label: string }>;
   productStatus?: 'Supported' | 'Needs Clarification' | 'Platform Limitation' | 'Unresolved';
   platformBadges?: string[];
+  attachmentSummary?: AiAgentAttachmentSummary;
+  onAddAttachment?: (agentId: string, type: AiAttachmentType) => void;
 }
 export type EditorNode = Node<EditorNodeData, 'workflow'>;
 export type EditorEdge = Edge<{ domainConnectionId: string }>;
@@ -32,6 +35,7 @@ interface EditorState extends Snapshot {
   moveSelectedBranch(branchId: string, direction: -1 | 1): void;
   removeSelectedBranch(branchId: string): void;
   addNode(item: ManualLibraryItem | WorkflowNode['category'], position?: XYPosition, platform?: Platform): string;
+  addAiAttachment(agentId: string, option: AiAttachmentOption): string | null;
   deleteNode(id?: string | null): void;
   deleteEdge(id?: string | null): void;
   duplicateSelected(): void;
@@ -54,7 +58,7 @@ const edgePresentation = (connection: WorkflowConnection) => ({
   label: semanticLabel(connection) ?? '',
   sourceHandle: connection.sourcePort && connection.sourcePort !== 'output' ? connection.sourcePort : ['TRUE', 'FOUND', 'APPROVED', 'PAID', 'QUALIFIED'].includes(connection.branchLabel ?? '') ? 'positive' : ['FALSE', 'NOT FOUND', 'REJECTED', 'UNPAID', 'NOT QUALIFIED'].includes(connection.branchLabel ?? '') ? 'negative' : 'default',
   targetHandle: connection.targetPort && connection.targetPort !== 'input' ? connection.targetPort : null,
-  style: { stroke: connection.style === 'failure' ? '#c65b62' : connection.style === 'conditional' ? '#c79227' : connection.style === 'loop' ? '#7659b6' : '#4f8a6c', strokeWidth: 2 },
+  style: isAiAttachmentConnection(connection) ? { stroke: '#6f8f7d', strokeWidth: 1.4, strokeDasharray: '5 5' } : { stroke: connection.style === 'failure' ? '#c65b62' : connection.style === 'conditional' ? '#c79227' : connection.style === 'loop' ? '#7659b6' : '#4f8a6c', strokeWidth: 2 },
   labelStyle: { fill: '#435149', fontSize: 10, fontWeight: 700 },
   labelBgStyle: { fill: '#ffffff', fillOpacity: .92 },
   markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
@@ -119,6 +123,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => {
       const source = state.nodes.find((node) => node.id === connection.source)?.data.domainNodeId; const target = state.nodes.find((node) => node.id === connection.target)?.data.domainNodeId;
       const sourceNode = state.workflow.nodes.find((node) => node.id === source);
+      const targetNode = state.workflow.nodes.find((node) => node.id === target);
+      if (isAiAttachmentNode(sourceNode!) || isAiAttachmentNode(targetNode!)) return state;
       const dynamicLabel = sourceNode ? readEditorBranches(sourceNode).find((branch) => branch.id === connection.sourceHandle)?.label : undefined;
       if (!source || !target || state.workflow.connections.some((edge) => edge.sourceNodeId === source && edge.targetNodeId === target && edge.sourcePort === (connection.sourceHandle ?? 'output') && edge.targetPort === (connection.targetHandle ?? 'input'))) return state;
       const id = crypto.randomUUID(); const domainConnection: WorkflowConnection = { id, sourceNodeId: source, targetNodeId: target, ...connectionSemantics(connection.sourceHandle, dynamicLabel), targetPort: connection.targetHandle ?? 'input', mappings: [] };
@@ -134,6 +140,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (!domainId || !source || !target || state.workflow.connections.some((item) => item.id !== domainId && item.sourceNodeId === source && item.targetNodeId === target && item.sourcePort === (connection.sourceHandle ?? 'output'))) return state;
       const current = state.workflow.connections.find((item) => item.id === domainId);
       if (!current) return state;
+      if (isAiAttachmentConnection(current)) return state;
       const sourceNode = state.workflow.nodes.find((node) => node.id === source);
       const dynamicLabel = sourceNode ? readEditorBranches(sourceNode).find((branch) => branch.id === connection.sourceHandle)?.label : undefined;
       const updated: WorkflowConnection = { ...current, sourceNodeId: source, targetNodeId: target, ...connectionSemantics(connection.sourceHandle, dynamicLabel), targetPort: connection.targetHandle ?? 'input' };
@@ -149,6 +156,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   moveSelectedBranch(branchId, direction) { set((state) => { const visual = state.nodes.find((node) => node.id === state.selectedNodeId); const node = state.workflow.nodes.find((item) => item.id === visual?.data.domainNodeId); if (!visual || !node) return state; const branches = readEditorBranches(node); const index = branches.findIndex((branch) => branch.id === branchId); const destination = index + direction; if (index < 0 || destination < 0 || destination >= branches.length) return state; const next = [...branches]; [next[index], next[destination]] = [next[destination]!, next[index]!]; const updated = { ...node, configuration: writeEditorBranches(node, next) }; return { ...record(state), workflow: { ...state.workflow, nodes: state.workflow.nodes.map((item) => item.id === node.id ? updated : item) }, nodes: state.nodes.map((item) => item.id === visual.id ? { ...item, data: nodeData(updated, visual.data.platform) } : item) }; }); },
   removeSelectedBranch(branchId) { set((state) => { const visual = state.nodes.find((node) => node.id === state.selectedNodeId); const node = state.workflow.nodes.find((item) => item.id === visual?.data.domainNodeId); if (!visual || !node) return state; const branches = readEditorBranches(node); if (branches.length <= 1 || !branches.some((branch) => branch.id === branchId)) return state; const updated = { ...node, configuration: writeEditorBranches(node, branches.filter((branch) => branch.id !== branchId)) }; return { ...record(state), workflow: { ...state.workflow, nodes: state.workflow.nodes.map((item) => item.id === node.id ? updated : item), connections: state.workflow.connections.filter((edge) => !(edge.sourceNodeId === node.id && edge.sourcePort === branchId)) }, nodes: state.nodes.map((item) => item.id === visual.id ? { ...item, data: nodeData(updated, visual.data.platform) } : item), edges: state.edges.filter((edge) => !(edge.source === visual.id && edge.sourceHandle === branchId)), selectedEdgeId: null }; }); },
   addNode(value, position, requestedPlatform) { const id = crypto.randomUUID(); set((state) => { const definition = isLibraryItem(value) ? value : { id: value, label: value.replace('_', ' '), category: value, service: null, operation: null }; const platform = requestedPlatform ?? state.nodes[0]?.data.platform ?? 'n8n'; const baseConfiguration = definition.configuration ?? {}; const configuration = baseConfiguration.editorBranchControl === 'dynamic' ? { ...baseConfiguration, editorBranches: [createEditorBranch(platform, 0)] } : baseConfiguration; const domain: WorkflowNode = { id, category: definition.category, name: definition.configuration?.manualCustomNode ? 'Custom Node' : `New ${definition.label}`, description: '', service: definition.service, operation: definition.operation, purpose: '', expectedResult: '', icon: definition.configuration?.manualCustomNode ? 'generic-custom' : `generic-${definition.category}`, estimatedExecution: 'Under 1 minute', inputs: [], outputs: [], credentials: [], configuration, status: 'unconfigured', configurationCompleteness: 0, conditions: [], decisionRule: null, notes: '', bestPractices: [], potentialErrors: [], alternativeImplementations: [], performanceNotes: [], securityNotes: [], riskLevel: 'low' }; const visual: EditorNode = { id: `visual-${id}`, type: 'workflow', position: freePosition(state.nodes, position), data: nodeData(domain, platform) }; return { ...record(state), workflow: { ...state.workflow, nodes: [...state.workflow.nodes, domain] }, nodes: [...state.nodes.map((node) => ({ ...node, selected: false })), { ...visual, selected: true }], edges: state.edges.map((edge) => ({ ...edge, selected: false })), selectedNodeId: visual.id, selectedEdgeId: null }; }); return id; },
+  addAiAttachment(agentId, option) {
+    const id = crypto.randomUUID();
+    let added = false;
+    set((state) => {
+      const agent = state.workflow.nodes.find((node) => node.id === agentId);
+      if (state.workflow.targetPlatform !== 'n8n' || !agent || !isN8nAiAgent(agent)) return state;
+      const kind = aiAttachmentPortFor(option.type);
+      const existing = state.workflow.connections.filter((edge) => edge.targetNodeId === agentId && edge.connectionKind === kind);
+      if (option.type !== 'tool' && existing.length) return state;
+      const agentVisual = state.nodes.find((node) => node.data.domainNodeId === agentId);
+      const position = freePosition(state.nodes, { x: (agentVisual?.position.x ?? 120) + (option.type === 'chat-model' ? -190 : option.type === 'memory' ? 40 : 270), y: (agentVisual?.position.y ?? 120) + 250 });
+      const node: WorkflowNode = { id, category: 'ai', nodeKind: 'ai-attachment', attachmentType: option.type, attachmentSubtype: option.id, attachmentStatus: 'unconfigured', name: option.title, description: option.summary, service: option.service, operation: option.operation, purpose: 'Configure an n8n AI Agent dependency.', expectedResult: 'Attachment configuration is available to the AI Agent.', icon: `generic-ai`, estimatedExecution: 'Configuration attachment', inputs: [], outputs: [], credentials: [], configuration: { provider: option.id }, status: 'unconfigured', configurationCompleteness: 0, conditions: [], decisionRule: null, notes: '', bestPractices: [], potentialErrors: [], alternativeImplementations: [], performanceNotes: [], securityNotes: [], riskLevel: 'low' };
+      const connectionId = crypto.randomUUID();
+      const edge: WorkflowConnection = { id: connectionId, sourceNodeId: id, targetNodeId: agentId, connectionKind: kind, sourcePort: 'attachment', targetPort: kind, label: option.type === 'tool' ? 'Tool' : option.type === 'memory' ? 'Memory' : 'Chat Model', condition: null, routeType: 'default', branchLabel: null, style: 'default', mappings: [] };
+      added = true;
+      return { ...record(state), workflow: { ...state.workflow, nodes: [...state.workflow.nodes, node], connections: [...state.workflow.connections, edge] }, nodes: [...state.nodes.map((item) => ({ ...item, selected: false })), { id: `visual-${id}`, type: 'workflow', position, selected: true, data: nodeData(node, 'n8n') }], edges: [...state.edges.map((item) => ({ ...item, selected: false })), { id: `visual-${connectionId}`, source: `visual-${id}`, target: `visual-${agentId}`, type: 'smoothstep', data: { domainConnectionId: connectionId }, ...edgePresentation(edge) }], selectedNodeId: `visual-${id}`, selectedEdgeId: null };
+    });
+    return added ? id : null;
+  },
   deleteNode(id) { set((state) => { const visualId = id ?? state.selectedNodeId; const visual = state.nodes.find((node) => node.id === visualId); if (!visual) return state; const domainId = visual.data.domainNodeId; return { ...record(state), nodes: state.nodes.filter((node) => node.id !== visual.id), edges: state.edges.filter((edge) => edge.source !== visual.id && edge.target !== visual.id), workflow: { ...state.workflow, nodes: state.workflow.nodes.filter((node) => node.id !== domainId), connections: state.workflow.connections.filter((edge) => edge.sourceNodeId !== domainId && edge.targetNodeId !== domainId) }, selectedNodeId: null, selectedEdgeId: null }; }); },
   deleteEdge(id) { set((state) => { const visualId = id ?? state.selectedEdgeId; const edge = state.edges.find((item) => item.id === visualId); if (!edge) return state; const domainId = edge.data?.domainConnectionId; return { ...record(state), edges: state.edges.filter((item) => item.id !== visualId), workflow: { ...state.workflow, connections: state.workflow.connections.filter((item) => item.id !== domainId) }, selectedEdgeId: null }; }); },
   duplicateSelected() { const state = get(); const visual = state.nodes.find((node) => node.id === state.selectedNodeId); const domain = state.workflow.nodes.find((node) => node.id === visual?.data.domainNodeId); if (!visual || !domain) return; const id = crypto.randomUUID(); const copy = { ...structuredClone(domain), id, name: `${domain.name} copy` }; set({ ...record(state), workflow: { ...state.workflow, nodes: [...state.workflow.nodes, copy] }, nodes: [...state.nodes, { ...visual, id: `visual-${id}`, position: { x: visual.position.x + 40, y: visual.position.y + 40 }, selected: false, data: nodeData(copy, visual.data.platform) }], selectedNodeId: `visual-${id}` }); },
@@ -157,7 +183,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const graph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
     graph.setGraph({ rankdir: direction, ranksep: 110, nodesep: 80, edgesep: 35 });
     const includedVisualIds = new Set(state.nodes
-      .filter((node) => !domainNodeIds || domainNodeIds.has(node.data.domainNodeId))
+      .filter((node) => !isAiAttachmentNode(node.data.node) && (!domainNodeIds || domainNodeIds.has(node.data.domainNodeId)))
       .map((node) => node.id));
     state.nodes.filter((node) => includedVisualIds.has(node.id)).forEach((node) => graph.setNode(node.id, { width: 290, height: 184 }));
     state.edges.filter((edge) => includedVisualIds.has(edge.source) && includedVisualIds.has(edge.target)).forEach((edge) => graph.setEdge(edge.source, edge.target));

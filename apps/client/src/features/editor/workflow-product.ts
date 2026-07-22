@@ -1,4 +1,4 @@
-import { workflowIdsForResource, type CanonicalWorkflow, type PlatformBuildPlan, type WorkflowSet, type WorkflowNode } from '@awm/shared';
+import { isAiAttachmentNode, workflowIdsForResource, type CanonicalWorkflow, type PlatformBuildPlan, type WorkflowSet, type WorkflowNode } from '@awm/shared';
 
 export interface WorkflowSlice {
   id: string;
@@ -91,13 +91,14 @@ export function evaluateWorkflowReadiness(workflow: CanonicalWorkflow, plan: Pla
     if (/connected app|workflow|configure/i.test(`${recommendation.appName} ${recommendation.event}`)) items.push({ priority: 'high', label: `Choose a supported application and operation for ${recommendation.stepType}.`, nodeId: recommendation.sourceNodeId });
     if (recommendation.decisionsRequired.length) items.push(...recommendation.decisionsRequired.map((label) => ({ priority: 'medium' as const, label, nodeId: recommendation.sourceNodeId })));
   }
-  for (const node of workflow.nodes.filter((item) => item.status !== 'configured' || item.configurationCompleteness < 100)) {
+  for (const node of workflow.nodes.filter((item) => !isAiAttachmentNode(item) && (item.status !== 'configured' || item.configurationCompleteness < 100))) {
     if (!items.some((item) => item.nodeId === node.id)) items.push({ priority: 'low', label: `Complete configuration for ${node.name}.`, nodeId: node.id });
   }
   const hasClarification = workflow.clarificationQuestions.some((item) => item.required && !item.answer);
   const hasLimitation = plan.nodes.some((item) => item.limitations.length || /connected app|workflow|configure/i.test(`${item.appName} ${item.event}`));
-  const complete = workflow.nodes.length > 0 && workflow.nodes.every((node) => node.status === 'configured' && node.configurationCompleteness === 100);
+  const executionNodes = workflow.nodes.filter((node) => !isAiAttachmentNode(node));
+  const complete = executionNodes.length > 0 && executionNodes.every((node) => node.status === 'configured' && node.configurationCompleteness === 100);
   const status: ReadinessStatus = hasClarification ? 'Needs Clarification' : hasLimitation ? 'Platform Limited' : complete ? 'Build Ready' : 'Draft';
-  const completed = workflow.nodes.filter((node) => node.status === 'configured' && node.configurationCompleteness === 100).length;
-  return { status, completed, total: workflow.nodes.length, estimatedEffort: workflow.nodes.length > 12 || workflow.complexity === 'enterprise' ? 'High' : workflow.nodes.length > 6 || workflow.complexity === 'advanced' ? 'Medium' : 'Low', items };
+  const completed = executionNodes.filter((node) => node.status === 'configured' && node.configurationCompleteness === 100).length;
+  return { status, completed, total: executionNodes.length, estimatedEffort: executionNodes.length > 12 || workflow.complexity === 'enterprise' ? 'High' : executionNodes.length > 6 || workflow.complexity === 'advanced' ? 'Medium' : 'Low', items };
 }

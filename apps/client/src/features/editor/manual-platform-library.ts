@@ -39,7 +39,7 @@ export const manualPlatformLibraries: Record<Platform, ManualPlatformLibrary> = 
     items: [
       item('trigger', 'Trigger', 'trigger', 'n8n', 'Trigger'),
       item('webhook', 'Webhook', 'webhook', 'n8n', 'Webhook'),
-      item('action', 'Action', 'action'), item('ai', 'AI', 'ai'),
+      item('action', 'Action', 'action'), item('ai', 'AI Agent', 'ai', 'n8n', 'AI Agent', { n8nAiAgent: true }),
       item('condition', 'IF', 'condition', 'n8n', 'IF', { editorBranchControl: 'fixed-binary' }), item('router', 'Switch / Router', 'router', 'n8n', 'Switch', { editorBranchControl: 'dynamic' }),
       item('transform', 'Transform', 'transformation'), item('delay', 'Delay / Wait', 'delay'),
       item('loop', 'Loop', 'loop'), item('http', 'HTTP Request', 'api_request', 'HTTP', 'Request'),
