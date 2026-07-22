@@ -27,5 +27,13 @@ describe('ManualNodeLibrary', () => {
     fireEvent.dragStart(paths, { dataTransfer });
     expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-awm-library-item', 'paths');
   });
-});
 
+  it('keeps the final item reachable and contains wheel navigation inside the scrolling list', () => {
+    const canvasWheel = vi.fn();
+    const { container } = render(<div onWheel={canvasWheel}><ManualNodeLibrary library={manualLibraryFor('zapier')} onAdd={vi.fn()} /></div>);
+    const list = container.querySelector('.palette-list')!;
+    expect(list.lastElementChild).toHaveTextContent('Custom Node');
+    fireEvent.wheel(list, { deltaY: 120 });
+    expect(canvasWheel).not.toHaveBeenCalled();
+  });
+});

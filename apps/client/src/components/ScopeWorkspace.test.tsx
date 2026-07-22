@@ -26,6 +26,14 @@ describe('ScopeWorkspace', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 
+  it('opens an empty persisted project directly as a blank workflow', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: { provider: 'local', available: true, models: ['preview'], message: 'ready' }, error: null, meta: { requestId: 'test' } }) }));
+    const onOpenBuilder = vi.fn();
+    render(<ScopeWorkspace project={project} onBack={vi.fn()} onSaved={vi.fn()} onOpenBuilder={onOpenBuilder} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open blank workflow' }));
+    expect(onOpenBuilder).toHaveBeenCalledTimes(1);
+  });
+
   it('clears a stale analysis when the requirements change', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: { provider: 'local', available: true, models: ['preview'], message: 'ready' }, error: null, meta: { requestId: 'test' } }) }));
     const analyzedProject: Project = {

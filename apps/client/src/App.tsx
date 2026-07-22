@@ -255,7 +255,7 @@ export default function App() {
         onBack={() => setSelectedProject(null)}
         onSaved={saveProjectState}
         onOpenBuilder={
-          selectedProject.workflow.nodes.length
+          selectedProject.workflow.nodes.length || !selectedProject.originalScope.trim()
             ? () => setEditorProject(selectedProject)
             : undefined
         }
@@ -499,6 +499,15 @@ export default function App() {
                         )}
                       </time>
                     </div>
+                    {!showArchived && !project.workflow.nodes.length && !project.originalScope.trim() && (
+                      <button
+                        type="button"
+                        className="project-open-blank"
+                        onClick={() => setEditorProject(project)}
+                      >
+                        Open blank workflow
+                      </button>
+                    )}
                     {showArchived ? (
                       <button
                         type="button"

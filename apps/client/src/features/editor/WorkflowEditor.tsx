@@ -58,6 +58,7 @@ import {
 import { useEditorStore, type EditorEdge, type EditorNode } from "./editor-store";
 import { manualLibraryFor, type ManualLibraryItem } from "./manual-platform-library";
 import { ManualNodeLibrary } from "./ManualNodeLibrary";
+import { branchControlFor, branchNounFor, readEditorBranches } from "./editor-branches";
 import { isEditableEditorTarget } from "./editor-interactions";
 import { ThemeSelector } from "../../theme/ThemeSelector";
 import { useTheme, workflowCanvasThemeTokens } from "../../theme/theme";
@@ -85,6 +86,8 @@ export function WorkflowEditor({
   const { resolvedTheme } = useTheme();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(project.workflow.nodes.length === 0);
+  const [pendingExit, setPendingExit] = useState<'scope' | 'dashboard' | null>(null);
   const [error, setError] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [comparisonOpen, setComparisonOpen] = useState(false);
@@ -181,12 +184,16 @@ export function WorkflowEditor({
               ? "HTTP / Webhook"
               : "",
           ].filter(Boolean);
+          const configuredBranches = readEditorBranches(domain);
           const usedRouteHandles = activeWorkflow.connections
             .filter((connection) => connection.sourceNodeId === domain.id && connection.sourcePort.startsWith("route-"))
-            .map((connection) => connection.sourcePort);
-          const nextRoute = Math.max(0, ...usedRouteHandles.map((handle) => Number(handle.slice(6)) || 0)) + 1;
-          const routeHandles = ["router", "split"].includes(domain.category)
-            ? [...new Set([...usedRouteHandles, `route-${nextRoute}`])].sort((left, right) => (Number(left.slice(6)) || 0) - (Number(right.slice(6)) || 0))
+            .map((connection) => ({ id: connection.sourcePort, label: connection.label || `${branchNounFor(targetPlatform)} ${Number(connection.sourcePort.slice(6)) || 1}` }));
+          const routeHandles = branchControlFor(domain) === "dynamic"
+            ? (configuredBranches.length
+              ? configuredBranches.map(({ id, label }) => ({ id, label }))
+              : usedRouteHandles.length
+                ? [...new Map(usedRouteHandles.map((branch) => [branch.id, branch])).values()]
+                : [{ id: "route-1", label: `${branchNounFor(targetPlatform)} 1` }])
             : undefined;
           return {
             ...node,
@@ -215,6 +222,19 @@ export function WorkflowEditor({
     setWorkflowSetDraft(project.workflowSet);
     setLayoutDirection(direction);
   }, [project.id]);
+  useEffect(() => useEditorStore.subscribe((state, previous) => {
+    const positionsChanged = state.nodes.length !== previous.nodes.length || state.nodes.some((node) => {
+      const prior = previous.nodes.find((candidate) => candidate.id === node.id);
+      return !prior || prior.position.x !== node.position.x || prior.position.y !== node.position.y;
+    });
+    if (state.workflow !== previous.workflow || positionsChanged) setDirty(true);
+  }), [project.id]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [dirty]);
   useEffect(() => {
     if (!workflows.some((item) => item.id === selectedWorkflowId))
       setSelectedWorkflowId(workflows[0]?.id ?? "");
@@ -344,6 +364,7 @@ export function WorkflowEditor({
       );
       onSaved(updated);
       setSaved(true);
+      setDirty(false);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -407,10 +428,10 @@ export function WorkflowEditor({
     >
       <header className="editor-topbar sticky-global-header">
         <div className="editor-navigation">
-          <button className="back-button" onClick={onBack}>
+          <button className="back-button" onClick={() => dirty ? setPendingExit('scope') : onBack()}>
             <ArrowLeft size={17} /> Scope
           </button>
-          <button className="back-button" onClick={onHome}>
+          <button className="back-button" onClick={() => dirty ? setPendingExit('dashboard') : onHome()}>
             <LayoutDashboard size={16} /> Dashboard
           </button>
         </div>
@@ -492,6 +513,15 @@ export function WorkflowEditor({
           </button>
         </div>
       </header>
+      <ConfirmationDialog
+        open={Boolean(pendingExit)}
+        title="This workflow is not saved"
+        message="Save the workflow before leaving if you want to keep its nodes, connections, and layout. You can continue editing or leave without saving."
+        confirmLabel="Leave without saving"
+        cancelLabel="Continue editing"
+        onCancel={() => setPendingExit(null)}
+        onConfirm={() => { const destination = pendingExit; setPendingExit(null); if (destination === 'scope') onBack(); else if (destination === 'dashboard') onHome(); }}
+      />
       <WorkflowSelector
         workflows={workflows}
         value={activeSlice.id}

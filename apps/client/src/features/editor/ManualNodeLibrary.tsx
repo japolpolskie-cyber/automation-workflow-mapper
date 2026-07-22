@@ -4,7 +4,7 @@ import type { ManualLibraryItem, ManualPlatformLibrary } from './manual-platform
 export function ManualNodeLibrary({ library, onAdd }: { library: ManualPlatformLibrary; onAdd: (item: ManualLibraryItem) => void }) {
   return <aside className="node-palette">
     <div className="palette-brand"><Workflow size={18} /><div><strong>{library.title}</strong><span>Click or drag to add a {library.itemNoun}</span></div></div>
-    <div className="palette-list">
+    <div className="palette-list" onWheel={(event) => event.stopPropagation()}>
       {library.items.map((item) => <button
         key={item.id}
         type="button"

@@ -325,6 +325,39 @@ Workflow Mapping Rules
     );
   });
 
+  it("persists an incomplete manual workflow as a draft", async () => {
+    const app = await buildApp(testEnvironment);
+    apps.push(app);
+    const created = await app.inject({ method: "POST", url: "/api/workflows", payload: { name: "Manual draft", platform: "n8n" } });
+    const id = created.json().data.id as string;
+    const source = structuredClone(leadQualificationWorkflow);
+    const trigger = source.nodes.find((node) => node.category === "trigger")!;
+    const condition = source.nodes.find((node) => node.category === "condition")!;
+    const connection = {
+      ...source.connections[0]!,
+      id: crypto.randomUUID(),
+      sourceNodeId: trigger.id,
+      targetNodeId: condition.id,
+      sourcePort: "output",
+      targetPort: "input",
+      label: "SUCCESS",
+      branchLabel: "SUCCESS" as const,
+      style: "success" as const,
+      routeType: "success" as const,
+    };
+    const workflow = { ...source, nodes: [trigger, condition], connections: [connection], branches: [], status: undefined };
+    const visualGraph = projectWorkflowToVisualGraph(workflow);
+    const saved = await app.inject({
+      method: "PATCH",
+      url: `/api/workflows/${id}/editor`,
+      payload: { workflow, workflowSet: createDefaultWorkflowSet(workflow), visualGraph },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().data.workflow.nodes).toHaveLength(2);
+    expect(saved.json().data.workflow.connections).toHaveLength(1);
+    expect(saved.json().data.status).toBe("draft");
+  });
+
   it("returns 200 for an Ollama procedural graph repaired with canonical Start", async () => {
     const candidate = structuredClone(leadQualificationWorkflow);
     const trigger = candidate.nodes.find((node) => node.category === "trigger")!;

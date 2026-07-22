@@ -446,6 +446,22 @@ h1 em {
   border-color: var(--color-accent, #177b59);
   color: var(--color-accent, #177b59);
 }
+.project-open-blank {
+  position: relative;
+  z-index: 2;
+  align-self: flex-start;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle, #d9e1dc);
+  border-radius: 7px;
+  color: var(--green);
+  background: var(--surface-2, #f5f8f6);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.project-open-blank:hover,
+.project-open-blank:focus-visible { background: var(--surface-3, #edf4f0); }
+.scope-header-actions { display: flex; align-items: center; gap: 8px; }
 .project-archive:focus-visible {
   outline: 2px solid var(--color-focus, #2d9d72);
   outline-offset: 2px;
@@ -1344,6 +1360,9 @@ h1 em {
   background: #f8faf9;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 .palette-brand {
   padding: 5px 7px 16px;
@@ -1367,7 +1386,12 @@ h1 em {
 .palette-list {
   display: grid;
   gap: 4px;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+  scrollbar-gutter: stable;
 }
 .palette-list button {
   min-height: 37px;
@@ -1408,7 +1432,8 @@ h1 em {
   background: #637fd1;
 }
 .palette-tip {
-  margin-top: auto;
+  flex: 0 0 auto;
+  margin-top: 8px;
   padding: 11px;
   border-radius: 8px;
   color: #698074;
@@ -1416,6 +1441,42 @@ h1 em {
   display: flex;
   gap: 7px;
 }
+.branch-editor {
+  margin: 2px 0 16px;
+  padding: 11px;
+  border: 1px solid var(--border-subtle, #dde3df);
+  border-radius: 9px;
+  background: var(--surface-2, #f8faf9);
+}
+.branch-editor-heading,
+.branch-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.branch-editor-heading {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.branch-editor-heading div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.branch-editor-heading span,
+.branch-limit {
+  color: var(--text-muted, #87928b);
+  font-size: 9px;
+}
+.branch-editor-heading .button {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 9px;
+}
+.branch-editor-row + .branch-editor-row { margin-top: 6px; }
+.branch-editor-row input { min-width: 0; margin: 0; }
+.branch-editor-row .icon-button { flex: 0 0 28px; width: 28px; height: 28px; }
+.branch-limit { margin: 8px 0 0; }
 .palette-tip p {
   margin: 0;
   font-size: 8px;

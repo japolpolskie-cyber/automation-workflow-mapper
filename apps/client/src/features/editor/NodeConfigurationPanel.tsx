@@ -1,13 +1,20 @@
 import type { PlatformBuildPlan } from '@awm/shared';
-import { AlertTriangle, CheckCircle2, Copy, KeyRound, Sparkles, X } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Copy, KeyRound, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 import { useEditorStore } from './editor-store';
+import { branchControlFor, branchNounFor, MAX_DYNAMIC_BRANCHES, readEditorBranches } from './editor-branches';
 
 export function NodeConfigurationPanel({ plan }: { plan: PlatformBuildPlan | undefined }) {
-  const { nodes, workflow, selectedNodeId, selectNode, updateSelected, duplicateSelected } = useEditorStore();
+  const { nodes, workflow, selectedNodeId, selectNode, updateSelected, duplicateSelected, addSelectedBranch, renameSelectedBranch, moveSelectedBranch, removeSelectedBranch } = useEditorStore();
+  const [branchToRemove, setBranchToRemove] = useState<string | null>(null);
   const visual = nodes.find((item) => item.id === selectedNodeId);
   const node = workflow?.nodes.find((item) => item.id === visual?.data.domainNodeId);
   const recommendation = plan?.nodes.find((item) => item.sourceNodeId === node?.id);
   if (!node) return <aside className="node-config empty"><span>Select a node</span><p>Choose a workflow step to inspect its platform recommendation and configuration.</p></aside>;
+  const branches = readEditorBranches(node);
+  const dynamicBranches = branchControlFor(node) === 'dynamic';
+  const branchNoun = branchNounFor(visual?.data.platform ?? 'n8n');
   return <aside className="node-config"><header><div><span>{node.category.replace('_', ' ')}</span><h2>Node configuration</h2></div><button className="icon-button" aria-label="Close configuration" onClick={() => selectNode(null)}><X size={18} /></button></header>
     <div className="config-scroll">
       <section className="canonical-node-details"><div><span>Canonical architecture</span><strong>{node.service || 'Workflow'}</strong><small>{node.operation || node.category.replace('_', ' ')}</small></div><dl><div><dt>Purpose</dt><dd>{node.purpose || node.description || 'Define why this step is required.'}</dd></div><div><dt>Expected result</dt><dd>{node.expectedResult || 'Define the successful result for this step.'}</dd></div><div><dt>Suggested inputs</dt><dd>{node.inputs.length ? node.inputs.map((field) => field.label).join(', ') : 'Previous step data'}</dd></div><div><dt>Suggested outputs</dt><dd>{node.outputs.length ? node.outputs.map((field) => field.label).join(', ') : 'Step result'}</dd></div>{node.decisionRule && <div><dt>Decision rule</dt><dd>{node.decisionRule.decisionQuestion}<br />{node.decisionRule.field} {node.decisionRule.operator.replace('_', ' ')} {String(node.decisionRule.comparisonValue ?? '')}</dd></div>}</dl>{node.bestPractices.length > 0 && <div className="canonical-guidance"><strong>Best practices</strong>{node.bestPractices.map((item) => <p key={item}><CheckCircle2 size={11} />{item}</p>)}</div>}{node.potentialErrors.length > 0 && <div className="canonical-guidance errors"><strong>Potential errors</strong>{node.potentialErrors.map((item) => <p key={item}><AlertTriangle size={11} />{item}</p>)}</div>}{node.alternativeImplementations.length > 0 && <div className="canonical-guidance"><strong>Alternative implementations</strong>{node.alternativeImplementations.map((item) => <p key={item}>{item}</p>)}</div>}</section>
@@ -21,7 +28,9 @@ export function NodeConfigurationPanel({ plan }: { plan: PlatformBuildPlan | und
       <label>Credentials required<textarea value={node.credentials.join('\n')} onChange={(event) => updateSelected({ credentials: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} placeholder="One credential placeholder per line" /></label>
       <label>Notes<textarea value={node.notes} onChange={(event) => updateSelected({ notes: event.target.value })} /></label>
       <label>Retry attempts<input type="number" min="0" max="10" value={node.retryPolicy?.attempts ?? 0} onChange={(event) => updateSelected({ retryPolicy: { attempts: Number(event.target.value), backoff: node.retryPolicy?.backoff ?? 'fixed' } })} /></label>
+      {dynamicBranches && <section className="branch-editor" aria-label={`${branchNoun} outputs`}><div className="branch-editor-heading"><div><strong>{branchNoun} outputs</strong><span>{branches.length} of {MAX_DYNAMIC_BRANCHES}</span></div><button type="button" className="button secondary" onClick={addSelectedBranch} disabled={branches.length >= MAX_DYNAMIC_BRANCHES}><Plus size={14} /> Add {branchNoun}</button></div>{branches.map((branch, index) => <div className="branch-editor-row" key={branch.id}><input aria-label={`${branchNoun} ${index + 1} label`} value={branch.label} onChange={(event) => renameSelectedBranch(branch.id, event.target.value)} /><button type="button" className="icon-button" aria-label={`Move ${branch.label} up`} disabled={index === 0} onClick={() => moveSelectedBranch(branch.id, -1)}><ArrowUp size={14} /></button><button type="button" className="icon-button" aria-label={`Move ${branch.label} down`} disabled={index === branches.length - 1} onClick={() => moveSelectedBranch(branch.id, 1)}><ArrowDown size={14} /></button><button type="button" className="icon-button danger" aria-label={`Remove ${branch.label}`} disabled={branches.length <= 1} onClick={() => setBranchToRemove(branch.id)}><Trash2 size={14} /></button></div>)}{branches.length >= MAX_DYNAMIC_BRANCHES && <p className="branch-limit" role="status">Maximum of 20 branches reached.</p>}</section>}
       <button className="button secondary duplicate-button" onClick={duplicateSelected}><Copy size={15} /> Duplicate node</button>
     </div>
+    <ConfirmationDialog open={Boolean(branchToRemove)} title={`Remove ${branchNoun.toLowerCase()}?`} message={`This removes only this ${branchNoun.toLowerCase()} and its connected edge. Other branches and connections are preserved.`} confirmLabel={`Remove ${branchNoun.toLowerCase()}`} onCancel={() => setBranchToRemove(null)} onConfirm={() => { if (branchToRemove) removeSelectedBranch(branchToRemove); setBranchToRemove(null); }} />
   </aside>;
 }

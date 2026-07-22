@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createWorkflowSetFromGraph, leadQualificationWorkflow, projectWorkflowToVisualGraph, type Project } from '@awm/shared';
 import { useEditorStore } from './editor-store';
 import { manualLibraryFor } from './manual-platform-library';
+import { branchControlFor, MAX_DYNAMIC_BRANCHES, readEditorBranches } from './editor-branches';
 
 const blankProject = (platform: Project['platform'] = 'n8n'): Project => {
   const now = new Date().toISOString();
@@ -181,5 +182,87 @@ describe('editor workflow layout isolation', () => {
     targets.forEach((target, index) => useEditorStore.getState().connect({ source: router!.id, sourceHandle: `route-${index + 1}`, target: target.id, targetHandle: null }));
     expect(useEditorStore.getState().workflow.connections).toHaveLength(8);
     expect(useEditorStore.getState().edges.map((edge) => edge.sourceHandle)).toEqual(['route-1', 'route-2', 'route-3', 'route-4', 'route-5', 'route-6', 'route-7', 'route-8']);
+  });
+
+  it.each([
+    ['zapier', 'paths'],
+    ['make', 'router'],
+    ['n8n', 'router'],
+  ] as const)('%s dynamic routing can add multiple stable outputs', (platform, itemId) => {
+    useEditorStore.getState().initialize(blankProject(platform));
+    useEditorStore.getState().addNode(manualLibraryFor(platform).items.find((item) => item.id === itemId)!, undefined, platform);
+    const initial = readEditorBranches(useEditorStore.getState().workflow.nodes[0]!);
+    useEditorStore.getState().addSelectedBranch();
+    useEditorStore.getState().addSelectedBranch();
+    const branches = readEditorBranches(useEditorStore.getState().workflow.nodes[0]!);
+    expect(branches).toHaveLength(3);
+    expect(branches[0]!.id).toBe(initial[0]!.id);
+    expect(new Set(branches.map((branch) => branch.id)).size).toBe(3);
+  });
+
+  it('keeps n8n IF fixed to TRUE and FALSE rather than dynamic outputs', () => {
+    useEditorStore.getState().initialize(blankProject('n8n'));
+    useEditorStore.getState().addNode(manualLibraryFor('n8n').items.find((item) => item.id === 'condition')!, undefined, 'n8n');
+    const node = useEditorStore.getState().workflow.nodes[0]!;
+    expect(branchControlFor(node)).toBe('fixed-binary');
+    useEditorStore.getState().addSelectedBranch();
+    expect(readEditorBranches(useEditorStore.getState().workflow.nodes[0]!)).toHaveLength(0);
+  });
+
+  it('preserves existing edges when branches are added or reordered', () => {
+    useEditorStore.getState().initialize(blankProject('make'));
+    useEditorStore.getState().addNode(manualLibraryFor('make').items.find((item) => item.id === 'router')!, undefined, 'make');
+    useEditorStore.getState().addNode('action');
+    const [router, target] = useEditorStore.getState().nodes;
+    const firstBranch = readEditorBranches(useEditorStore.getState().workflow.nodes[0]!)[0]!;
+    useEditorStore.getState().selectNode(router!.id);
+    useEditorStore.getState().connect({ source: router!.id, sourceHandle: firstBranch.id, target: target!.id, targetHandle: null });
+    const connectionId = useEditorStore.getState().workflow.connections[0]!.id;
+    useEditorStore.getState().addSelectedBranch();
+    const secondBranch = readEditorBranches(useEditorStore.getState().workflow.nodes[0]!)[1]!;
+    useEditorStore.getState().moveSelectedBranch(secondBranch.id, -1);
+    expect(useEditorStore.getState().workflow.connections).toHaveLength(1);
+    expect(useEditorStore.getState().workflow.connections[0]).toMatchObject({ id: connectionId, sourcePort: firstBranch.id });
+  });
+
+  it('removes only the selected branch and its own edge', () => {
+    useEditorStore.getState().initialize(blankProject('zapier'));
+    useEditorStore.getState().addNode(manualLibraryFor('zapier').items.find((item) => item.id === 'paths')!, undefined, 'zapier');
+    useEditorStore.getState().addSelectedBranch();
+    useEditorStore.getState().addNode('action');
+    useEditorStore.getState().addNode('action');
+    const [paths, firstTarget, secondTarget] = useEditorStore.getState().nodes;
+    useEditorStore.getState().selectNode(paths!.id);
+    const [first, second] = readEditorBranches(useEditorStore.getState().workflow.nodes[0]!);
+    useEditorStore.getState().connect({ source: paths!.id, sourceHandle: first!.id, target: firstTarget!.id, targetHandle: null });
+    useEditorStore.getState().connect({ source: paths!.id, sourceHandle: second!.id, target: secondTarget!.id, targetHandle: null });
+    useEditorStore.getState().removeSelectedBranch(first!.id);
+    expect(readEditorBranches(useEditorStore.getState().workflow.nodes[0]!).map((branch) => branch.id)).toEqual([second!.id]);
+    expect(useEditorStore.getState().workflow.connections).toHaveLength(1);
+    expect(useEditorStore.getState().workflow.connections[0]!.sourcePort).toBe(second!.id);
+  });
+
+  it('enforces the centralized 20-branch limit', () => {
+    useEditorStore.getState().initialize(blankProject('n8n'));
+    useEditorStore.getState().addNode(manualLibraryFor('n8n').items.find((item) => item.id === 'router')!, undefined, 'n8n');
+    for (let index = 1; index < MAX_DYNAMIC_BRANCHES + 5; index += 1) useEditorStore.getState().addSelectedBranch();
+    expect(readEditorBranches(useEditorStore.getState().workflow.nodes[0]!)).toHaveLength(MAX_DYNAMIC_BRANCHES);
+  });
+
+  it('restores saved branch IDs, labels, order, and connections after reload', () => {
+    useEditorStore.getState().initialize(blankProject('make'));
+    useEditorStore.getState().addNode(manualLibraryFor('make').items.find((item) => item.id === 'router')!, undefined, 'make');
+    useEditorStore.getState().addSelectedBranch();
+    useEditorStore.getState().addNode('action');
+    const [router, target] = useEditorStore.getState().nodes;
+    useEditorStore.getState().selectNode(router!.id);
+    const branches = readEditorBranches(useEditorStore.getState().workflow.nodes[0]!);
+    useEditorStore.getState().renameSelectedBranch(branches[1]!.id, 'VIP customers');
+    useEditorStore.getState().connect({ source: router!.id, sourceHandle: branches[1]!.id, target: target!.id, targetHandle: null });
+    const state = useEditorStore.getState();
+    const saved: Project = { ...blankProject('make'), workflow: structuredClone(state.workflow), visualGraph: { nodes: state.nodes.map((node) => ({ id: node.id, type: 'workflow', position: node.position, data: { domainNodeId: node.data.domainNodeId } })), edges: [] } };
+    useEditorStore.getState().initialize(saved);
+    expect(readEditorBranches(useEditorStore.getState().workflow.nodes[0]!)[1]).toMatchObject({ id: branches[1]!.id, label: 'VIP customers', order: 1 });
+    expect(useEditorStore.getState().workflow.connections[0]).toMatchObject({ sourcePort: branches[1]!.id, label: 'VIP customers' });
   });
 });

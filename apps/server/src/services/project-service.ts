@@ -1,6 +1,17 @@
 import { applyVisualTopology, createProjectSchema, saveWorkflowEditorSchema, updateProjectScopeSchema, validateWorkflowGraph, type CreateProjectInput, type Project } from '@awm/shared';
 import type { ProjectRepository } from '../repositories/project-repository.js';
 
+const unsafeEditorGraphIssueCodes = new Set([
+  'DUPLICATE_NODE_ID',
+  'DUPLICATE_CONNECTION_ID',
+  'MISSING_SOURCE_NODE',
+  'MISSING_TARGET_NODE',
+  'SELF_CONNECTION',
+  'MISSING_BRANCH_SOURCE',
+  'MISSING_BRANCH_DESTINATION',
+  'INVALID_CYCLE',
+]);
+
 export class ProjectService {
   public constructor(private readonly repository: ProjectRepository) {}
   public listProjects(): Project[] { return this.repository.list(); }
@@ -15,7 +26,8 @@ export class ProjectService {
     const visibleNodeIds = new Set(parsed.visualGraph.nodes.map((node) => node.data.domainNodeId));
     const workflow = applyVisualTopology({ ...parsed.workflow, nodes: parsed.workflow.nodes.filter((node) => visibleNodeIds.has(node.id)) }, parsed.visualGraph);
     const validation = validateWorkflowGraph(workflow);
-    if (!validation.valid) throw new Error(`Workflow editor graph is invalid: ${validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ')}`);
+    const unsafeIssues = validation.issues.filter((issue) => issue.severity === 'error' && unsafeEditorGraphIssueCodes.has(issue.code));
+    if (unsafeIssues.length) throw new Error(`Workflow editor graph is structurally invalid: ${unsafeIssues.map((issue) => issue.message).join('; ')}`);
     return this.repository.updateEditor(id, workflow, parsed.workflowSet, parsed.visualGraph);
   }
 }

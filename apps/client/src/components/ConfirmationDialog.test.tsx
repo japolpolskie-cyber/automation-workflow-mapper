@@ -14,4 +14,10 @@ describe('ConfirmationDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete node' }));
     expect(onConfirm).toHaveBeenCalledOnce();
   });
+
+  it('supports workflow-specific leave choices', () => {
+    render(<ConfirmationDialog open title="This workflow is not saved" message="Save before leaving." confirmLabel="Leave without saving" cancelLabel="Continue editing" onCancel={vi.fn()} onConfirm={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Continue editing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Leave without saving' })).toBeInTheDocument();
+  });
 });
