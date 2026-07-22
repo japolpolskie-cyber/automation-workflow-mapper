@@ -10,13 +10,14 @@ import { PlannerShadowService } from '../planner/planner-shadow-service.js';
 import { UnifiedPlannerRuntime, type PlannerRuntime, type PlannerRuntimeResult } from '../planner/planner-runtime-service.js';
 import { countExplicitWorkflowSteps } from '../ai/prompts/workflow-analysis.js';
 import { V2PromotionService } from '../planner/v2-promotion-service.js';
+import type { HybridRAGPlannerRollout } from '../hybrid-rag/hybrid-rag-planner-rollout.js';
 
 export class AnalysisError extends Error {
   public constructor(public readonly code: string, message: string, public readonly statusCode = 422) { super(message); this.name = 'AnalysisError'; }
 }
 
 export class AnalysisService {
-  public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null), private readonly promotion = new V2PromotionService({ mode: 'disabled', allowPassWithWarnings: false })) {}
+  public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null), private readonly promotion = new V2PromotionService({ mode: 'disabled', allowPassWithWarnings: false }), private readonly hybridRAGRollout: HybridRAGPlannerRollout | null = null) {}
   public getProviderStatus() { return this.provider.getStatus(); }
   public async analyze(projectId: string, workflowMode: 'auto' | 'single' = 'auto', requestCorrelationId: string | null = null): Promise<WorkflowAnalysisResult> {
     return this.pipeline.run(() => this.analyzeCurrent(projectId, workflowMode, requestCorrelationId));
@@ -123,7 +124,11 @@ export class AnalysisService {
         // Compare and guarded modes retain the already validated provider candidate.
       }
     } else if (detectedProcess && this.plannerRuntime && this.promotion.mode === 'disabled') {
-      plannerResult = await this.plannerRuntime.execute(this.provider, project.originalScope, project.platform, detectedProcess, parsed.data);
+      if (this.hybridRAGRollout) {
+        plannerResult = (await this.hybridRAGRollout.execute(this.plannerRuntime, this.provider, project.originalScope, project.platform, detectedProcess, parsed.data)).result;
+      } else {
+        plannerResult = await this.plannerRuntime.execute(this.provider, project.originalScope, project.platform, detectedProcess, parsed.data);
+      }
     }
     const plannerShadow = plannerResult.plannerShadow;
     const v21Analysis = plannerResult.v21Analysis;

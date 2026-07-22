@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { distributedPlannerPlatformSchema } from './distributed-planner.js';
 import { symbolTableSchema } from './controlled-vocabulary.js';
 import { plannerDataShapeSchema, plannerEdgeRoleSchema, plannerSemanticRoleSchema, semanticRoleSlotSchema } from './semantic-role.js';
+import { plannerRetrievalContextSchema } from './planner.js';
 
 export const p36ContractVersion = '3.6.0' as const;
 export const p37SkeletonContractVersion = '3.7.0' as const;
@@ -37,6 +38,7 @@ export const p36BusinessIntentInputSchema = z.object({
   facts: z.array(compactFactSchema),
   clarifications: z.array(compactClarificationSchema),
   patterns: z.array(compactPatternSchema),
+  retrievalContext: plannerRetrievalContextSchema.optional(),
 }).strict();
 
 export const p36BusinessIntentOutputSchema = z.object({

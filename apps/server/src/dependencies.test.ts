@@ -4,6 +4,7 @@ import {
   createApplicationDependencies,
   registerApplicationDependencies,
 } from "./dependencies.js";
+import type { HybridRAGProvider } from "./hybrid-rag/hybrid-rag-service.js";
 
 describe("application dependency registration", () => {
   it("registers an initialized Hybrid RAG service without invoking retrieval", async () => {
@@ -37,5 +38,22 @@ describe("application dependency registration", () => {
       supportedRetrievalStrategies: ["keyword", "vector", "hybrid"],
     });
     await app.close();
+  });
+
+  it("keeps application dependencies available when Hybrid RAG initialization fails", async () => {
+    const failedProvider: HybridRAGProvider = {
+      name: "failed",
+      initialize: async () => { throw new Error("initialization failed"); },
+      retrieve: async () => ({ chunks: [], scores: [] }),
+      health: async () => ({
+        initialized: false, ready: false, indexedDocumentCount: 0, indexedChunkCount: 0,
+        platformCounts: { n8n: 0, make: 0, zapier: 0 }, embeddingProvider: null,
+        embeddingReady: false, vectorDimensions: null, indexedVectorCount: 0,
+        vectorIndexHealthy: false, lastIndexBuildStatus: "failed",
+        supportedRetrievalStrategies: ["keyword", "vector", "hybrid"],
+      }),
+    };
+    const dependencies = await createApplicationDependencies({ HYBRID_RAG_MODE: "enabled" }, failedProvider);
+    await expect(dependencies.hybridRAGService.health()).resolves.toMatchObject({ ready: false, provider: "failed" });
   });
 });

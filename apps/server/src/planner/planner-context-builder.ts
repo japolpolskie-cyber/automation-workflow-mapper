@@ -1,5 +1,5 @@
 import { applicationPacks, platformCapabilities, ruleManuals, workflowPatterns } from '@awm/knowledge';
-import { applicationRegistry, plannerContextSchema, type DetectedProcessSummary, type PlannerContext, type Platform } from '@awm/shared';
+import { applicationRegistry, plannerContextSchema, type DetectedProcessSummary, type PlannerContext, type PlannerRetrievalContext, type Platform } from '@awm/shared';
 
 const constraints = [
   'Use only operations listed in supportedOperations.',
@@ -11,7 +11,7 @@ const constraints = [
 ];
 
 export class PlannerContextBuilder {
-  public build(objective: string, platform: Platform, analysis: DetectedProcessSummary): PlannerContext {
+  public build(objective: string, platform: Platform, analysis: DetectedProcessSummary, retrievalContext?: PlannerRetrievalContext): PlannerContext {
     const planningFacts = analysis.facts.filter((item) => item.kind !== 'uncertainty' && item.kind !== 'pattern').map((item) => ({ id: item.id, kind: item.kind, value: item.value, explanation: item.explanation, entityId: item.subject?.entityId ?? null, evidenceIds: item.evidence.map((evidence) => evidence.id) }));
     const evidenceById = new Map(analysis.facts.flatMap((fact) => fact.evidence).map((item) => [item.id, item]));
     const evidence = [...evidenceById.values()].map((item) => ({ id: item.id, evidenceType: item.evidenceType, ruleId: item.ruleId, ruleVersion: item.ruleVersion, text: item.evidenceText, explanation: item.explanation, sourceStart: item.sourceLocation.start, sourceEnd: item.sourceLocation.end }));
@@ -26,7 +26,7 @@ export class PlannerContextBuilder {
     for (const operation of operations) functionIds.add(operation.canonicalFunctionId);
     const capabilities = platformCapabilities.filter((capability) => capability.platform === platform && functionIds.has(capability.canonicalFunctionId)).map((capability) => ({ kind: 'capability' as const, id: capability.id, title: capability.implementation, purpose: `Platform implementation for ${capability.canonicalFunctionId}.`, canonicalFunctionId: capability.canonicalFunctionId, applicationId: null, operationId: null, support: capability.support, requiredInputs: [], outputs: [], limitations: capability.limitation ? [capability.limitation] : [], alternatives: capability.alternative ? [capability.alternative] : [] }));
     const allowedCanonicalFunctions = [...new Set(['trigger', 'action', 'end', ...capabilities.map((item) => item.canonicalFunctionId).filter(Boolean), ...knowledge.map((item) => item.canonicalFunctionId).filter(Boolean)])];
-    return plannerContextSchema.parse({ version: '1.0', objective, platform, facts: planningFacts, evidence, clarifications, patterns, knowledge: [...applications, ...manuals, ...knowledge], capabilities, allowedApplications: applications.map((item) => item.id), allowedCanonicalFunctions, supportedOperations: knowledge.filter((operation) => operation.support !== 'unsupported').map((operation) => operation.id), constraints });
+    return plannerContextSchema.parse({ version: '1.0', objective, platform, facts: planningFacts, evidence, clarifications, patterns, knowledge: [...applications, ...manuals, ...knowledge], capabilities, allowedApplications: applications.map((item) => item.id), allowedCanonicalFunctions, supportedOperations: knowledge.filter((operation) => operation.support !== 'unsupported').map((operation) => operation.id), constraints, ...(retrievalContext ? { retrievalContext } : {}) });
   }
 
   private selectOperations(objective: string, analysis: DetectedProcessSummary, retrievedIds: Set<string>) {

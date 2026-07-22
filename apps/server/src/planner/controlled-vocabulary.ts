@@ -121,6 +121,7 @@ export function buildP36IntentInput(runId: string, rawScope: string, context: Pl
         requiredSignals: item.requiredInputs,
         canonicalFunctionSymbols: item.outputs.filter((id) => context.allowedCanonicalFunctions.includes(id)).map((id) => table.symbol('canonical-function', id)),
       })),
+      ...(context.retrievalContext ? { retrievalContext: context.retrievalContext } : {}),
     }),
   };
 }

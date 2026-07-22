@@ -41,6 +41,8 @@ import {
   createApplicationDependencies,
   registerApplicationDependencies,
 } from "./dependencies.js";
+import { PlannerRAGIntegration } from "./hybrid-rag/planner-rag-integration.js";
+import { HybridRAGPlannerRollout } from "./hybrid-rag/hybrid-rag-planner-rollout.js";
 
 export async function buildApp(environment: Environment) {
   const app = Fastify({
@@ -51,10 +53,8 @@ export async function buildApp(environment: Environment) {
     genReqId: () => crypto.randomUUID(),
     bodyLimit: 1_048_576,
   });
-  registerApplicationDependencies(
-    app,
-    await createApplicationDependencies(environment),
-  );
+  const dependencies = await createApplicationDependencies(environment);
+  registerApplicationDependencies(app, dependencies);
   await app.register(helmet);
   await app.register(cors, {
     origin: environment.CLIENT_ORIGIN,
@@ -169,8 +169,23 @@ export async function buildApp(environment: Environment) {
           distributedRuntime,
           deterministicRuntime,
         ),
-        promotion,
-      ),
+          promotion,
+          new HybridRAGPlannerRollout(
+            environment.HYBRID_RAG_MODE,
+            new PlannerRAGIntegration(
+              environment.HYBRID_RAG_MODE,
+              dependencies.hybridRAGService,
+              {
+                timeoutMs: environment.HYBRID_RAG_RETRIEVAL_TIMEOUT_MS,
+                maximumResults: environment.HYBRID_RAG_MAX_RESULTS,
+                maximumChunkCharacters: environment.HYBRID_RAG_MAX_CHUNK_CHARS,
+                maximumContextCharacters: environment.HYBRID_RAG_MAX_CONTEXT_CHARS,
+              },
+              (reason) => app.log.warn({ reason }, "Hybrid RAG retrieval fell back to the existing Planner V2 context"),
+            ),
+            (diagnostics) => app.log.info({ hybridRAG: diagnostics }, "Hybrid RAG planner rollout"),
+          ),
+        ),
     ),
     { prefix: "/api" },
   );

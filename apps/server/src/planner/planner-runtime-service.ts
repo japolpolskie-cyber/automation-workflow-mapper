@@ -5,6 +5,7 @@ import {
   type PlannerFailureCategory,
   type PlannerShadowComparison,
   type Platform,
+  type PlannerRetrievalContext,
   type V21AnalysisArtifacts,
   type V22ConceptualGraphResult,
   type PlatformTranslationResult,
@@ -42,7 +43,7 @@ export interface PlannerRuntimeResult {
 export interface PlannerRuntime {
   readonly mode: PlannerRuntimeMode;
   buildV2Artifacts(objective: string, platform: Platform, analysis: DetectedProcessSummary): PlannerRuntimeResult;
-  execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult>;
+  execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal, retrievalContext?: PlannerRetrievalContext): Promise<PlannerRuntimeResult>;
 }
 
 export function selectPlannerRuntimeMode(environment: Pick<Environment, 'PLANNER_RUNTIME_MODE' | 'K4_PLANNER_SHADOW' | 'P2_DISTRIBUTED_PLANNER' | 'P3_DISTRIBUTED_PLANNER'>): PlannerRuntimeMode {
@@ -101,17 +102,17 @@ export class UnifiedPlannerRuntime implements PlannerRuntime {
     return { v21Analysis, v22ConceptualGraph, ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), v24GraphCritique, v24GraphRepair, v25AcceptanceMatrix };
   }
 
-  public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerRuntimeResult> {
+  public async execute(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal, retrievalContext?: PlannerRetrievalContext): Promise<PlannerRuntimeResult> {
     if (this.mode === 'production') return {};
     const artifacts = this.buildV2Artifacts(objective, platform, analysis);
     if (this.mode === 'mock') return { plannerShadow: emptyComparison('completed', null, 0, null), ...artifacts };
     if (this.mode === 'shadow') {
       if (!this.shadowRuntime) return artifacts;
-      return { plannerShadow: await this.shadowRuntime.compare(provider, objective, platform, analysis, productionWorkflow, signal), ...artifacts };
+      return { plannerShadow: await this.shadowRuntime.compare(provider, objective, platform, analysis, productionWorkflow, signal, retrievalContext), ...artifacts };
     }
     if (this.deterministicRuntime) {
       const started = performance.now();
-      const result = await this.deterministicRuntime.run(objective, platform, analysis, productionWorkflow, signal);
+      const result = await this.deterministicRuntime.run(objective, platform, analysis, productionWorkflow, signal, retrievalContext);
       const failed = result.status === 'failed' || result.status === 'cancelled';
       const comparison = emptyComparison(failed ? 'failed' : 'completed', failed ? result.error : null, Number((performance.now() - started).toFixed(2)), failed ? 'validation_failure' : null);
       comparison.groundedPlan = result.plan;

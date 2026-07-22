@@ -1,4 +1,4 @@
-import { plannerShadowComparisonSchema, structuredWorkflowPlanSchema, type CanonicalWorkflow, type DetectedProcessSummary, type PlannerShadowComparison, type Platform, type StructuredWorkflowPlan } from '@awm/shared';
+import { plannerShadowComparisonSchema, structuredWorkflowPlanSchema, type CanonicalWorkflow, type DetectedProcessSummary, type PlannerRetrievalContext, type PlannerShadowComparison, type Platform, type StructuredWorkflowPlan } from '@awm/shared';
 import { parseJsonWithRepair } from '../ai/repair/json-repair.js';
 import type { AnalysisProvider, GroundedPlannerResponse } from '../ai/providers/analysis-provider.js';
 import { PlannerContextBuilder } from './planner-context-builder.js';
@@ -16,13 +16,13 @@ export class PlannerShadowService {
     private readonly cache = new PlannerContextCache(),
   ) { this.options = { ...defaultPlannerRuntimeOptions, ...options }; }
 
-  public async compare(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, current: CanonicalWorkflow, signal?: AbortSignal): Promise<PlannerShadowComparison> {
+  public async compare(provider: AnalysisProvider, objective: string, platform: Platform, analysis: DetectedProcessSummary, current: CanonicalWorkflow, signal?: AbortSignal, retrievalContext?: PlannerRetrievalContext): Promise<PlannerShadowComparison> {
     const started = performance.now();
     const cacheKey = this.cache.key(objective, platform);
-    let context = this.cache.get(cacheKey);
+    let context = retrievalContext ? undefined : this.cache.get(cacheKey);
     const cacheHit = Boolean(context);
-    context ??= this.contextBuilder.build(objective, platform, analysis);
-    if (!cacheHit) this.cache.set(cacheKey, context);
+    context ??= this.contextBuilder.build(objective, platform, analysis, retrievalContext);
+    if (!cacheHit && !retrievalContext) this.cache.set(cacheKey, context);
     const prompt = this.promptBuilder.build(context);
     const base = {
       oldNodeCount: current.nodes.length,

@@ -4,6 +4,7 @@ import {
   type DetectedProcessSummary,
   type P3BusinessIntentOutput,
   type Platform,
+  type PlannerRetrievalContext,
   type StageCGroundingReport,
   type StageDGroundingReport,
   type StructuredWorkflowPlan,
@@ -40,10 +41,10 @@ export class P4DeterministicPlannerService {
     private readonly edgeGroundingService: StageDGroundingService | null = null,
   ) {}
 
-  public async run(objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal): Promise<P4PlannerResult> {
+  public async run(objective: string, platform: Platform, analysis: DetectedProcessSummary, productionWorkflow: CanonicalWorkflow, signal?: AbortSignal, retrievalContext?: PlannerRetrievalContext): Promise<P4PlannerResult> {
     const started = performance.now();
     const productionSnapshot = JSON.stringify(productionWorkflow);
-    const context = this.contextBuilder.build(objective, platform, analysis);
+    const context = this.contextBuilder.build(objective, platform, analysis, retrievalContext);
     const { input, table } = buildP36IntentInput('p4-shadow', objective, context, analysis.knowledgeContext.catalogVersion);
     const runner = this.runnerFactory.create('business-intent', p36BusinessIntentOutputSchema, 60_000);
     let intent: P3BusinessIntentOutput | null = null;

@@ -5,7 +5,16 @@ export const plannerEvidenceSchema = z.object({ id: z.string().min(1), evidenceT
 export const plannerFactSchema = z.object({ id: z.string().min(1), kind: z.enum(['application', 'entity', 'business_verb', 'decision', 'route', 'repetition', 'cardinality', 'workflow_function']), value: z.string().min(1), explanation: z.string().min(1), entityId: z.string().nullable(), evidenceIds: z.array(z.string().min(1)) }).strict();
 export const plannerClarificationSchema = z.object({ id: z.string().min(1), category: z.string().min(1), question: z.string().min(1), reason: z.string().min(1), missingFact: z.string().min(1), evidenceIds: z.array(z.string().min(1)) }).strict();
 export const plannerKnowledgeEntrySchema = z.object({ kind: z.enum(['application', 'manual', 'operation', 'pattern', 'capability']), id: z.string().min(1), title: z.string().min(1), purpose: z.string().min(1), canonicalFunctionId: z.string().nullable(), applicationId: z.string().nullable(), operationId: z.string().nullable(), support: z.enum(['native', 'workaround', 'unsupported', 'unknown']).nullable(), requiredInputs: z.array(z.string()), outputs: z.array(z.string()), limitations: z.array(z.string()), alternatives: z.array(z.string()) }).strict();
-export const plannerContextSchema = z.object({ version: z.literal('1.0'), objective: z.string().min(1), platform: plannerPlatformSchema, facts: z.array(plannerFactSchema), evidence: z.array(plannerEvidenceSchema), clarifications: z.array(plannerClarificationSchema), patterns: z.array(plannerKnowledgeEntrySchema), knowledge: z.array(plannerKnowledgeEntrySchema), capabilities: z.array(plannerKnowledgeEntrySchema), allowedApplications: z.array(z.string().min(1)), allowedCanonicalFunctions: z.array(z.string().min(1)), supportedOperations: z.array(z.string()), constraints: z.array(z.string().min(1)) }).strict();
+export const plannerRetrievalContextSchema = z.object({
+  strategy: z.enum(['keyword', 'vector', 'hybrid']),
+  provider: z.string().min(1),
+  items: z.array(z.object({
+    chunkId: z.string().min(1), documentId: z.string().min(1), platform: plannerPlatformSchema,
+    title: z.string().min(1), content: z.string().min(1), score: z.number().finite(),
+    sourceId: z.string().min(1), sourceVersion: z.string().min(1),
+  }).strict()),
+}).strict();
+export const plannerContextSchema = z.object({ version: z.literal('1.0'), objective: z.string().min(1), platform: plannerPlatformSchema, facts: z.array(plannerFactSchema), evidence: z.array(plannerEvidenceSchema), clarifications: z.array(plannerClarificationSchema), patterns: z.array(plannerKnowledgeEntrySchema), knowledge: z.array(plannerKnowledgeEntrySchema), capabilities: z.array(plannerKnowledgeEntrySchema), allowedApplications: z.array(z.string().min(1)), allowedCanonicalFunctions: z.array(z.string().min(1)), supportedOperations: z.array(z.string()), constraints: z.array(z.string().min(1)), retrievalContext: plannerRetrievalContextSchema.optional() }).strict();
 
 export const plannerNodeSchema = z.object({
   id: z.string().min(1),
@@ -97,6 +106,7 @@ export const plannerShadowComparisonSchema = z.object({
 }).strict();
 
 export type PlannerContext = z.infer<typeof plannerContextSchema>;
+export type PlannerRetrievalContext = z.infer<typeof plannerRetrievalContextSchema>;
 export type StructuredWorkflowPlan = z.infer<typeof structuredWorkflowPlanSchema>;
 export type PlannerShadowComparison = z.infer<typeof plannerShadowComparisonSchema>;
 export type PlannerFailureCategory = z.infer<typeof plannerFailureCategorySchema>;

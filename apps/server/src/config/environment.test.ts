@@ -8,6 +8,12 @@ describe('AI environment validation', () => {
       expect(loadEnvironment({ HYBRID_RAG_MODE: mode }).HYBRID_RAG_MODE).toBe(mode);
     }
     expect(() => loadEnvironment({ HYBRID_RAG_MODE: 'invalid' })).toThrow(/HYBRID_RAG_MODE/);
+    expect(loadEnvironment({})).toMatchObject({
+      HYBRID_RAG_RETRIEVAL_TIMEOUT_MS: 1_500,
+      HYBRID_RAG_MAX_RESULTS: 6,
+      HYBRID_RAG_MAX_CHUNK_CHARS: 800,
+      HYBRID_RAG_MAX_CONTEXT_CHARS: 4_000,
+    });
   });
   it('allows local analysis without a key', () => { expect(loadEnvironment({ AI_PROVIDER: 'local' }).AI_PROVIDER).toBe('local'); });
   it('requires a server key for OpenAI mode', () => { expect(() => loadEnvironment({ AI_PROVIDER: 'openai' })).toThrow(/OPENAI_API_KEY/); });

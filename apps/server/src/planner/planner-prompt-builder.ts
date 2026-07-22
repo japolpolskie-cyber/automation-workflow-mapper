@@ -49,6 +49,7 @@ export class PlannerPromptBuilder {
       section('Clarifications', context.clarifications.map((item) => ({ id: item.id, missing: item.missingFact, question: item.question, evidence: item.evidenceIds }))),
       section('Detected Patterns', context.patterns.map((item) => ({ id: item.id, sequence: item.outputs, requiredSignals: item.requiredInputs, stopOrClarify: item.limitations }))),
       section('Retrieved Knowledge', compactKnowledge(context.knowledge)),
+      ...(context.retrievalContext ? [section('Hybrid Retrieval Context', context.retrievalContext)] : []),
       section('Allowed Operations', {
         applications: context.allowedApplications,
         functions: context.allowedCanonicalFunctions,
