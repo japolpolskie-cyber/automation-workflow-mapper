@@ -37,6 +37,10 @@ import { CustomTemplateRepository } from "./repositories/custom-template-reposit
 import { CustomTemplateService } from "./services/custom-template-service.js";
 import { customTemplateRoutes } from "./routes/custom-templates.js";
 import { V2PromotionService } from "./planner/v2-promotion-service.js";
+import {
+  createApplicationDependencies,
+  registerApplicationDependencies,
+} from "./dependencies.js";
 
 export async function buildApp(environment: Environment) {
   const app = Fastify({
@@ -47,6 +51,10 @@ export async function buildApp(environment: Environment) {
     genReqId: () => crypto.randomUUID(),
     bodyLimit: 1_048_576,
   });
+  registerApplicationDependencies(
+    app,
+    await createApplicationDependencies(environment),
+  );
   await app.register(helmet);
   await app.register(cors, {
     origin: environment.CLIENT_ORIGIN,

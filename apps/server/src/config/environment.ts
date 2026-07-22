@@ -18,6 +18,7 @@ const environmentSchema = z.object({
   ,PLANNER_RUNTIME_MODE: z.enum(['production', 'shadow', 'distributed', 'mock']).optional()
   ,PLANNER_V2_PROMOTION_MODE: z.enum(['disabled', 'compare', 'guarded', 'enabled']).default('disabled')
   ,PLANNER_V2_ALLOW_PASS_WITH_WARNINGS: z.enum(['true', 'false']).default('false').transform((value) => value === 'true')
+  ,HYBRID_RAG_MODE: z.enum(['off', 'compare', 'guarded', 'enabled']).default('off')
   ,K4_PLANNER_SHADOW: z.enum(['true', 'false']).default('true').transform((value) => value === 'true')
   ,K4_PLANNER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(900_000).default(180_000)
   ,K4_PLANNER_MAX_OUTPUT_CHARS: z.coerce.number().int().min(1_000).max(2_000_000).default(120_000)

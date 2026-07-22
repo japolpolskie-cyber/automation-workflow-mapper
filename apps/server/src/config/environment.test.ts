@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { loadEnvironment } from './environment.js';
 
 describe('AI environment validation', () => {
+  it('keeps Hybrid RAG off by default and accepts only reserved modes', () => {
+    expect(loadEnvironment({}).HYBRID_RAG_MODE).toBe('off');
+    for (const mode of ['compare', 'guarded', 'enabled'] as const) {
+      expect(loadEnvironment({ HYBRID_RAG_MODE: mode }).HYBRID_RAG_MODE).toBe(mode);
+    }
+    expect(() => loadEnvironment({ HYBRID_RAG_MODE: 'invalid' })).toThrow(/HYBRID_RAG_MODE/);
+  });
   it('allows local analysis without a key', () => { expect(loadEnvironment({ AI_PROVIDER: 'local' }).AI_PROVIDER).toBe('local'); });
   it('requires a server key for OpenAI mode', () => { expect(() => loadEnvironment({ AI_PROVIDER: 'openai' })).toThrow(/OPENAI_API_KEY/); });
   it('can remove K4 shadow planning without disabling K3 analysis', () => { const environment = loadEnvironment({ K3_SCOPE_INTELLIGENCE: 'true', K4_PLANNER_SHADOW: 'false' }); expect(environment.K3_SCOPE_INTELLIGENCE).toBe(true); expect(environment.K4_PLANNER_SHADOW).toBe(false); });
