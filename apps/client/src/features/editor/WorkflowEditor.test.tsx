@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '@awm/shared';
 import { WorkflowEditor } from './WorkflowEditor';
+
+const { updateEditor } = vi.hoisted(() => ({ updateEditor: vi.fn() }));
+vi.mock('../../api/projects', () => ({
+  projectApi: { updateEditor },
+  customTemplateApi: {},
+}));
 
 const now = new Date().toISOString();
 const project: Project = {
@@ -17,10 +23,27 @@ beforeAll(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 
+beforeEach(() => {
+  updateEditor.mockReset();
+  updateEditor.mockResolvedValue(project);
+});
+
+afterEach(cleanup);
+
 describe('WorkflowEditor startup', () => {
   it('opens a blank builder before the editor store initialization effect runs', () => {
     render(<WorkflowEditor project={project} onBack={vi.fn()} onHome={vi.fn()} onSaved={vi.fn()} onTemplateSaved={vi.fn()} />);
     expect(screen.getByRole('button', { name: /Save workflow/i })).toBeInTheDocument();
     expect(screen.getByText('Build your workflow from scratch')).toBeInTheDocument();
+  });
+
+  it('saves a blank workflow when the editor store has not initialized yet', async () => {
+    render(<WorkflowEditor project={project} onBack={vi.fn()} onHome={vi.fn()} onSaved={vi.fn()} onTemplateSaved={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save workflow' }));
+
+    await waitFor(() => expect(updateEditor).toHaveBeenCalledOnce());
+    expect(updateEditor.mock.calls[0]?.[1]).toEqual(project.workflow);
+    expect(screen.queryByText(/Cannot read properties of null/)).not.toBeInTheDocument();
   });
 });

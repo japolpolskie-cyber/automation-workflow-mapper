@@ -328,6 +328,7 @@ export function WorkflowEditor({
     setSaving(true);
     setError("");
     try {
+      const workflowToSave = store.workflow ?? currentWorkflow;
       const visualGraph = {
         nodes: store.nodes.map((node) => ({
           id: node.id,
@@ -342,7 +343,7 @@ export function WorkflowEditor({
         })),
       };
       const normalizedSet = normalizeWorkflowSet(
-        store.workflow,
+        workflowToSave,
         effectiveWorkflowSet,
         activeSlice.id,
       );
@@ -376,7 +377,7 @@ export function WorkflowEditor({
       };
       const updated = await projectApi.updateEditor(
         project.id,
-        store.workflow,
+        workflowToSave,
         persistedSet,
         visualGraph,
       );
