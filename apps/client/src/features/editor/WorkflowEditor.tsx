@@ -5,6 +5,8 @@ import {
   MiniMap,
   Panel,
   ReactFlow,
+  type EdgeMouseHandler,
+  type OnReconnect,
   type ReactFlowInstance,
   type NodeMouseHandler,
 } from "@xyflow/react";
@@ -17,7 +19,6 @@ import {
   type Platform,
   type PlatformBuildPlan,
   type Project,
-  type WorkflowNode,
 } from "@awm/shared";
 import { buildPlatformPlan } from "@awm/platforms";
 import {
@@ -33,8 +34,9 @@ import {
   Undo2,
   Workflow,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from "react";
 import { customTemplateApi, projectApi } from "../../api/projects";
+import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { CustomTemplateDialog } from "../../components/CustomTemplateDialog";
 import { PlatformMark } from "../../components/PlatformMark";
 import { AssistantPanel } from "./AssistantPanel";
@@ -53,7 +55,10 @@ import {
   evaluateWorkflowReadiness,
   splitIndependentWorkflows,
 } from "./workflow-product";
-import { useEditorStore, type EditorNode } from "./editor-store";
+import { useEditorStore, type EditorEdge, type EditorNode } from "./editor-store";
+import { manualLibraryFor, type ManualLibraryItem } from "./manual-platform-library";
+import { ManualNodeLibrary } from "./ManualNodeLibrary";
+import { isEditableEditorTarget } from "./editor-interactions";
 import { ThemeSelector } from "../../theme/ThemeSelector";
 import { useTheme, workflowCanvasThemeTokens } from "../../theme/theme";
 
@@ -62,32 +67,6 @@ const ComparisonExportPanel = lazy(() =>
     default: module.ComparisonExportPanel,
   })),
 );
-
-const palette: Array<{ category: WorkflowNode["category"]; label: string }> = [
-  { category: "trigger", label: "Trigger" },
-  { category: "webhook", label: "Webhook" },
-  { category: "action", label: "Action" },
-  { category: "ai", label: "AI" },
-  { category: "condition", label: "Condition" },
-  { category: "router", label: "Router" },
-  { category: "transformation", label: "Transform" },
-  { category: "delay", label: "Delay" },
-  { category: "loop", label: "Loop" },
-  { category: "api_request", label: "API request" },
-  { category: "database", label: "Database" },
-  { category: "crm", label: "CRM" },
-  { category: "spreadsheet", label: "Spreadsheet" },
-  { category: "email", label: "Email" },
-  { category: "messaging", label: "Messaging" },
-  { category: "notification", label: "Notification" },
-  { category: "human_approval", label: "Approval" },
-  { category: "retry", label: "Retry" },
-  { category: "error_handler", label: "Error handler" },
-  { category: "merge", label: "Merge" },
-  { category: "split", label: "Split" },
-  { category: "logger", label: "Logger" },
-  { category: "end", label: "End" },
-];
 
 export function WorkflowEditor({
   project,
@@ -118,15 +97,24 @@ export function WorkflowEditor({
   );
   const [selectedWorkflowId, setSelectedWorkflowId] = useState("");
   const [flowInstance, setFlowInstance] =
-    useState<ReactFlowInstance<EditorNode> | null>(null);
+    useState<ReactFlowInstance<EditorNode, EditorEdge> | null>(null);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
+  const [workflowSetDraft, setWorkflowSetDraft] = useState(project.workflowSet);
+  const [nodePendingDelete, setNodePendingDelete] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ type: "node" | "edge"; id: string; x: number; y: number } | null>(null);
+  const canvasRef = useRef<HTMLElement | null>(null);
   const nodeTypes = useMemo(() => ({ workflow: WorkflowCanvasNode }), []);
   const currentWorkflow = store.workflow ?? project.workflow;
-  const workflows = useMemo(
-    () => splitIndependentWorkflows(currentWorkflow, project.workflowSet),
-    [currentWorkflow, project.workflowSet],
+  const effectiveWorkflowSet = useMemo(
+    () => normalizeWorkflowSet(currentWorkflow, workflowSetDraft, selectedWorkflowId || workflowSetDraft.workflows[0]?.id),
+    [currentWorkflow, workflowSetDraft, selectedWorkflowId],
   );
+  const workflows = useMemo(
+    () => splitIndependentWorkflows(currentWorkflow, effectiveWorkflowSet),
+    [currentWorkflow, effectiveWorkflowSet],
+  );
+  const manualLibrary = useMemo(() => manualLibraryFor(targetPlatform), [targetPlatform]);
   const activeSlice =
     workflows.find((item) => item.id === selectedWorkflowId) ?? workflows[0]!;
   const activeWorkflow = activeSlice.workflow;
@@ -193,9 +181,16 @@ export function WorkflowEditor({
               ? "HTTP / Webhook"
               : "",
           ].filter(Boolean);
+          const usedRouteHandles = activeWorkflow.connections
+            .filter((connection) => connection.sourceNodeId === domain.id && connection.sourcePort.startsWith("route-"))
+            .map((connection) => connection.sourcePort);
+          const nextRoute = Math.max(0, ...usedRouteHandles.map((handle) => Number(handle.slice(6)) || 0)) + 1;
+          const routeHandles = ["router", "split"].includes(domain.category)
+            ? [...new Set([...usedRouteHandles, `route-${nextRoute}`])].sort((left, right) => (Number(left.slice(6)) || 0) - (Number(right.slice(6)) || 0))
+            : undefined;
           return {
             ...node,
-            data: { ...node.data, productStatus, platformBadges },
+            data: { ...node.data, platform: targetPlatform, productStatus, platformBadges, ...(routeHandles ? { routeHandles } : {}) },
           };
         }),
     [store.nodes, activeDomainIds, activeWorkflow, plan, targetPlatform],
@@ -210,13 +205,14 @@ export function WorkflowEditor({
         (edge) =>
           visibleVisualIds.has(edge.source) &&
           visibleVisualIds.has(edge.target),
-      ),
-    [store.edges, visibleVisualIds],
+      ).map((edge) => ({ ...edge, selected: edge.id === store.selectedEdgeId, reconnectable: true })),
+    [store.edges, store.selectedEdgeId, visibleVisualIds],
   );
 
   useEffect(() => {
     const direction = project.platform === "zapier" ? "TB" : "LR";
     store.initialize(project);
+    setWorkflowSetDraft(project.workflowSet);
     setLayoutDirection(direction);
   }, [project.id]);
   useEffect(() => {
@@ -248,6 +244,48 @@ export function WorkflowEditor({
   };
   const selectNode: NodeMouseHandler<EditorNode> = (_, node) =>
     store.selectNode(node.id);
+  const syncWorkflowSet = () => {
+    setWorkflowSetDraft((current) => normalizeWorkflowSet(useEditorStore.getState().workflow, current, activeSlice.id));
+  };
+  const centerCanvasPosition = () => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    if (!bounds || !flowInstance) return undefined;
+    return flowInstance.screenToFlowPosition({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 });
+  };
+  const addManualNode = (item: ManualLibraryItem, position = centerCanvasPosition()) => {
+    store.addNode(item, position, targetPlatform);
+    syncWorkflowSet();
+    setSaved(false);
+  };
+  const dropLibraryItem = (event: ReactDragEvent) => {
+    event.preventDefault();
+    const itemId = event.dataTransfer.getData("application/x-awm-library-item");
+    const item = manualLibrary.items.find((candidate) => candidate.id === itemId);
+    if (!item || !flowInstance) return;
+    addManualNode(item, flowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+  };
+  const reconnect: OnReconnect<EditorEdge> = (edge, connection) => {
+    store.reconnect(edge, connection);
+    syncWorkflowSet();
+    setSaved(false);
+  };
+  const selectEdge: EdgeMouseHandler = (_, edge) => store.selectEdge(edge.id);
+  useEffect(() => {
+    const handleDelete = (event: KeyboardEvent) => {
+      if (!['Delete', 'Backspace'].includes(event.key) || isEditableEditorTarget(event.target)) return;
+      if (store.selectedNodeId) {
+        event.preventDefault();
+        setNodePendingDelete(store.selectedNodeId);
+      } else if (store.selectedEdgeId) {
+        event.preventDefault();
+        store.deleteEdge();
+        syncWorkflowSet();
+        setSaved(false);
+      }
+    };
+    window.addEventListener('keydown', handleDelete);
+    return () => window.removeEventListener('keydown', handleDelete);
+  }, [store.selectedNodeId, store.selectedEdgeId, activeSlice.id]);
   const save = async () => {
     setSaving(true);
     setError("");
@@ -267,7 +305,7 @@ export function WorkflowEditor({
       };
       const normalizedSet = normalizeWorkflowSet(
         store.workflow,
-        project.workflowSet,
+        effectiveWorkflowSet,
         activeSlice.id,
       );
       const persistedSet = {
@@ -339,7 +377,7 @@ export function WorkflowEditor({
       workflow: structuredClone(store.workflow),
       workflowSet: normalizeWorkflowSet(
         store.workflow,
-        project.workflowSet,
+        effectiveWorkflowSet,
         activeSlice.id,
       ),
       visualGraph,
@@ -460,37 +498,8 @@ export function WorkflowEditor({
         onChange={setSelectedWorkflowId}
       />
       <div className="editor-body">
-        <aside className="node-palette">
-          <div className="palette-brand">
-            <Workflow size={18} />
-            <div>
-              <strong>Node library</strong>
-              <span>Click to add a step</span>
-            </div>
-          </div>
-          <div className="palette-list">
-            {palette.map((item) => (
-              <button
-                key={item.category}
-                onClick={() => {
-                  store.addNode(item.category);
-                  setSaved(false);
-                }}
-              >
-                <span className={`palette-dot category-${item.category}`} />
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="palette-tip">
-            <LayoutDashboard size={15} />
-            <p>
-              Drag nodes to arrange them. Connect handles to define execution
-              order.
-            </p>
-          </div>
-        </aside>
-        <section className="canvas-wrap" id="workflow-canvas-export">
+        <ManualNodeLibrary library={manualLibrary} onAdd={addManualNode} />
+        <section className="canvas-wrap" id="workflow-canvas-export" ref={canvasRef}>
           {error && <div className="canvas-error">{error}</div>}
           {view === "business" ? (
             <BusinessFlowView workflow={activeWorkflow} />
@@ -501,7 +510,7 @@ export function WorkflowEditor({
               <ReadinessPanel readiness={readiness} />
             </div>
           ) : (
-            <ReactFlow<EditorNode>
+            <ReactFlow<EditorNode, EditorEdge>
               nodes={visibleNodes}
               edges={visibleEdges}
               nodeTypes={nodeTypes}
@@ -511,26 +520,56 @@ export function WorkflowEditor({
               }}
               onEdgesChange={(changes) => {
                 store.onEdgesChange(changes);
+                syncWorkflowSet();
                 setSaved(false);
               }}
               onConnect={(connection) => {
                 store.connect(connection);
+                syncWorkflowSet();
                 setSaved(false);
               }}
+              onReconnect={reconnect}
               onNodeClick={selectNode}
-              onPaneClick={() => store.selectNode(null)}
+              onEdgeClick={selectEdge}
+              onNodeContextMenu={(event, node) => {
+                event.preventDefault();
+                store.selectNode(node.id);
+                setContextMenu({ type: "node", id: node.id, x: event.clientX, y: event.clientY });
+              }}
+              onEdgeContextMenu={(event, edge) => {
+                event.preventDefault();
+                store.selectEdge(edge.id);
+                setContextMenu({ type: "edge", id: edge.id, x: event.clientX, y: event.clientY });
+              }}
+              onPaneClick={() => {
+                store.selectNode(null);
+                setContextMenu(null);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }}
+              onDrop={dropLibraryItem}
               onInit={setFlowInstance}
               fitView
               fitViewOptions={{ padding: 0.22 }}
               snapToGrid
               snapGrid={[20, 20]}
-              deleteKeyCode={["Backspace", "Delete"]}
+              deleteKeyCode={null}
+              edgesReconnectable
               multiSelectionKeyCode="Shift"
               selectionKeyCode="Shift"
               colorMode={resolvedTheme}
               minZoom={0.25}
               maxZoom={1.8}
             >
+              {!visibleNodes.length && (
+                <div className="blank-workflow-guide" role="status">
+                  <span><Workflow size={24} /></span>
+                  <strong>Build your workflow from scratch</strong>
+                  <p>Choose a Trigger or Webhook from the node library, add the next steps, then drag between their connection points.</p>
+                </div>
+              )}
               <Background
                 variant={BackgroundVariant.Dots}
                 gap={20}
@@ -611,6 +650,7 @@ export function WorkflowEditor({
           onClose={() => setAssistantOpen(false)}
           onApply={(proposal) => {
             store.applyProposedWorkflow(proposal.proposedWorkflow);
+            syncWorkflowSet();
             setAssistantOpen(false);
             setSaved(false);
           }}
@@ -627,7 +667,7 @@ export function WorkflowEditor({
         >
           <ComparisonExportPanel
             workflow={activeWorkflow}
-            workflowSet={project.workflowSet}
+            workflowSet={effectiveWorkflowSet}
             selectedWorkflowId={activeSlice.id}
             platform={targetPlatform}
             canvasId="workflow-canvas-export"
@@ -636,6 +676,32 @@ export function WorkflowEditor({
           />
         </Suspense>
       )}
+      {contextMenu && (
+        <div className="editor-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button type="button" role="menuitem" onClick={() => {
+            if (contextMenu.type === "node") setNodePendingDelete(contextMenu.id);
+            else {
+              store.deleteEdge(contextMenu.id);
+              syncWorkflowSet();
+              setSaved(false);
+            }
+            setContextMenu(null);
+          }}>{contextMenu.type === "node" ? "Delete node…" : "Delete connection"}</button>
+        </div>
+      )}
+      <ConfirmationDialog
+        open={Boolean(nodePendingDelete)}
+        title="Delete this node?"
+        message="This node and its connected lines will be removed from the workflow."
+        confirmLabel="Delete node"
+        onCancel={() => setNodePendingDelete(null)}
+        onConfirm={() => {
+          store.deleteNode(nodePendingDelete);
+          syncWorkflowSet();
+          setNodePendingDelete(null);
+          setSaved(false);
+        }}
+      />
       <CustomTemplateDialog
         open={templateDialogOpen}
         busy={templateSaving}

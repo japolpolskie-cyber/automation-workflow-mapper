@@ -28,8 +28,12 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { customTemplateApi, projectApi } from "./api/projects";
 import { CustomTemplateDialog } from "./components/CustomTemplateDialog";
+import { ConfirmationDialog } from "./components/ConfirmationDialog";
 import { MyTemplates } from "./components/MyTemplates";
-import { NewProjectDialog } from "./components/NewProjectDialog";
+import {
+  NewProjectDialog,
+  type ProjectCreationMode,
+} from "./components/NewProjectDialog";
 import { PlatformMark } from "./components/PlatformMark";
 import { ScopeWorkspace } from "./components/ScopeWorkspace";
 import { WorkflowEditor } from "./features/editor/WorkflowEditor";
@@ -57,6 +61,8 @@ export default function App() {
   const [templateError, setTemplateError] = useState("");
   const [templateBusyId, setTemplateBusyId] = useState<string | null>(null);
   const [editingTemplate, setEditingTemplate] =
+    useState<CustomWorkflowTemplate | null>(null);
+  const [templatePendingDelete, setTemplatePendingDelete] =
     useState<CustomWorkflowTemplate | null>(null);
 
   useEffect(() => {
@@ -97,7 +103,10 @@ export default function App() {
       ),
     [archivedProjects, projects, platform, query, showArchived],
   );
-  const create = async (input: CreateProjectInput) => {
+  const create = async (
+    input: CreateProjectInput,
+    mode: ProjectCreationMode,
+  ) => {
     setCreating(true);
     setError("");
     try {
@@ -108,7 +117,12 @@ export default function App() {
       setProjects((current) => [readyProject, ...current]);
       setDialogOpen(false);
       setSelectedTemplate(null);
-      setSelectedProject(readyProject);
+      if (mode === "blank") {
+        setSelectedProject(null);
+        setEditorProject(readyProject);
+      } else {
+        setSelectedProject(readyProject);
+      }
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Unable to create project.",
@@ -199,8 +213,6 @@ export default function App() {
     setEditingTemplate(null);
   };
   const deleteCustomTemplate = async (template: CustomWorkflowTemplate) => {
-    if (!window.confirm(`Delete “${template.name}”? This cannot be undone.`))
-      return;
     setTemplateBusyId(template.id);
     setTemplateError("");
     try {
@@ -208,6 +220,7 @@ export default function App() {
       setCustomTemplates((current) =>
         current.filter((item) => item.id !== template.id),
       );
+      setTemplatePendingDelete(null);
     } catch (cause) {
       setTemplateError(
         cause instanceof Error
@@ -589,7 +602,7 @@ export default function App() {
               busyId={templateBusyId}
               onUse={(template) => void useCustomTemplate(template)}
               onEdit={setEditingTemplate}
-              onDelete={(template) => void deleteCustomTemplate(template)}
+              onDelete={setTemplatePendingDelete}
             />
           </section>
           <section
@@ -680,6 +693,17 @@ export default function App() {
         template={editingTemplate ?? undefined}
         onClose={() => setEditingTemplate(null)}
         onSave={updateCustomTemplate}
+      />
+      <ConfirmationDialog
+        open={Boolean(templatePendingDelete)}
+        title="Delete this template?"
+        message="This template will be permanently removed. Projects created from it will not be affected."
+        confirmLabel="Delete template"
+        busy={Boolean(templatePendingDelete && templateBusyId === templatePendingDelete.id)}
+        onCancel={() => setTemplatePendingDelete(null)}
+        onConfirm={() => {
+          if (templatePendingDelete) void deleteCustomTemplate(templatePendingDelete);
+        }}
       />
     </div>
   );

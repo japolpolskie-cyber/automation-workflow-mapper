@@ -73,7 +73,10 @@ function detectUnsupportedCycles(workflow: CanonicalWorkflow, issues: GraphIssue
   const visit = (id: string, path: string[]): void => {
     if (active.has(id)) {
       const cycle = path.slice(path.indexOf(id));
-      if (!cycle.some((nodeId) => nodeById.get(nodeId)?.category === 'loop')) issues.push({ severity: 'error', code: 'INVALID_CYCLE', message: 'A circular dependency exists without an explicit loop node.', nodeId: id });
+      const cycleIds = new Set(cycle);
+      const intentionalNode = cycle.some((nodeId) => ['loop', 'retry', 'human_approval'].includes(nodeById.get(nodeId)?.category ?? ''));
+      const intentionalEdge = workflow.connections.some((edge) => cycleIds.has(edge.sourceNodeId) && cycleIds.has(edge.targetNodeId) && (edge.style === 'loop' || edge.branchLabel === 'LOOP'));
+      if (!intentionalNode && !intentionalEdge) issues.push({ severity: 'error', code: 'INVALID_CYCLE', message: 'A circular dependency exists without an explicit loop, retry, revision, or approval boundary.', nodeId: id });
       return;
     }
     if (visited.has(id)) return;

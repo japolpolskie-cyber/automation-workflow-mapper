@@ -27,6 +27,17 @@ describe('workflow graph integrity', () => {
     workflow.connections.push({ ...workflow.connections[0]!, id: '77777777-7777-4777-8777-777777777777', sourceNodeId: workflow.nodes[7]!.id, targetNodeId: workflow.nodes[0]!.id });
     expect(validateWorkflowGraph(workflow).issues.some((issue) => issue.code === 'INVALID_CYCLE')).toBe(true);
   });
+
+  it('accepts an intentional cycle through an explicit loop connection', () => {
+    const workflow = structuredClone(leadQualificationWorkflow);
+    const loopNode = { ...workflow.nodes[1]!, id: '80000000-0000-4000-8000-000000000001', category: 'loop' as const, name: 'Repeat until complete' };
+    workflow.nodes.push(loopNode);
+    workflow.connections.push(
+      { ...workflow.connections[0]!, id: '80000000-0000-4000-8000-000000000002', sourceNodeId: workflow.nodes[1]!.id, targetNodeId: loopNode.id },
+      { ...workflow.connections[0]!, id: '80000000-0000-4000-8000-000000000003', sourceNodeId: loopNode.id, targetNodeId: workflow.nodes[1]!.id, sourcePort: 'item', label: 'Current Item', branchLabel: 'LOOP', style: 'loop', routeType: 'conditional' },
+    );
+    expect(validateWorkflowGraph(workflow).issues.some((issue) => issue.code === 'INVALID_CYCLE')).toBe(false);
+  });
 });
 
 describe('visual graph projection', () => {
