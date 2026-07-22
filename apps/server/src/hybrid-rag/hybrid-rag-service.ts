@@ -4,6 +4,7 @@ import type {
   RetrievalRequest,
   RetrievalResult,
   KnowledgePlatform,
+  RetrievalStrategy,
 } from "./contracts.js";
 
 export interface HybridRAGProviderHealth {
@@ -12,6 +13,13 @@ export interface HybridRAGProviderHealth {
   indexedDocumentCount: number;
   indexedChunkCount: number;
   platformCounts: Record<KnowledgePlatform, number>;
+  embeddingProvider: string | null;
+  embeddingReady: boolean;
+  vectorDimensions: number | null;
+  indexedVectorCount: number;
+  vectorIndexHealthy: boolean;
+  lastIndexBuildStatus: "not-built" | "ready" | "failed";
+  supportedRetrievalStrategies: RetrievalStrategy[];
 }
 
 export interface HybridRAGProvider {

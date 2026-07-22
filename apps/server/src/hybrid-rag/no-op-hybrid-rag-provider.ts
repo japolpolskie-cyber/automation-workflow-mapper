@@ -11,7 +11,7 @@ export class NoOpHybridRAGProvider implements HybridRAGProvider {
   }
 
   public async retrieve(): Promise<RetrievalResult> {
-    return { chunks: [] };
+    return { chunks: [], scores: [] };
   }
 
   public async health(): Promise<HybridRAGProviderHealth> {
@@ -21,6 +21,13 @@ export class NoOpHybridRAGProvider implements HybridRAGProvider {
       indexedDocumentCount: 0,
       indexedChunkCount: 0,
       platformCounts: { n8n: 0, make: 0, zapier: 0 },
+      embeddingProvider: null,
+      embeddingReady: false,
+      vectorDimensions: null,
+      indexedVectorCount: 0,
+      vectorIndexHealthy: false,
+      lastIndexBuildStatus: "not-built",
+      supportedRetrievalStrategies: ["keyword"],
     };
   }
 }

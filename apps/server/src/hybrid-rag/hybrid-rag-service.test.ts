@@ -13,6 +13,13 @@ describe("Hybrid RAG foundation", () => {
       indexedDocumentCount: 0,
       indexedChunkCount: 0,
       platformCounts: { n8n: 0, make: 0, zapier: 0 },
+      embeddingProvider: null,
+      embeddingReady: false,
+      vectorDimensions: null,
+      indexedVectorCount: 0,
+      vectorIndexHealthy: false,
+      lastIndexBuildStatus: "not-built",
+      supportedRetrievalStrategies: ["keyword"],
     });
   });
 
@@ -31,6 +38,13 @@ describe("Hybrid RAG foundation", () => {
       indexedDocumentCount: 0,
       indexedChunkCount: 0,
       platformCounts: { n8n: 0, make: 0, zapier: 0 },
+      embeddingProvider: null,
+      embeddingReady: false,
+      vectorDimensions: null,
+      indexedVectorCount: 0,
+      vectorIndexHealthy: false,
+      lastIndexBuildStatus: "not-built",
+      supportedRetrievalStrategies: ["keyword"],
     });
   });
 });

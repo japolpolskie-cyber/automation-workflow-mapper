@@ -1,5 +1,6 @@
 export type HybridRAGMode = "off" | "compare" | "guarded" | "enabled";
 export type KnowledgePlatform = "n8n" | "make" | "zapier";
+export type RetrievalStrategy = "keyword" | "vector" | "hybrid";
 
 export interface KnowledgeSource {
   id: string;
@@ -33,10 +34,19 @@ export interface RetrievalRequest {
   query: string;
   platform: KnowledgePlatform;
   limit?: number;
+  strategy?: RetrievalStrategy;
+}
+
+export interface RetrievalScoreBreakdown {
+  chunkId: string;
+  combinedScore: number;
+  keywordScore: number;
+  vectorScore: number;
 }
 
 export interface RetrievalResult {
   chunks: KnowledgeChunk[];
+  scores: RetrievalScoreBreakdown[];
 }
 
 export interface HybridRAGHealth {
@@ -47,4 +57,11 @@ export interface HybridRAGHealth {
   indexedDocumentCount: number;
   indexedChunkCount: number;
   platformCounts: Record<KnowledgePlatform, number>;
+  embeddingProvider: string | null;
+  embeddingReady: boolean;
+  vectorDimensions: number | null;
+  indexedVectorCount: number;
+  vectorIndexHealthy: boolean;
+  lastIndexBuildStatus: "not-built" | "ready" | "failed";
+  supportedRetrievalStrategies: RetrievalStrategy[];
 }

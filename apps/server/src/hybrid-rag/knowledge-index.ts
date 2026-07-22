@@ -1,7 +1,4 @@
 import type {
-  HybridRAGProviderHealth,
-} from "./hybrid-rag-service.js";
-import type {
   KnowledgeChunk,
   KnowledgeDocument,
   KnowledgePlatform,
@@ -62,21 +59,34 @@ export class KnowledgeIndex {
 
   public retrieve(request: RetrievalRequest): RetrievalResult {
     const query = normalizeSearchText(request.query ?? "");
-    if (!query || !validPlatforms.has(request.platform)) return { chunks: [] };
+    if (!query || !validPlatforms.has(request.platform)) return { chunks: [], scores: [] };
     const limit = Math.max(0, Math.floor(request.limit ?? 10));
-    if (limit === 0) return { chunks: [] };
+    if (limit === 0) return { chunks: [], scores: [] };
     const terms = [...new Set(query.split(" ").filter(Boolean))];
-    const chunks = this.chunks
+    const ranked = this.chunks
       .filter((chunk) => chunk.platform === request.platform)
       .map((chunk) => ({ chunk, score: scoreChunk(chunk, query, terms) }))
       .filter(({ score }) => score > 0)
       .sort((left, right) => right.score - left.score || left.chunk.id.localeCompare(right.chunk.id))
-      .slice(0, limit)
-      .map(({ chunk }) => chunk);
-    return { chunks };
+      .slice(0, limit);
+    const maximumScore = ranked[0]?.score ?? 1;
+    return {
+      chunks: ranked.map(({ chunk }) => chunk),
+      scores: ranked.map(({ chunk, score }) => ({
+        chunkId: chunk.id,
+        combinedScore: score / maximumScore,
+        keywordScore: score / maximumScore,
+        vectorScore: 0,
+      })),
+    };
   }
 
-  public health(): Omit<HybridRAGProviderHealth, "ready"> {
+  public health(): {
+    initialized: boolean;
+    indexedDocumentCount: number;
+    indexedChunkCount: number;
+    platformCounts: Record<KnowledgePlatform, number>;
+  } {
     const platformCounts = emptyPlatformCounts();
     for (const document of this.documents) platformCounts[document.platform] += 1;
     return {

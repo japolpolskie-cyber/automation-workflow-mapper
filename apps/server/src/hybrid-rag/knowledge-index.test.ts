@@ -58,7 +58,7 @@ describe("Hybrid RAG knowledge index", () => {
     const make = index.retrieve({ query: "iterator", platform: "make" });
     expect(make.chunks.length).toBeGreaterThan(0);
     expect(make.chunks.every((chunk) => chunk.platform === "make")).toBe(true);
-    expect(index.retrieve({ query: "", platform: "n8n" })).toEqual({ chunks: [] });
-    expect(index.retrieve({ query: "term-that-does-not-exist", platform: "zapier" })).toEqual({ chunks: [] });
+    expect(index.retrieve({ query: "", platform: "n8n" })).toEqual({ chunks: [], scores: [] });
+    expect(index.retrieve({ query: "term-that-does-not-exist", platform: "zapier" })).toEqual({ chunks: [], scores: [] });
   });
 });

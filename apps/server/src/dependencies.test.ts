@@ -20,7 +20,7 @@ describe("application dependency registration", () => {
     await expect(app.dependencies.hybridRAGService.health()).resolves.toMatchObject({
       initialized: true,
       ready: true,
-      provider: "keyword",
+      provider: "keyword-vector",
       mode: "off",
       indexedDocumentCount: expect.any(Number),
       indexedChunkCount: expect.any(Number),
@@ -29,6 +29,12 @@ describe("application dependency registration", () => {
         make: expect.any(Number),
         zapier: expect.any(Number),
       },
+      embeddingProvider: "local-hash@1.0",
+      embeddingReady: true,
+      vectorDimensions: 64,
+      vectorIndexHealthy: true,
+      lastIndexBuildStatus: "ready",
+      supportedRetrievalStrategies: ["keyword", "vector", "hybrid"],
     });
     await app.close();
   });

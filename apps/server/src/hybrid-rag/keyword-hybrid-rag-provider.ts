@@ -22,6 +22,16 @@ export class KeywordHybridRAGProvider implements HybridRAGProvider {
 
   public async health(): Promise<HybridRAGProviderHealth> {
     const status = this.index.health();
-    return { ...status, ready: status.initialized };
+    return {
+      ...status,
+      ready: status.initialized,
+      embeddingProvider: null,
+      embeddingReady: false,
+      vectorDimensions: null,
+      indexedVectorCount: 0,
+      vectorIndexHealthy: false,
+      lastIndexBuildStatus: status.initialized ? "ready" : "not-built",
+      supportedRetrievalStrategies: ["keyword"],
+    };
   }
 }
