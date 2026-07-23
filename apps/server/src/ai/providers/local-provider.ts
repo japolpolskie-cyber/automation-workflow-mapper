@@ -172,11 +172,26 @@ function buildSemanticFallback(analysis: SemanticRequirementAnalysis): Extracted
         const routerNode = nodesByUnit.get(parent.id);
         if (!routerNode) continue;
         const routeNodes: WorkflowNode[] = [];
-        for (const route of routesByRouter.get(parent.id) ?? []) {
+        const routes = routesByRouter.get(parent.id) ?? [];
+        routerNode.configuration = {
+          ...routerNode.configuration,
+          editorBranchControl: 'dynamic',
+          editorBranches: routes.map((route, order) => ({
+            id: `route-${order + 1}`,
+            label: route.text,
+            order,
+          })),
+        };
+        for (const [routeIndex, route] of routes.entries()) {
           const routeNode = { ...node, id: crypto.randomUUID(), name: `Create ${route.text} department ticket` };
           nodes.push(routeNode);
           routeNodes.push(routeNode);
-          connections.push({ ...connect(routerNode.id, routeNode.id, route.text, null, `Department equals ${route.text}`), routeType: 'conditional', style: 'conditional' });
+          connections.push({
+            ...connect(routerNode.id, routeNode.id, route.text, null, `Department equals ${route.text}`),
+            sourcePort: `route-${routeIndex + 1}`,
+            routeType: 'conditional',
+            style: 'conditional',
+          });
           branches.push({ id: crypto.randomUUID(), sourceNodeId: routerNode.id, name: route.text, condition: { combinator: 'and', rules: [{ field: 'department', operator: 'equals', value: route.text }] }, destinationNodeId: routeNode.id, isDefault: false });
         }
         tails = routeNodes;

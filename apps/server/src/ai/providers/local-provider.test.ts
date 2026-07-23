@@ -107,7 +107,22 @@ describe('LocalAnalysisProvider operational fallback', () => {
       expect.stringMatching(/Wait the AI Agent/i),
       expect.stringMatching(/Wait the department ticket/i),
     ]));
-    expect(workflow.connections.filter((edge) => edge.sourceNodeId === workflow.nodes.find((node) => node.category === 'router')?.id).map((edge) => edge.label)).toEqual(['Sales', 'Technical Support', 'Billing']);
+    const router = workflow.nodes.find((node) => node.category === 'router')!;
+    const routeEdges = workflow.connections.filter((edge) => edge.sourceNodeId === router.id);
+    expect(routeEdges.map((edge) => ({
+      label: edge.label,
+      sourcePort: edge.sourcePort,
+      target: workflow.nodes.find((node) => node.id === edge.targetNodeId)?.name,
+    }))).toEqual([
+      { label: 'Sales', sourcePort: 'route-1', target: 'Create Sales department ticket' },
+      { label: 'Technical Support', sourcePort: 'route-2', target: 'Create Technical Support department ticket' },
+      { label: 'Billing', sourcePort: 'route-3', target: 'Create Billing department ticket' },
+    ]);
+    expect(router.configuration.editorBranches).toEqual([
+      { id: 'route-1', label: 'Sales', order: 0 },
+      { id: 'route-2', label: 'Technical Support', order: 1 },
+      { id: 'route-3', label: 'Billing', order: 2 },
+    ]);
     expect(workflow.connections.filter((edge) => edge.branchLabel).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
     const compiled = compileAutomationArchitecture(workflow);
     const validation = validateWorkflowGraph(compiled);
@@ -117,6 +132,7 @@ describe('LocalAnalysisProvider operational fallback', () => {
     expect(workflow.connections.filter((edge) => edge.connectionKind && edge.connectionKind !== 'execution')).toHaveLength(4);
     expect(workflow.nodes.filter((node) => node.category === 'ai' && node.nodeKind !== 'ai-attachment')).toHaveLength(1);
     expect(compiled.nodes.filter((node) => node.category === 'ai' && node.nodeKind !== 'ai-attachment')).toHaveLength(1);
+    expect(compiled.connections.filter((edge) => edge.sourceNodeId === router.id).map((edge) => edge.sourcePort)).toEqual(['route-1', 'route-2', 'route-3']);
   });
 
   it('retains a real temporal wait in a semantic fallback', async () => {

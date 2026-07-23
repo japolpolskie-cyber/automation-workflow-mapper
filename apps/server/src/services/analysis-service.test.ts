@@ -57,6 +57,18 @@ Do not count the AI Agent's Chat Model, Memory, and Tools as normal execution no
     expect(result.workflow.connections.filter((edge) => edge.connectionKind && edge.connectionKind !== 'execution')).toHaveLength(4);
     expect(result.workflow.nodes.filter((node) => node.category === 'ai' && node.nodeKind !== 'ai-attachment')).toHaveLength(1);
     expect(result.workflow.nodes.map((node) => node.name).join(' ')).not.toMatch(/Wait the AI Agent|Wait the department ticket/i);
+    const router = result.workflow.nodes.find((node) => node.category === 'router')!;
+    const persisted = repository.findById(project.id)!;
+    expect(result.workflow.connections.filter((edge) => edge.sourceNodeId === router.id).map((edge) => [edge.sourcePort, edge.label])).toEqual([
+      ['route-1', 'Sales'],
+      ['route-2', 'Technical Support'],
+      ['route-3', 'Billing'],
+    ]);
+    expect(persisted.workflow.connections.filter((edge) => edge.sourceNodeId === router.id).map((edge) => [edge.sourcePort, edge.label])).toEqual([
+      ['route-1', 'Sales'],
+      ['route-2', 'Technical Support'],
+      ['route-3', 'Billing'],
+    ]);
   });
 
   it('accepts Ollama output with exactly one valid trigger', async () => {

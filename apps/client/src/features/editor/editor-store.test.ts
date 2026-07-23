@@ -107,6 +107,59 @@ describe('editor workflow layout isolation', () => {
     ]);
   });
 
+  it('projects persisted semantic router routes onto matching visible handles', () => {
+    const base = blankProject('n8n');
+    const router = {
+      ...leadQualificationWorkflow.nodes[1]!,
+      id: crypto.randomUUID(),
+      category: 'router' as const,
+      name: 'Route by department',
+      configuration: {
+        editorBranchControl: 'dynamic',
+        editorBranches: [
+          { id: 'route-1', label: 'Sales', order: 0 },
+          { id: 'route-2', label: 'Technical Support', order: 1 },
+          { id: 'route-3', label: 'Billing', order: 2 },
+        ],
+      },
+    };
+    const targets = ['Sales', 'Technical Support', 'Billing'].map((department) => ({
+      ...leadQualificationWorkflow.nodes[1]!,
+      id: crypto.randomUUID(),
+      name: `Create ${department} department ticket`,
+    }));
+    const connections = targets.map((target, index) => ({
+      ...leadQualificationWorkflow.connections[0]!,
+      id: crypto.randomUUID(),
+      sourceNodeId: router.id,
+      targetNodeId: target.id,
+      sourcePort: `route-${index + 1}`,
+      label: ['Sales', 'Technical Support', 'Billing'][index]!,
+      branchLabel: null,
+      routeType: 'conditional' as const,
+      style: 'conditional' as const,
+    }));
+    const workflow = { ...base.workflow, nodes: [router, ...targets], connections };
+    const project = {
+      ...base,
+      workflow,
+      workflowSet: createWorkflowSetFromGraph(workflow),
+      visualGraph: projectWorkflowToVisualGraph(workflow),
+    };
+
+    useEditorStore.getState().initialize(project);
+
+    expect(useEditorStore.getState().edges.map((edge) => ({
+      sourceHandle: edge.sourceHandle,
+      label: edge.label,
+      target: useEditorStore.getState().nodes.find((node) => node.id === edge.target)?.data.node.name,
+    }))).toEqual([
+      { sourceHandle: 'route-1', label: 'Sales', target: 'Create Sales department ticket' },
+      { sourceHandle: 'route-2', label: 'Technical Support', target: 'Create Technical Support department ticket' },
+      { sourceHandle: 'route-3', label: 'Billing', target: 'Create Billing department ticket' },
+    ]);
+  });
+
   it('adds separate selected nodes at non-overlapping positions with platform metadata', () => {
     useEditorStore.getState().initialize(blankProject('zapier'));
     const action = manualLibraryFor('zapier').items.find((item) => item.id === 'action')!;
