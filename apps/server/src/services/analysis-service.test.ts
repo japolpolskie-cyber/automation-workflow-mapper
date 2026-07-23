@@ -27,6 +27,7 @@ describe('AnalysisService output boundary', () => {
     repository.updateScope(project.id, `Create an n8n workflow for handling customer support requests.
 The workflow should start when a customer submits a support form through a webhook.
 Use an AI Agent to analyze the message, identify the department, determine urgency, and create a short summary.
+The AI Agent should use:
 - OpenAI Chat Model
 - Simple Memory
 - HTTP Request Tool
@@ -35,11 +36,14 @@ After the AI Agent, use a Router with three routes:
 1. Sales
 2. Technical Support
 3. Billing
-Each route creates a department-specific ticket.
+Each route should create a department-specific ticket.
 Continue to an IF condition that checks whether the request is high priority:
-- TRUE: Send an urgent Slack notification
-- FALSE: Log the request in Google Sheets
-Finish successfully.`);
+If the request is high priority:
+- Send an urgent Slack notification
+If the request is not high priority:
+- Log the request in Google Sheets
+Finish successfully.
+Do not count the AI Agent's Chat Model, Memory, and Tools as normal execution nodes.`);
 
     const result = await new AnalysisService(repository, provider).analyze(project.id);
     const nodeIds = new Set(result.workflow.nodes.map((node) => node.id));
@@ -51,6 +55,7 @@ Finish successfully.`);
     expect(result.workflow.nodes.some((node) => node.category === 'merge')).toBe(true);
     expect(result.workflow.connections.filter((edge) => edge.branchLabel).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
     expect(result.workflow.connections.filter((edge) => edge.connectionKind && edge.connectionKind !== 'execution')).toHaveLength(4);
+    expect(result.workflow.nodes.filter((node) => node.category === 'ai' && node.nodeKind !== 'ai-attachment')).toHaveLength(1);
     expect(result.workflow.nodes.map((node) => node.name).join(' ')).not.toMatch(/Wait the AI Agent|Wait the department ticket/i);
   });
 

@@ -8,7 +8,8 @@ import {
 const authoringInstruction = /^(?:please\s+)?(?:create|build|design|generate|return)\s+(?:an?\s+)?(?:complete\s+)?(?:n8n|make(?:\.com)?|zapier|automation|workflow)\b/i;
 const authoringConstraint = /^(?:please\s+)?(?:use|avoid|do not|don't|ensure|keep|include|limit|preserve)\b/i;
 const trigger = /\b(?:workflow should start when|starts? when|trigger(?:ed)? (?:when|by)|webhook\b|upon receiving|when .* (?:arrives|is received|is submitted))\b/i;
-const aiAgent = /\bAI Agent\b/i;
+const aiAgent = /^(?:use\s+)?an?\s+AI Agent\s+to\b/i;
+const aiResourceHeading = /^the\s+AI Agent\s+should\s+use\s*:?$/i;
 const aiResource = /\b(?:chat model|simple memory|memory|HTTP request tool|vector store(?: tool)?|tool)\b/i;
 const router = /\b(?:router|switch)\b/i;
 const binaryCondition = /^(?:if|whether)\b|\bIF condition\b/i;
@@ -16,7 +17,7 @@ const terminalOutcome = /^(?:finish|end|terminate|complete)\b/i;
 const eventWait = /\bwait\s+(?:for|until)\s+(?:an?\s+)?(?:approval|callback|response|signature|payment|status|event)\b/i;
 const temporalWait = /\bwait\s+(?:for\s+)?(?:(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:seconds?|minutes?|hours?|days?|weeks?)|until\s+(?:tomorrow|[^.\n]*(?:am|pm|\d{1,2}:\d{2})))\b/i;
 const sequence = /^(?:after|continue to|next|then)\b/i;
-const operation = /^(?:(?:each route\s+)?(?:receive|analy[sz]e|extract|classify|create|update|send|log|store|retrieve|fetch|notify|assign|generate|process|validate|creates?))\b/i;
+const operation = /^(?:(?:each route\s+(?:should\s+)?)?(?:receive|analy[sz]e|extract|classify|create|update|send|log|store|retrieve|fetch|notify|assign|generate|process|validate|creates?))\b/i;
 const branchMarker = /^(?:[-*]\s*)?(TRUE|FALSE)\s*[:—-]\s*(.+)$/i;
 const listItem = /^\s*(?:[-*]|\d+[.)])\s+(.+)$/;
 
@@ -34,13 +35,24 @@ export class SemanticRequirementAnalyzer {
     let activeAgent: string | null = null;
     let activeRouter: string | null = null;
     let activeCondition: string | null = null;
+    let activeBranch: string | null = null;
 
     for (const line of lines(scope)) {
+      if (aiResourceHeading.test(line.content) && activeAgent) continue;
+
       const branch = branchMarker.exec(line.text);
       if (branch && activeCondition) {
         const branchUnit = add(units, branch[1]!.toUpperCase() === 'TRUE' ? 'branch' : 'branch', line, true, activeCondition, branch[1]!.toUpperCase() as 'TRUE' | 'FALSE');
+        activeBranch = branchUnit.id;
         const actionText = branch[2]!.trim();
         if (actionText) add(units, 'operation', { ...line, text: actionText, content: actionText }, true, branchUnit.id);
+        continue;
+      }
+
+      const namedBranch = /^if\s+the\s+request\s+is\s+(not\s+)?high\s+priority\s*:?$/i.exec(line.content);
+      if (namedBranch && activeCondition) {
+        const branchUnit = add(units, 'branch', line, true, activeCondition, namedBranch[1] ? 'FALSE' : 'TRUE');
+        activeBranch = branchUnit.id;
         continue;
       }
 
@@ -48,10 +60,10 @@ export class SemanticRequirementAnalyzer {
         add(units, 'sequence', line, false, null);
         if (router.test(line.content)) {
           const unit = add(units, 'router', line, true, null);
-          activeRouter = unit.id; activeAgent = null; activeCondition = null;
+          activeRouter = unit.id; activeAgent = null; activeCondition = null; activeBranch = null;
         } else if (binaryCondition.test(line.content)) {
           const unit = add(units, 'binary-condition', line, true, null);
-          activeCondition = unit.id; activeAgent = null; activeRouter = null;
+          activeCondition = unit.id; activeAgent = null; activeRouter = null; activeBranch = null;
         }
         continue;
       }
@@ -59,12 +71,15 @@ export class SemanticRequirementAnalyzer {
       const kind = classify(line, { activeAgent, activeRouter, activeCondition });
       if (!kind) continue;
       const executable = !['authoring-instruction', 'authoring-constraint', 'ai-resource', 'route', 'sequence'].includes(kind);
-      const parentId = kind === 'ai-resource' ? activeAgent : kind === 'route' || (kind === 'operation' && /^each route\b/i.test(line.content)) ? activeRouter : null;
+      const parentId = kind === 'ai-resource' ? activeAgent
+        : kind === 'route' || (kind === 'operation' && /^each route\b/i.test(line.content)) ? activeRouter
+          : kind === 'operation' && line.isListItem ? activeBranch
+            : null;
       const unit = add(units, kind, line, executable, parentId);
 
-      if (kind === 'ai-agent') { activeAgent = unit.id; activeRouter = null; activeCondition = null; }
-      else if (kind === 'router') { activeRouter = unit.id; activeAgent = null; activeCondition = null; }
-      else if (kind === 'binary-condition') { activeCondition = unit.id; activeAgent = null; activeRouter = null; }
+      if (kind === 'ai-agent') { activeAgent = unit.id; activeRouter = null; activeCondition = null; activeBranch = null; }
+      else if (kind === 'router') { activeRouter = unit.id; activeAgent = null; activeCondition = null; activeBranch = null; }
+      else if (kind === 'binary-condition') { activeCondition = unit.id; activeAgent = null; activeRouter = null; activeBranch = null; }
       else if (!line.isListItem && !['sequence'].includes(kind)) {
         if (kind !== 'ai-resource') activeAgent = null;
         if (kind !== 'route') activeRouter = null;

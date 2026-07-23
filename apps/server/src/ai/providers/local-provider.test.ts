@@ -65,6 +65,7 @@ Workflow Mapping Rules
 const semanticSupportScope = `Create an n8n workflow for handling customer support requests.
 The workflow should start when a customer submits a support form through a webhook.
 Use an AI Agent to analyze the message, identify the department, determine urgency, and create a short summary.
+The AI Agent should use:
 - OpenAI Chat Model
 - Simple Memory
 - HTTP Request Tool
@@ -73,11 +74,14 @@ After the AI Agent, use a Router with three routes:
 1. Sales
 2. Technical Support
 3. Billing
-Each route creates a department-specific ticket.
+Each route should create a department-specific ticket.
 Continue to an IF condition that checks whether the request is high priority:
-- TRUE: Send an urgent Slack notification
-- FALSE: Log the request in Google Sheets
-Finish successfully.`;
+If the request is high priority:
+- Send an urgent Slack notification
+If the request is not high priority:
+- Log the request in Google Sheets
+Finish successfully.
+Do not count the AI Agent's Chat Model, Memory, and Tools as normal execution nodes.`;
 
 describe('LocalAnalysisProvider operational fallback', () => {
   it('builds the customer-support fallback from owned semantic artifacts', async () => {
@@ -111,6 +115,8 @@ describe('LocalAnalysisProvider operational fallback', () => {
     expect(compiled.nodes.some((node) => node.category === 'merge' && /priority/i.test(node.name))).toBe(true);
     expect(compiled.connections.every((edge) => compiled.nodes.some((node) => node.id === edge.sourceNodeId) && compiled.nodes.some((node) => node.id === edge.targetNodeId))).toBe(true);
     expect(workflow.connections.filter((edge) => edge.connectionKind && edge.connectionKind !== 'execution')).toHaveLength(4);
+    expect(workflow.nodes.filter((node) => node.category === 'ai' && node.nodeKind !== 'ai-attachment')).toHaveLength(1);
+    expect(compiled.nodes.filter((node) => node.category === 'ai' && node.nodeKind !== 'ai-attachment')).toHaveLength(1);
   });
 
   it('retains a real temporal wait in a semantic fallback', async () => {

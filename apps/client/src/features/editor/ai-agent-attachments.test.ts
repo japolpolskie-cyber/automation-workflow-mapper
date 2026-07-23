@@ -63,4 +63,27 @@ describe('n8n AI Agent attachments', () => {
     expect(useEditorStore.getState().workflow.nodes.find((node) => node.id === attachmentId)).toMatchObject({ nodeKind: 'ai-attachment', attachmentType: 'memory' });
     expect(useEditorStore.getState().nodes.find((node) => node.data.domainNodeId === attachmentId)!.position).toEqual(position);
   });
+
+  it('projects generated attachments beneath their owning AI Agent', () => {
+    useEditorStore.getState().initialize(projectFor());
+    const agentId = useEditorStore.getState().addNode(manualLibraryFor('n8n').items.find((item) => item.id === 'ai')!, { x: 300, y: 100 }, 'n8n');
+    useEditorStore.getState().addAiAttachment(agentId, aiAttachmentOptions['chat-model'][0]!);
+    useEditorStore.getState().addAiAttachment(agentId, aiAttachmentOptions.memory[0]!);
+    useEditorStore.getState().addAiAttachment(agentId, aiAttachmentOptions.tool[0]!);
+    useEditorStore.getState().addAiAttachment(agentId, aiAttachmentOptions.tool[1]!);
+    const workflow = structuredClone(useEditorStore.getState().workflow);
+    const generated = { ...projectFor(), workflow, workflowSet: createWorkflowSetFromGraph(workflow), visualGraph: projectWorkflowToVisualGraph(workflow) };
+
+    useEditorStore.getState().initialize(generated);
+    const state = useEditorStore.getState();
+    const agentPosition = state.nodes.find((node) => node.data.domainNodeId === agentId)!.position;
+    const attachmentPositions = state.nodes.filter((node) => node.data.node.nodeKind === 'ai-attachment').map((node) => node.position);
+    expect(attachmentPositions).toHaveLength(4);
+    expect(attachmentPositions.every((position) => position.y > agentPosition.y)).toBe(true);
+
+    state.autoLayout('LR');
+    const laidOut = useEditorStore.getState();
+    const laidOutAgent = laidOut.nodes.find((node) => node.data.domainNodeId === agentId)!.position;
+    expect(laidOut.nodes.filter((node) => node.data.node.nodeKind === 'ai-attachment').every((node) => node.position.y > laidOutAgent.y)).toBe(true);
+  });
 });

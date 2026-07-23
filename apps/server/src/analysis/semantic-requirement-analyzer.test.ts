@@ -8,6 +8,7 @@ describe('semantic requirement analysis', () => {
     const result = analyzer.analyze(`Create an n8n workflow for customer support.
 The workflow should start when a customer submits a form through a webhook.
 Use an AI Agent to analyze the message.
+The AI Agent should use:
 - OpenAI Chat Model
 - Simple Memory
 - HTTP Request Tool
@@ -17,14 +18,18 @@ After the AI Agent, use a Router with three routes:
 2. Technical Support
 3. Billing
 Continue to an IF condition:
-- TRUE: Send an urgent Slack notification
-- FALSE: Log the request in Google Sheets
-Finish successfully.`);
+If the request is high priority:
+- Send an urgent Slack notification
+If the request is not high priority:
+- Log the request in Google Sheets
+Finish successfully.
+Do not count the AI Agent's Chat Model, Memory, and Tools as normal execution nodes.`);
 
     const instruction = result.units.find((unit) => unit.kind === 'authoring-instruction');
     expect(instruction?.executable).toBe(false);
 
     const agent = result.units.find((unit) => unit.kind === 'ai-agent');
+    expect(result.units.filter((unit) => unit.kind === 'ai-agent')).toHaveLength(1);
     const resources = result.units.filter((unit) => unit.kind === 'ai-resource');
     expect(resources).toHaveLength(4);
     expect(resources.every((unit) => unit.parentId === agent?.id && !unit.executable)).toBe(true);

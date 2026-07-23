@@ -1,6 +1,6 @@
 import dagre from '@dagrejs/dagre';
 import { addEdge, applyEdgeChanges, applyNodeChanges, MarkerType, reconnectEdge, type Connection, type Edge, type EdgeChange, type Node, type NodeChange, type XYPosition } from '@xyflow/react';
-import { aiAttachmentPortFor, isAiAttachmentConnection, isAiAttachmentNode, isN8nAiAgent, inferWorkflowConnections, projectWorkflowToVisualGraph, type AiAgentAttachmentSummary, type AiAttachmentType, type Platform, type Project, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
+import { aiAttachmentPortFor, aiAttachmentPositions, isAiAttachmentConnection, isAiAttachmentNode, isN8nAiAgent, inferWorkflowConnections, projectWorkflowToVisualGraph, type AiAgentAttachmentSummary, type AiAttachmentType, type Platform, type Project, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
 import { create } from 'zustand';
 import type { ManualLibraryItem } from './manual-platform-library';
 import { branchControlFor, createEditorBranch, MAX_DYNAMIC_BRANCHES, readEditorBranches, writeEditorBranches } from './editor-branches';
@@ -208,10 +208,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         positions.set(negativeId, { ...negativePoint, [axis]: midpoint + 95 });
       }
     }
+    const domainPositions = new Map(state.nodes.flatMap((node) => {
+      const position = positions.get(node.id);
+      return position && !isAiAttachmentNode(node.data.node) ? [[node.data.domainNodeId, position] as const] : [];
+    }));
+    for (const [domainId, position] of aiAttachmentPositions(state.workflow, domainPositions)) positions.set(`visual-${domainId}`, position);
     return {
       ...record(state),
       nodes: state.nodes.map((node) => {
-        if (!includedVisualIds.has(node.id)) return node;
+        if (!includedVisualIds.has(node.id) && !isAiAttachmentNode(node.data.node)) return node;
         return { ...node, position: positions.get(node.id) ?? node.position };
       }),
     };

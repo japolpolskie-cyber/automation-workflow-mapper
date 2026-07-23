@@ -112,15 +112,17 @@ function detectUnsupportedCycles(workflow: CanonicalWorkflow, issues: GraphIssue
 }
 
 export function projectWorkflowToVisualGraph(workflow: CanonicalWorkflow): VisualGraphProjection {
-  const incoming = new Map(workflow.nodes.map((node) => [node.id, 0]));
-  for (const connection of workflow.connections) incoming.set(connection.targetNodeId, (incoming.get(connection.targetNodeId) ?? 0) + 1);
+  const executionNodes = workflow.nodes.filter((node) => !isAiAttachmentNode(node));
+  const executionConnections = workflow.connections.filter((edge) => !isAiAttachmentConnection(edge));
+  const incoming = new Map(executionNodes.map((node) => [node.id, 0]));
+  for (const connection of executionConnections) incoming.set(connection.targetNodeId, (incoming.get(connection.targetNodeId) ?? 0) + 1);
   const depth = new Map<string, number>();
-  const queue = workflow.nodes.filter((node) => (incoming.get(node.id) ?? 0) === 0).map((node) => node.id);
+  const queue = executionNodes.filter((node) => (incoming.get(node.id) ?? 0) === 0).map((node) => node.id);
   for (const id of queue) depth.set(id, 0);
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const id = queue[cursor];
     if (!id) continue;
-    for (const connection of workflow.connections.filter((item) => item.sourceNodeId === id)) {
+    for (const connection of executionConnections.filter((item) => item.sourceNodeId === id)) {
       const nextDepth = (depth.get(id) ?? 0) + 1;
       depth.set(connection.targetNodeId, Math.max(depth.get(connection.targetNodeId) ?? 0, nextDepth));
       const remaining = (incoming.get(connection.targetNodeId) ?? 1) - 1;
@@ -129,12 +131,32 @@ export function projectWorkflowToVisualGraph(workflow: CanonicalWorkflow): Visua
     }
   }
   const rows = new Map<number, number>();
-  const nodes = workflow.nodes.map((node, index) => {
+  const executionPositions = new Map<string, { x: number; y: number }>();
+  executionNodes.forEach((node, index) => {
     const layer = depth.get(node.id) ?? index;
     const row = rows.get(layer) ?? 0; rows.set(layer, row + 1);
-    return { id: `visual-${node.id}`, position: { x: layer * 320, y: row * 190 }, data: { domainNodeId: node.id } };
+    executionPositions.set(node.id, { x: layer * 320, y: row * 190 });
   });
+  const positions = new Map([...executionPositions, ...aiAttachmentPositions(workflow, executionPositions)]);
+  const nodes = workflow.nodes.map((node, index) => ({ id: `visual-${node.id}`, position: positions.get(node.id) ?? { x: index * 320, y: 0 }, data: { domainNodeId: node.id } }));
   return { nodes, edges: workflow.connections.map((connection) => ({ id: `visual-${connection.id}`, source: `visual-${connection.sourceNodeId}`, target: `visual-${connection.targetNodeId}`, data: { domainConnectionId: connection.id } })) };
+}
+
+export function aiAttachmentPositions(workflow: CanonicalWorkflow, executionPositions: ReadonlyMap<string, { x: number; y: number }>): Map<string, { x: number; y: number }> {
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const agent of workflow.nodes.filter(isN8nAiAgent)) {
+    const origin = executionPositions.get(agent.id);
+    if (!origin) continue;
+    const attachmentIds = workflow.connections
+      .filter((edge) => edge.targetNodeId === agent.id && isAiAttachmentConnection(edge))
+      .map((edge) => edge.sourceNodeId);
+    const count = attachmentIds.length;
+    attachmentIds.forEach((id, index) => positions.set(id, {
+      x: origin.x + 40 + (index - (count - 1) / 2) * 240,
+      y: origin.y + 250,
+    }));
+  }
+  return positions;
 }
 
 export function applyVisualTopology(workflow: CanonicalWorkflow, graph: VisualGraphProjection): CanonicalWorkflow {
