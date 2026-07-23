@@ -17,6 +17,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   LifeBuoy,
+  LoaderCircle,
   Plus,
   RotateCcw,
   Search,
@@ -26,7 +27,7 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { customTemplateApi, projectApi } from "./api/projects";
 import { CustomTemplateDialog } from "./components/CustomTemplateDialog";
 import { ConfirmationDialog } from "./components/ConfirmationDialog";
@@ -47,6 +48,7 @@ export default function App() {
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [projectLoadFailed, setProjectLoadFailed] = useState(false);
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -68,24 +70,25 @@ export default function App() {
   const [projectPendingDelete, setProjectPendingDelete] =
     useState<Project | null>(null);
   const [projectDeleteBusy, setProjectDeleteBusy] = useState(false);
+  const [projectActionBusyId, setProjectActionBusyId] = useState<string | null>(null);
+  const projectRequests = useRef(new Set<string>());
 
-  useEffect(() => {
-    projectApi
-      .list()
-      .then(setProjects)
-      .catch((cause: unknown) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Projects could not be loaded. Confirm the local server is running, then try again.",
-        ),
-      )
-      .finally(() => setLoading(false));
-    projectApi
-      .listArchived()
-      .then(setArchivedProjects)
-      .catch(() => setError("Archived projects could not be loaded."));
+  const loadProjects = useCallback(async () => {
+    setLoading(true);
+    setProjectLoadFailed(false);
+    try {
+      const [active, archived] = await Promise.all([projectApi.list(), projectApi.listArchived()]);
+      setProjects(active);
+      setArchivedProjects(archived);
+      setError("");
+    } catch (cause) {
+      setProjectLoadFailed(true);
+      setError(cause instanceof Error ? cause.message : "Projects could not be loaded. Confirm the local server is running, then try again.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+  useEffect(() => { void loadProjects(); }, [loadProjects]);
   useEffect(() => {
     customTemplateApi
       .list()
@@ -146,12 +149,15 @@ export default function App() {
     );
   };
   const archiveProject = async (project: Project) => {
+    if (projectRequests.current.has(project.id)) return;
     if (
       !window.confirm(
         `Archive "${project.name}"? It will be removed from Your projects, while its workflow and history remain saved.`,
       )
     )
       return;
+    projectRequests.current.add(project.id);
+    setProjectActionBusyId(project.id);
     setError("");
     try {
       await projectApi.archive(project.id);
@@ -168,6 +174,9 @@ export default function App() {
           ? cause.message
           : "The project could not be archived.",
       );
+    } finally {
+      projectRequests.current.delete(project.id);
+      setProjectActionBusyId(null);
     }
   };
   const restoreProject = async (project: Project) => {
@@ -187,6 +196,9 @@ export default function App() {
     }
   };
   const deleteProject = async (project: Project) => {
+    if (projectRequests.current.has(project.id)) return;
+    projectRequests.current.add(project.id);
+    setProjectActionBusyId(project.id);
     setProjectDeleteBusy(true);
     setError("");
     try {
@@ -199,6 +211,8 @@ export default function App() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The project could not be deleted.");
     } finally {
+      projectRequests.current.delete(project.id);
+      setProjectActionBusyId(null);
       setProjectDeleteBusy(false);
     }
   };
@@ -463,7 +477,7 @@ export default function App() {
               <div className="error-banner enhanced-feedback" role="alert">
                 <CircleHelp size={18} />
                 <div>
-                  <strong>Projects are temporarily unavailable</strong>
+                  <strong>{projectLoadFailed ? "Projects are temporarily unavailable" : "The project action could not be completed"}</strong>
                   <p>{error}</p>
                 </div>
               </div>
@@ -528,36 +542,20 @@ export default function App() {
                         Open blank workflow
                       </button>
                     )}
-                    {showArchived ? (
-                      <button
-                        type="button"
-                        className="project-archive"
-                        aria-label={`Restore ${project.name}`}
-                        title="Restore project"
-                        onClick={() => void restoreProject(project)}
-                      >
-                        <RotateCcw size={15} />
+                    <div className="project-actions" aria-label={`Actions for ${project.name}`}>
+                      {showArchived ? (
+                        <button type="button" className="project-archive" aria-label={`Restore ${project.name}`} title="Restore project" onClick={() => void restoreProject(project)}>
+                          <RotateCcw size={15} />
+                        </button>
+                      ) : (
+                        <button type="button" className="project-archive" aria-label={`Archive ${project.name}`} title="Archive project" disabled={projectActionBusyId === project.id} onClick={() => void archiveProject(project)}>
+                          {projectActionBusyId === project.id ? <LoaderCircle className="spin" size={15} /> : <Archive size={15} />}
+                        </button>
+                      )}
+                      <button type="button" className="project-delete" aria-label={`Delete ${project.name}`} title="Delete project permanently" disabled={projectActionBusyId === project.id} onClick={() => setProjectPendingDelete(project)}>
+                        <Trash2 size={15} />
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="project-archive"
-                        aria-label={`Archive ${project.name}`}
-                        title="Archive project"
-                        onClick={() => void archiveProject(project)}
-                      >
-                        <Archive size={15} />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="project-delete"
-                      aria-label={`Delete ${project.name}`}
-                      title="Delete project permanently"
-                      onClick={() => setProjectPendingDelete(project)}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -567,20 +565,26 @@ export default function App() {
                   <Workflow size={28} />
                 </span>
                 <h3>
-                  {query || platform !== "all"
+                  {projectLoadFailed
+                    ? "Projects are temporarily unavailable"
+                    : query || platform !== "all"
                     ? "No matching projects"
                     : showArchived
                       ? "No archived projects"
                     : "Your first workflow starts here"}
                 </h3>
                 <p>
-                  {query || platform !== "all"
+                  {projectLoadFailed
+                    ? "Confirm the local server is running, then retry. No project data has been removed."
+                    : query || platform !== "all"
                     ? "Try adjusting the search or platform filter."
                     : showArchived
                       ? "Projects you archive will appear here and can be restored at any time."
                     : "Create a project, choose a platform, and turn a scope of work into a reviewable draft plan."}
                 </p>
-                {!showArchived && !query && platform === "all" && (
+                {projectLoadFailed ? (
+                  <button className="button secondary" onClick={() => void loadProjects()}>Retry loading projects</button>
+                ) : !showArchived && !query && platform === "all" && (
                   <button
                     className="button primary"
                     onClick={() => {

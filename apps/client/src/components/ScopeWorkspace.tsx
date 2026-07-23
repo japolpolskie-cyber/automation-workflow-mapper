@@ -23,6 +23,7 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
   const [analysisPhase, setAnalysisPhase] = useState<'idle' | 'saving' | 'generating' | 'processing' | 'complete'>('idle');
   const [analysis, setAnalysis] = useState<WorkflowAnalysisResult | null>(project.workflow.nodes.length ? { workflow: project.workflow, graphValidation: { valid: true, errorCount: 0, warningCount: 0 }, provider: 'local', analyzedAt: project.updatedAt } : null);
   const [providerStatus, setProviderStatus] = useState<AnalysisProviderStatus | null>(null);
+  const analysisRequest = useRef(false);
   useEffect(() => {
     let active = true;
     projectApi.analysisStatus().then((status) => { if (active) setProviderStatus(status); }).catch(() => { if (active) setProviderStatus(null); });
@@ -47,7 +48,7 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
   }, [analysisPhase, analysisSeconds]);
   const friendlyError = useMemo(() => {
     if (!error) return null;
-    if (/fetch|network|connect/i.test(error)) return { title: 'The analysis service is not available', detail: 'Confirm the local server and your selected AI provider are running, then try again. Your requirements are still here.' };
+    if (/fetch|network|connect|unavailable|service/i.test(error)) return { title: 'The analysis service is not available', detail: 'Confirm the local server and your selected AI provider are running, then try again. Your requirements are still here.' };
     if (/timeout|timed out/i.test(error)) return { title: 'Analysis took longer than expected', detail: 'The local model may still be loading. Wait a moment and retry; your requirements have not been lost.' };
     return { title: 'We could not complete that step', detail: error };
   }, [error]);
@@ -83,8 +84,10 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The scope could not be saved.'); }
     finally { setSaving(false); }
   };
-  const analyze = async (replaceExisting = false, workflowMode: 'auto' | 'single' = 'auto') => {
-    if (replaceExisting) setAnalysis(null);
+  const analyze = async (_replaceExisting = false, workflowMode: 'auto' | 'single' = 'auto') => {
+    void _replaceExisting;
+    if (analysisRequest.current) return;
+    analysisRequest.current = true;
     setAnalyzing(true); setAnalysisPhase('saving'); setError(''); setSaved(false);
     try {
       await projectApi.updateScope(project.id, text);
@@ -95,7 +98,7 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
       const updated = await projectApi.get(project.id); onSaved(updated); setSaved(true);
       setAnalysisPhase('complete');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Requirements analysis failed.'); }
-    finally { setAnalyzing(false); setAnalysisPhase('idle'); }
+    finally { analysisRequest.current = false; setAnalyzing(false); setAnalysisPhase('idle'); }
   };
 
   return <div className="scope-page">

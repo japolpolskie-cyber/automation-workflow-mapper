@@ -84,7 +84,7 @@ a {
   background: var(--green);
   box-shadow: 0 3px 10px #174e3b24;
 }
-.button.primary:hover {
+.button.primary:hover:not(:disabled) {
   background: var(--green-dark);
   transform: translateY(-1px);
 }
@@ -92,10 +92,21 @@ a {
   color: #39443f;
   background: #f1f3f2;
 }
+.button.secondary:hover:not(:disabled) {
+  background: #e7ebe9;
+}
+.button:focus-visible {
+  outline: 2px solid var(--color-focus, #2d9d72);
+  outline-offset: 2px;
+}
 .button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
+}
+.button > .spin {
+  flex: 0 0 auto;
 }
 .new-project {
   width: 100%;
@@ -412,6 +423,7 @@ h1 em {
   flex-direction: column;
   justify-content: space-between;
   transition: 0.18s ease;
+  overflow: hidden;
 }
 .project-card-open {
   position: absolute;
@@ -426,11 +438,16 @@ h1 em {
   outline: 2px solid var(--color-focus, #2d9d72);
   outline-offset: 2px;
 }
-.project-archive,
-.project-delete {
+.project-actions {
   position: absolute;
+  right: 14px;
   bottom: 11px;
   z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+.project-archive,
+.project-delete {
   width: 28px;
   height: 28px;
   display: grid;
@@ -441,8 +458,8 @@ h1 em {
   color: var(--color-text-muted, #69746e);
   cursor: pointer;
 }
-.project-archive { right: 14px; }
-.project-delete { right: 50px; }
+.project-archive:disabled,
+.project-delete:disabled { cursor: wait; opacity: .65; }
 .project-archive:hover,
 .project-archive:focus-visible,
 .project-delete:hover,
@@ -478,10 +495,15 @@ h1 em {
 }
 .card-top,
 .card-meta {
-  padding-right: 34px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.card-top {
+  width: 100%;
+}
+.card-meta {
+  padding-right: 82px;
 }
 .platform-mark {
   display: inline-flex;
@@ -501,6 +523,9 @@ h1 em {
   font: 700 12px Manrope;
 }
 .project-status {
+  flex: 0 0 auto;
+  width: fit-content;
+  margin-left: auto;
   padding: 4px 8px;
   border-radius: 20px;
   color: #746845;
@@ -512,19 +537,29 @@ h1 em {
   margin: 16px 0 6px;
   color: #24312b;
   font: 600 15px Manrope;
+  overflow-wrap: anywhere;
 }
 .project-card p {
   margin: 0;
   color: #818a85;
   font-size: 12px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 .card-meta {
   padding-top: 13px;
   border-top: 1px solid #eef0ef;
   color: #929a96;
   font-size: 10px;
+  min-width: 0;
+  gap: 8px;
 }
+.card-meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.card-meta time { white-space: nowrap; flex: 0 1 auto; }
 .skeleton {
   border: 0;
   background: linear-gradient(100deg, #eaedeb 30%, #f5f6f5 50%, #eaedeb 70%);

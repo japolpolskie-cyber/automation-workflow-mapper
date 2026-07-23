@@ -75,4 +75,26 @@ describe('ScopeWorkspace', () => {
     expect(screen.queryByText('Choose how to continue')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Analyze automatically' })).toBeDisabled();
   });
+
+  it('submits generation once, preserves requirements, and restores controls after failure', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/ai/status')) return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: { provider: 'local', available: true, models: ['preview'], message: 'ready' }, error: null, meta: { requestId: 'test' } }) };
+      if (init?.method === 'PATCH') return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: project, error: null, meta: { requestId: 'test' } }) };
+      return { ok: false, status: 503, headers: { get: () => 'application/json' }, json: async () => ({ success: false, data: null, error: { code: 'UNAVAILABLE', message: 'The analysis service is temporarily unavailable.' }, meta: { requestId: 'test' } }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ScopeWorkspace project={project} onBack={vi.fn()} onSaved={vi.fn()} onOpenBuilder={undefined} />);
+    const requirements = 'When a request arrives, route it to the correct support team.';
+    fireEvent.change(screen.getByLabelText('Scope of Work text'), { target: { value: requirements } });
+    const analyze = screen.getByRole('button', { name: 'Analyze automatically' });
+
+    fireEvent.click(analyze);
+    fireEvent.click(analyze);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The analysis service is not available');
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(screen.getByLabelText('Scope of Work text')).toHaveValue(requirements);
+    expect(screen.getByRole('button', { name: 'Analyze automatically' })).toBeEnabled();
+  });
 });
