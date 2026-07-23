@@ -16,7 +16,7 @@ const terminalOutcome = /^(?:finish|end|terminate|complete)\b/i;
 const eventWait = /\bwait\s+(?:for|until)\s+(?:an?\s+)?(?:approval|callback|response|signature|payment|status|event)\b/i;
 const temporalWait = /\bwait\s+(?:for\s+)?(?:(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:seconds?|minutes?|hours?|days?|weeks?)|until\s+(?:tomorrow|[^.\n]*(?:am|pm|\d{1,2}:\d{2})))\b/i;
 const sequence = /^(?:after|continue to|next|then)\b/i;
-const operation = /^(?:receive|analy[sz]e|extract|classify|create|update|send|log|store|retrieve|fetch|notify|assign|generate|process|validate)\b/i;
+const operation = /^(?:(?:each route\s+)?(?:receive|analy[sz]e|extract|classify|create|update|send|log|store|retrieve|fetch|notify|assign|generate|process|validate|creates?))\b/i;
 const branchMarker = /^(?:[-*]\s*)?(TRUE|FALSE)\s*[:—-]\s*(.+)$/i;
 const listItem = /^\s*(?:[-*]|\d+[.)])\s+(.+)$/;
 
@@ -59,7 +59,7 @@ export class SemanticRequirementAnalyzer {
       const kind = classify(line, { activeAgent, activeRouter, activeCondition });
       if (!kind) continue;
       const executable = !['authoring-instruction', 'authoring-constraint', 'ai-resource', 'route', 'sequence'].includes(kind);
-      const parentId = kind === 'ai-resource' ? activeAgent : kind === 'route' ? activeRouter : null;
+      const parentId = kind === 'ai-resource' ? activeAgent : kind === 'route' || (kind === 'operation' && /^each route\b/i.test(line.content)) ? activeRouter : null;
       const unit = add(units, kind, line, executable, parentId);
 
       if (kind === 'ai-agent') { activeAgent = unit.id; activeRouter = null; activeCondition = null; }

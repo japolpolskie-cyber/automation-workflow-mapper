@@ -62,7 +62,60 @@ Workflow Mapping Rules
 - Add an explicit connection between every related node.
 - Use an IF node for binary decisions.`;
 
+const semanticSupportScope = `Create an n8n workflow for handling customer support requests.
+The workflow should start when a customer submits a support form through a webhook.
+Use an AI Agent to analyze the message, identify the department, determine urgency, and create a short summary.
+- OpenAI Chat Model
+- Simple Memory
+- HTTP Request Tool
+- Vector Store Tool
+After the AI Agent, use a Router with three routes:
+1. Sales
+2. Technical Support
+3. Billing
+Each route creates a department-specific ticket.
+Continue to an IF condition that checks whether the request is high priority:
+- TRUE: Send an urgent Slack notification
+- FALSE: Log the request in Google Sheets
+Finish successfully.`;
+
 describe('LocalAnalysisProvider operational fallback', () => {
+  it('builds the customer-support fallback from owned semantic artifacts', async () => {
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: semanticSupportScope,
+      projectName: 'Customer Support',
+      platform: 'n8n',
+    }) as CanonicalWorkflow;
+
+    expect(workflow.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: 'webhook', name: expect.stringMatching(/Webhook/) }),
+      expect.objectContaining({ category: 'ai', name: expect.stringMatching(/AI Agent/) }),
+      expect.objectContaining({ category: 'router', name: 'Route by department' }),
+      expect.objectContaining({ name: 'Create department ticket' }),
+      expect.objectContaining({ category: 'condition', name: 'Is the request high priority?' }),
+      expect.objectContaining({ name: 'Send urgent Slack notification', service: 'Slack' }),
+      expect.objectContaining({ name: 'Log request in Google Sheets', service: 'Google Sheets' }),
+      expect.objectContaining({ category: 'end' }),
+    ]));
+    expect(workflow.nodes.map((node) => node.name)).not.toEqual(expect.arrayContaining([
+      expect.stringMatching(/Wait the AI Agent/i),
+      expect.stringMatching(/Wait the department ticket/i),
+    ]));
+    expect(workflow.connections.filter((edge) => edge.sourceNodeId === workflow.nodes.find((node) => node.category === 'router')?.id).map((edge) => edge.label)).toEqual(['Sales', 'Technical Support', 'Billing']);
+    expect(workflow.connections.filter((edge) => edge.branchLabel).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
+  });
+
+  it('retains a real temporal wait in a semantic fallback', async () => {
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: `${semanticSupportScope.replace('Continue to an IF condition', 'Wait five minutes.\nContinue to an IF condition')}`,
+      projectName: 'Delayed Customer Support',
+      platform: 'n8n',
+    }) as CanonicalWorkflow;
+    expect(workflow.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: 'delay', name: 'Wait five minutes' }),
+    ]));
+  });
+
   it('ignores hiring prose and extracts explicit trigger/action requirements', async () => {
     const workflow = await new LocalAnalysisProvider().analyze({ scope, projectName: 'Asana CRM', platform: 'make' }) as CanonicalWorkflow;
     expect(workflow.nodes.map((node) => node.name).join(' ')).not.toMatch(/we are seeking|skilled make/i);

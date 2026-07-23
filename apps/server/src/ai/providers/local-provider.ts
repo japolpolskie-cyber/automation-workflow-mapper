@@ -1,5 +1,6 @@
-import { leadQualificationWorkflow, type CanonicalWorkflow, type WorkflowBranch, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
+import { aiAttachmentPortFor, leadQualificationWorkflow, type CanonicalWorkflow, type SemanticRequirementAnalysis, type SemanticRequirementUnit, type WorkflowBranch, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
 import type { AnalysisProvider, AnalysisProviderInput } from './analysis-provider.js';
+import { SemanticRequirementAnalyzer } from '../../analysis/semantic-requirement-analyzer.js';
 
 const serviceNames = ['Asana', 'Google Drive', 'Salesforce', 'HubSpot', 'GoHighLevel', 'Slack', 'Microsoft Teams', 'Google Sheets', 'Airtable', 'Apollo', 'Facebook Lead Ads', 'Gmail', 'Outlook', 'Notion', 'Shopify', 'Stripe', 'Twilio'];
 const boilerplate = /\b(we are seeking|skilled .+ expert|scope of work|essential for improving|help us streamline|job description|ideal candidate|responsibilit(?:y|ies)|qualification|deliverable)\b/i;
@@ -8,6 +9,7 @@ const operationalStart = /^(automatically\s+|create\s+|include\s+|send\s+|update
 
 const makeNode = (category: WorkflowNode['category'], name: string, service: string | null, operation: string, description = ''): WorkflowNode => ({ id: crypto.randomUUID(), category, name, description, service, operation, purpose: description, expectedResult: '', icon: 'generic-action', estimatedExecution: category === 'delay' ? 'Depends on configured wait' : 'Under 1 minute', inputs: [], outputs: [], credentials: service ? [`${service} connection`] : [], configuration: {}, status: 'incomplete', configurationCompleteness: 35, conditions: [], decisionRule: null, notes: '', bestPractices: [], potentialErrors: [], alternativeImplementations: [], performanceNotes: [], securityNotes: [], riskLevel: ['api_request', 'database', 'crm'].includes(category) ? 'high' : 'low' });
 const connect = (sourceNodeId: string, targetNodeId: string, label = '', branchLabel: WorkflowConnection['branchLabel'] = null, condition: string | null = null): WorkflowConnection => ({ id: crypto.randomUUID(), sourceNodeId, targetNodeId, sourcePort: 'output', targetPort: 'input', label, branchLabel, style: branchLabel ? 'conditional' : 'default', condition, routeType: branchLabel ? 'conditional' : 'success', mappings: [] });
+const semanticAnalyzer = new SemanticRequirementAnalyzer();
 
 export class LocalAnalysisProvider implements AnalysisProvider {
   public readonly name = 'local' as const;
@@ -50,6 +52,8 @@ function extractOperationalArchitecture(scope: string, platform: AnalysisProvide
   if (portfolio) return portfolio;
   const explicitSequence = extractExplicitWorkflowSequence(scope);
   if (explicitSequence) return explicitSequence;
+  const semantic = semanticAnalyzer.analyze(scope);
+  if (hasOwnedSemanticStructure(semantic)) return buildSemanticFallback(semantic);
   if (!/^\s*(?:trigger|action)\s*:/im.test(scope) && /\b(?:when|whenever|upon)\b/i.test(scope)) return addEvidenceBasedIterators(extractProceduralArchitecture(scope), platform);
   const lines = scope.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
   const nodes: WorkflowNode[] = []; const connections: WorkflowConnection[] = []; const branches: WorkflowBranch[] = [];
@@ -70,6 +74,142 @@ function extractOperationalArchitecture(scope: string, platform: AnalysisProvide
     nodes.push(node); if (previous) connections.push(connect(previous.id, node.id)); previous = node;
   }
   return { nodes, connections, branches };
+}
+
+function hasOwnedSemanticStructure(analysis: SemanticRequirementAnalysis): boolean {
+  return analysis.units.some((unit) => unit.kind === 'ai-resource' || unit.kind === 'route' || unit.kind === 'branch');
+}
+
+function buildSemanticFallback(analysis: SemanticRequirementAnalysis): ExtractedArchitecture {
+  const nodes: WorkflowNode[] = [];
+  const connections: WorkflowConnection[] = [];
+  const branches: WorkflowBranch[] = [];
+  const nodesByUnit = new Map<string, WorkflowNode>();
+  const routesByRouter = new Map<string, SemanticRequirementUnit[]>();
+  const branchTails: WorkflowNode[] = [];
+  let tails: WorkflowNode[] = [];
+
+  const append = (node: WorkflowNode) => {
+    for (const tail of tails) connections.push(connect(tail.id, node.id));
+    nodes.push(node);
+    tails = [node];
+    return node;
+  };
+
+  for (const unit of analysis.units) {
+    if (unit.kind === 'route' && unit.parentId) {
+      const routes = routesByRouter.get(unit.parentId) ?? [];
+      routes.push(unit);
+      routesByRouter.set(unit.parentId, routes);
+      continue;
+    }
+    if ((!unit.executable && unit.kind !== 'ai-resource') || unit.kind === 'branch') {
+      continue;
+    }
+
+    if (unit.kind === 'trigger') {
+      const webhook = /\bwebhook\b/i.test(unit.text);
+      const node = append(makeNode(webhook ? 'webhook' : 'trigger', webhook ? 'Webhook — Receive request' : sentenceTitle(unit.text), webhook ? 'Webhook' : findService(unit.text), 'Receive event', unit.text));
+      nodesByUnit.set(unit.id, node);
+      continue;
+    }
+
+    if (unit.kind === 'ai-agent') {
+      const node = append(makeNode('ai', 'AI Agent — Analyze request', 'n8n', 'AI Agent', unit.text));
+      nodesByUnit.set(unit.id, node);
+      continue;
+    }
+
+    if (unit.kind === 'ai-resource' && unit.parentId) {
+      const agent = nodesByUnit.get(unit.parentId);
+      if (!agent) continue;
+      const attachmentType = /memory/i.test(unit.text) ? 'memory' as const : /model/i.test(unit.text) ? 'chat-model' as const : 'tool' as const;
+      const node = {
+        ...makeNode('ai', sentenceTitle(unit.text), null, sentenceTitle(unit.text), unit.text),
+        nodeKind: 'ai-attachment' as const,
+        attachmentType,
+        attachmentSubtype: unit.text,
+        attachmentStatus: 'unconfigured' as const,
+      };
+      const connectionKind = aiAttachmentPortFor(attachmentType);
+      nodes.push(node);
+      connections.push({
+        ...connect(node.id, agent.id, sentenceTitle(unit.text)),
+        connectionKind,
+        sourcePort: 'attachment',
+        targetPort: connectionKind,
+      });
+      nodesByUnit.set(unit.id, node);
+      continue;
+    }
+
+    if (unit.kind === 'router') {
+      const node = append(makeNode('router', 'Route by department', null, 'Evaluate routes', unit.text));
+      nodesByUnit.set(unit.id, node);
+      continue;
+    }
+
+    if (unit.kind === 'binary-condition') {
+      const node = append(makeNode('condition', 'Is the request high priority?', null, 'Evaluate condition', unit.text));
+      node.decisionRule = { decisionQuestion: node.name, field: 'highPriority', operator: 'equals', comparisonValue: true, trueLabel: 'TRUE', falseLabel: 'FALSE' };
+      nodesByUnit.set(unit.id, node);
+      tails = [];
+      continue;
+    }
+
+    if (unit.kind === 'temporal-wait' || unit.kind === 'event-wait') {
+      const node = append(makeNode('delay', sentenceTitle(unit.text), null, unit.kind === 'event-wait' ? 'Wait for event' : 'Wait', unit.text));
+      nodesByUnit.set(unit.id, node);
+      continue;
+    }
+
+    if (unit.kind === 'operation') {
+      const category = actionCategory(unit.text);
+      const node = makeNode(category, semanticOperationTitle(unit.text), actionService(unit.text, ''), actionOperation(unit.text), unit.text);
+      const parent = unit.parentId ? analysis.units.find((candidate) => candidate.id === unit.parentId) : undefined;
+
+      if (parent?.kind === 'router') {
+        const routerNode = nodesByUnit.get(parent.id);
+        if (!routerNode) continue;
+        nodes.push(node);
+        for (const route of routesByRouter.get(parent.id) ?? []) {
+          connections.push({ ...connect(routerNode.id, node.id, route.text, null, `Department equals ${route.text}`), routeType: 'conditional', style: 'conditional' });
+          branches.push({ id: crypto.randomUUID(), sourceNodeId: routerNode.id, name: route.text, condition: { combinator: 'and', rules: [{ field: 'department', operator: 'equals', value: route.text }] }, destinationNodeId: node.id, isDefault: false });
+        }
+        tails = [node];
+      } else if (parent?.kind === 'branch' && parent.parentId) {
+        const decision = nodesByUnit.get(parent.parentId);
+        if (!decision || !parent.branchLabel) continue;
+        nodes.push(node);
+        connections.push(connect(decision.id, node.id, parent.branchLabel, parent.branchLabel, parent.branchLabel === 'TRUE' ? 'Condition is true' : 'Condition is false'));
+        branches.push({ id: crypto.randomUUID(), sourceNodeId: decision.id, name: parent.branchLabel, condition: { combinator: 'and', rules: [{ field: 'highPriority', operator: 'equals', value: parent.branchLabel === 'TRUE' }] }, destinationNodeId: node.id, isDefault: parent.branchLabel === 'FALSE' });
+        branchTails.push(node);
+      } else {
+        append(node);
+      }
+      nodesByUnit.set(unit.id, node);
+      continue;
+    }
+
+    if (unit.kind === 'terminal-outcome') {
+      const node = makeNode('end', 'End — Request handled', null, 'End workflow', unit.text);
+      const sources = branchTails.length ? branchTails : tails;
+      nodes.push(node);
+      for (const source of sources) connections.push(connect(source.id, node.id));
+      tails = [node];
+      branchTails.length = 0;
+      nodesByUnit.set(unit.id, node);
+    }
+  }
+
+  return { nodes, connections, branches };
+}
+
+function semanticOperationTitle(text: string): string {
+  if (/each route\b.*ticket/i.test(text)) return 'Create department ticket';
+  if (/slack/i.test(text)) return 'Send urgent Slack notification';
+  if (/google sheets/i.test(text)) return 'Log request in Google Sheets';
+  return actionTitle(text);
 }
 
 export function isLargeWorkflowPortfolio(scope: string): boolean {
