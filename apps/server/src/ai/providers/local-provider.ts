@@ -109,7 +109,7 @@ function buildSemanticFallback(analysis: SemanticRequirementAnalysis): Extracted
 
     if (unit.kind === 'trigger') {
       const webhook = /\bwebhook\b/i.test(unit.text);
-      const node = append(makeNode(webhook ? 'webhook' : 'trigger', webhook ? 'Webhook — Receive request' : sentenceTitle(unit.text), webhook ? 'Webhook' : findService(unit.text), 'Receive event', unit.text));
+      const node = append(makeNode('trigger', webhook ? 'Webhook — Receive request' : sentenceTitle(unit.text), webhook ? 'Webhook' : findService(unit.text), 'Receive event', unit.text));
       nodesByUnit.set(unit.id, node);
       continue;
     }
@@ -171,12 +171,15 @@ function buildSemanticFallback(analysis: SemanticRequirementAnalysis): Extracted
       if (parent?.kind === 'router') {
         const routerNode = nodesByUnit.get(parent.id);
         if (!routerNode) continue;
-        nodes.push(node);
+        const routeNodes: WorkflowNode[] = [];
         for (const route of routesByRouter.get(parent.id) ?? []) {
-          connections.push({ ...connect(routerNode.id, node.id, route.text, null, `Department equals ${route.text}`), routeType: 'conditional', style: 'conditional' });
-          branches.push({ id: crypto.randomUUID(), sourceNodeId: routerNode.id, name: route.text, condition: { combinator: 'and', rules: [{ field: 'department', operator: 'equals', value: route.text }] }, destinationNodeId: node.id, isDefault: false });
+          const routeNode = { ...node, id: crypto.randomUUID(), name: `Create ${route.text} department ticket` };
+          nodes.push(routeNode);
+          routeNodes.push(routeNode);
+          connections.push({ ...connect(routerNode.id, routeNode.id, route.text, null, `Department equals ${route.text}`), routeType: 'conditional', style: 'conditional' });
+          branches.push({ id: crypto.randomUUID(), sourceNodeId: routerNode.id, name: route.text, condition: { combinator: 'and', rules: [{ field: 'department', operator: 'equals', value: route.text }] }, destinationNodeId: routeNode.id, isDefault: false });
         }
-        tails = [node];
+        tails = routeNodes;
       } else if (parent?.kind === 'branch' && parent.parentId) {
         const decision = nodesByUnit.get(parent.parentId);
         if (!decision || !parent.branchLabel) continue;
@@ -187,7 +190,7 @@ function buildSemanticFallback(analysis: SemanticRequirementAnalysis): Extracted
       } else {
         append(node);
       }
-      nodesByUnit.set(unit.id, node);
+      if (!nodesByUnit.has(unit.id)) nodesByUnit.set(unit.id, node);
       continue;
     }
 

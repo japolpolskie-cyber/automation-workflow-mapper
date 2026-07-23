@@ -1,4 +1,5 @@
 import { canonicalWorkflowSchema, type CanonicalWorkflow, type WorkflowConnection, type WorkflowNode } from './domain.js';
+import { isAiAttachmentConnection } from './ai-agent-attachments.js';
 import { isExternalAction, resolveApplication } from './application-registry.js';
 import { migrateWorkflow } from './workflow-migration.js';
 
@@ -72,7 +73,7 @@ function enforceExternalFailurePaths(workflow: CanonicalWorkflow): CanonicalWork
 function insertExplicitMerges(nodes: WorkflowNode[], edges: WorkflowConnection[]) {
   const nextNodes = [...nodes]; let nextEdges = [...edges];
   for (const target of nodes) {
-    const incoming = nextEdges.filter((edge) => edge.targetNodeId === target.id && edge.routeType !== 'error');
+    const incoming = nextEdges.filter((edge) => edge.targetNodeId === target.id && edge.routeType !== 'error' && !isAiAttachmentConnection(edge));
     if (incoming.length < 2 || target.category === 'merge') continue;
     const merge = architectureNode('merge', `Merge before ${target.name}`, null, 'Wait for incoming route', `Combine converging routes before ${target.name}.`);
     nextNodes.push(merge);

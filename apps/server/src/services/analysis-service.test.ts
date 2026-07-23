@@ -19,6 +19,41 @@ function setup(provider: AnalysisProvider) {
 }
 
 describe('AnalysisService output boundary', () => {
+  it('accepts the semantic customer-support fallback through final preparation and validation', async () => {
+    const provider: AnalysisProvider = { name: 'ollama', async analyze() { return '{"connections":[{"connectionKind":"conditional"}]}'; }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
+    const database = createDatabase(':memory:'); databases.push(database);
+    const repository = new ProjectRepository(database);
+    const project = repository.create({ name: 'Customer Support', clientName: '', description: '', platform: 'n8n' });
+    repository.updateScope(project.id, `Create an n8n workflow for handling customer support requests.
+The workflow should start when a customer submits a support form through a webhook.
+Use an AI Agent to analyze the message, identify the department, determine urgency, and create a short summary.
+- OpenAI Chat Model
+- Simple Memory
+- HTTP Request Tool
+- Vector Store Tool
+After the AI Agent, use a Router with three routes:
+1. Sales
+2. Technical Support
+3. Billing
+Each route creates a department-specific ticket.
+Continue to an IF condition that checks whether the request is high priority:
+- TRUE: Send an urgent Slack notification
+- FALSE: Log the request in Google Sheets
+Finish successfully.`);
+
+    const result = await new AnalysisService(repository, provider).analyze(project.id);
+    const nodeIds = new Set(result.workflow.nodes.map((node) => node.id));
+
+    expect(result.provider).toBe('local');
+    expect(result.graphValidation.valid).toBe(true);
+    expect(result.workflow.connections.every((edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId))).toBe(true);
+    expect(result.workflow.nodes.filter((node) => /department ticket/i.test(node.name))).toHaveLength(3);
+    expect(result.workflow.nodes.some((node) => node.category === 'merge')).toBe(true);
+    expect(result.workflow.connections.filter((edge) => edge.branchLabel).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
+    expect(result.workflow.connections.filter((edge) => edge.connectionKind && edge.connectionKind !== 'execution')).toHaveLength(4);
+    expect(result.workflow.nodes.map((node) => node.name).join(' ')).not.toMatch(/Wait the AI Agent|Wait the department ticket/i);
+  });
+
   it('accepts Ollama output with exactly one valid trigger', async () => {
     const provider: AnalysisProvider = { name: 'ollama', async analyze() { return structuredClone(leadQualificationWorkflow); }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
     const { project, service } = setup(provider);

@@ -88,10 +88,12 @@ describe('LocalAnalysisProvider operational fallback', () => {
     }) as CanonicalWorkflow;
 
     expect(workflow.nodes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ category: 'webhook', name: expect.stringMatching(/Webhook/) }),
+      expect.objectContaining({ category: 'trigger', service: 'Webhook', name: expect.stringMatching(/Webhook/) }),
       expect.objectContaining({ category: 'ai', name: expect.stringMatching(/AI Agent/) }),
       expect.objectContaining({ category: 'router', name: 'Route by department' }),
-      expect.objectContaining({ name: 'Create department ticket' }),
+      expect.objectContaining({ name: 'Create Sales department ticket' }),
+      expect.objectContaining({ name: 'Create Technical Support department ticket' }),
+      expect.objectContaining({ name: 'Create Billing department ticket' }),
       expect.objectContaining({ category: 'condition', name: 'Is the request high priority?' }),
       expect.objectContaining({ name: 'Send urgent Slack notification', service: 'Slack' }),
       expect.objectContaining({ name: 'Log request in Google Sheets', service: 'Google Sheets' }),
@@ -103,6 +105,12 @@ describe('LocalAnalysisProvider operational fallback', () => {
     ]));
     expect(workflow.connections.filter((edge) => edge.sourceNodeId === workflow.nodes.find((node) => node.category === 'router')?.id).map((edge) => edge.label)).toEqual(['Sales', 'Technical Support', 'Billing']);
     expect(workflow.connections.filter((edge) => edge.branchLabel).map((edge) => edge.branchLabel)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
+    const compiled = compileAutomationArchitecture(workflow);
+    const validation = validateWorkflowGraph(compiled);
+    expect(validation.issues.filter((issue) => issue.severity === 'error'), JSON.stringify(validation.issues, null, 2)).toEqual([]);
+    expect(compiled.nodes.some((node) => node.category === 'merge' && /priority/i.test(node.name))).toBe(true);
+    expect(compiled.connections.every((edge) => compiled.nodes.some((node) => node.id === edge.sourceNodeId) && compiled.nodes.some((node) => node.id === edge.targetNodeId))).toBe(true);
+    expect(workflow.connections.filter((edge) => edge.connectionKind && edge.connectionKind !== 'execution')).toHaveLength(4);
   });
 
   it('retains a real temporal wait in a semantic fallback', async () => {
@@ -114,6 +122,20 @@ describe('LocalAnalysisProvider operational fallback', () => {
     expect(workflow.nodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ category: 'delay', name: 'Wait five minutes' }),
     ]));
+    expect(validateWorkflowGraph(compileAutomationArchitecture(workflow)).valid).toBe(true);
+  });
+
+  it('continues to reject invalid connection targets', async () => {
+    const workflow = await new LocalAnalysisProvider().analyze({
+      scope: semanticSupportScope,
+      projectName: 'Invalid target guard',
+      platform: 'n8n',
+    }) as CanonicalWorkflow;
+    workflow.connections[0] = { ...workflow.connections[0]!, targetNodeId: crypto.randomUUID() };
+    expect(validateWorkflowGraph(workflow)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'MISSING_TARGET_NODE', severity: 'error' })]),
+    });
   });
 
   it('ignores hiring prose and extracts explicit trigger/action requirements', async () => {
