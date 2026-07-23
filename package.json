@@ -3,23 +3,38 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "predev": "npm run build -w @awm/shared && npm run build -w @awm/knowledge && npm run build -w @awm/platforms",
     "dev": "concurrently -n client,server -c cyan,magenta \"npm:dev -w @awm/client\" \"npm:dev -w @awm/server\"",
+    "dev:desktop": "concurrently -k -n client,server,desktop -c cyan,magenta,yellow \"npm:dev -w @awm/client\" \"npm:dev -w @awm/server\" \"npm:dev -w @awm/desktop\"",
     "build": "npm run build -w @awm/shared && npm run build -w @awm/knowledge && npm run build -w @awm/platforms && npm run build -w @awm/server && npm run build -w @awm/client",
     "test": "npm run test -w @awm/shared && npm run build -w @awm/shared && npm run test -w @awm/knowledge && npm run build -w @awm/knowledge && npm run test -w @awm/platforms && npm run build -w @awm/platforms && npm run test -w @awm/server && npm run test -w @awm/client",
     "typecheck": "npm run typecheck -w @awm/shared && npm run build -w @awm/shared && npm run typecheck -w @awm/knowledge && npm run build -w @awm/knowledge && npm run typecheck -w @awm/platforms && npm run build -w @awm/platforms && npm run typecheck -w @awm/server && npm run typecheck -w @awm/client",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "typecheck:desktop": "npm run typecheck -w @awm/desktop"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",
     "concurrently": "^9.2.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.30.0",
     "prettier": "^3.6.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.35.0"
   },
-  "engines": { "node": ">=22.13" }
+  "engines": {
+    "node": ">=22.13"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.25.12": true,
+    "electron-winstaller@5.4.0": true,
+    "core-js@3.49.0": true
+  }
 }

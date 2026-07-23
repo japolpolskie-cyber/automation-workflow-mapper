@@ -1,0 +1,13 @@
+{
+  "name": "@awm/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && electron dist/main.js --dev-client",
+    "start:built": "npm run build && electron dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
