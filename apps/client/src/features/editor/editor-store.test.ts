@@ -14,6 +14,58 @@ const blankProject = (platform: Project['platform'] = 'n8n'): Project => {
   };
 };
 
+const routerLayoutProject = (branches: Array<{ id: string; label: string; target: string }>): Project => {
+  const base = blankProject('n8n');
+  const router = {
+    ...leadQualificationWorkflow.nodes[1]!,
+    id: crypto.randomUUID(),
+    category: 'router' as const,
+    name: 'Choose destination',
+    configuration: {
+      editorBranchControl: 'dynamic',
+      editorBranches: branches.map(({ id, label }, order) => ({ id, label, order })),
+    },
+  };
+  const targets = [...branches].reverse().map(({ target }) => ({
+    ...leadQualificationWorkflow.nodes[1]!,
+    id: crypto.randomUUID(),
+    name: target,
+  }));
+  const targetByName = new Map(targets.map((target) => [target.name, target]));
+  const merge = {
+    ...leadQualificationWorkflow.nodes[1]!,
+    id: crypto.randomUUID(),
+    category: 'merge' as const,
+    name: 'Continue combined flow',
+  };
+  const routeConnections = branches.map((branch) => ({
+    ...leadQualificationWorkflow.connections[0]!,
+    id: crypto.randomUUID(),
+    sourceNodeId: router.id,
+    targetNodeId: targetByName.get(branch.target)!.id,
+    sourcePort: branch.id,
+    label: branch.label,
+    branchLabel: null,
+    routeType: 'conditional' as const,
+    style: 'conditional' as const,
+  }));
+  const mergeConnections = targets.map((target) => ({
+    ...leadQualificationWorkflow.connections[0]!,
+    id: crypto.randomUUID(),
+    sourceNodeId: target.id,
+    targetNodeId: merge.id,
+  }));
+  const workflow = { ...base.workflow, nodes: [router, ...targets, merge], connections: [...routeConnections, ...mergeConnections] };
+  return {
+    ...base,
+    workflow,
+    workflowSet: createWorkflowSetFromGraph(workflow),
+    visualGraph: projectWorkflowToVisualGraph(workflow),
+  };
+};
+
+const positionByName = (name: string) => useEditorStore.getState().nodes.find((node) => node.data.node.name === name)!.position;
+
 describe('editor workflow layout isolation', () => {
   it('lays out only nodes owned by the selected workflow', () => {
     const now = new Date().toISOString();
@@ -225,6 +277,56 @@ describe('editor workflow layout isolation', () => {
     useEditorStore.getState().autoLayout('LR');
     const nodes = useEditorStore.getState().nodes;
     expect(nodes.find((node) => node.id === trueNode!.id)!.position.y).toBeLessThan(nodes.find((node) => node.id === falseNode!.id)!.position.y);
+  });
+
+  it.each([
+    [
+      { id: 'branch-zeta', label: 'North queue', target: 'Handle cobalt request' },
+      { id: 'branch-alpha', label: 'Central queue', target: 'Handle amber request' },
+    ],
+    [
+      { id: 'branch-third', label: 'Gamma lane', target: 'Prepare orchid record' },
+      { id: 'branch-first', label: 'Alpha lane', target: 'Prepare quartz record' },
+      { id: 'branch-fourth', label: 'Delta lane', target: 'Prepare cedar record' },
+      { id: 'branch-second', label: 'Beta lane', target: 'Prepare willow record' },
+    ],
+  ])('places %i configured router targets in branch order and centers their merge', (...branches) => {
+    const project = routerLayoutProject(branches);
+    const semantics = structuredClone(project.workflow.connections);
+    useEditorStore.getState().initialize(project);
+    useEditorStore.getState().autoLayout('LR');
+
+    const targetYs = branches.map((branch) => positionByName(branch.target).y);
+    expect(targetYs).toEqual([...targetYs].sort((left, right) => left - right));
+    expect(targetYs.slice(1).map((value, index) => value - targetYs[index]!)).toEqual(
+      Array.from({ length: targetYs.length - 1 }, () => 264),
+    );
+    expect(positionByName('Continue combined flow').y).toBeCloseTo(targetYs.reduce((sum, value) => sum + value, 0) / targetYs.length);
+    expect(useEditorStore.getState().workflow.connections).toEqual(semantics);
+  });
+
+  it('changes only visual order when configured router branches are reordered', () => {
+    const branches = [
+      { id: 'branch-one', label: 'Crimson choice', target: 'Process lunar item' },
+      { id: 'branch-two', label: 'Ivory choice', target: 'Process solar item' },
+      { id: 'branch-three', label: 'Teal choice', target: 'Process stellar item' },
+    ];
+    const project = routerLayoutProject(branches);
+    const semantics = structuredClone(project.workflow.connections);
+    useEditorStore.getState().initialize(project);
+    useEditorStore.getState().autoLayout('LR');
+    const firstOrder = branches.map((branch) => positionByName(branch.target).y);
+
+    const reordered = structuredClone(project);
+    const router = reordered.workflow.nodes.find((node) => node.category === 'router')!;
+    router.configuration.editorBranches = [...branches].reverse().map(({ id, label }, order) => ({ id, label, order }));
+    useEditorStore.getState().initialize(reordered);
+    useEditorStore.getState().autoLayout('LR');
+    const secondOrder = branches.map((branch) => positionByName(branch.target).y);
+
+    expect(firstOrder).toEqual([...firstOrder].sort((left, right) => left - right));
+    expect(secondOrder).toEqual([...secondOrder].sort((left, right) => right - left));
+    expect(useEditorStore.getState().workflow.connections).toEqual(semantics);
   });
 
   it('supports more than four router branches and preserves stable route handle IDs', () => {

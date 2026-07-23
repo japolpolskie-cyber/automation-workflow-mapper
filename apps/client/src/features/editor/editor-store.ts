@@ -208,6 +208,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         positions.set(negativeId, { ...negativePoint, [axis]: midpoint + 95 });
       }
     }
+    const branchAxis = direction === 'LR' ? 'y' : 'x';
+    for (const domain of state.workflow.nodes.filter((node) => branchControlFor(node) === 'dynamic')) {
+      const orderedTargets = readEditorBranches(domain).flatMap((branch) => {
+        const connection = state.workflow.connections.find((edge) => edge.sourceNodeId === domain.id && edge.sourcePort === branch.id);
+        const visualId = connection ? `visual-${connection.targetNodeId}` : null;
+        const position = visualId ? positions.get(visualId) : undefined;
+        return visualId && position ? [{ visualId, position }] : [];
+      });
+      if (orderedTargets.length < 2) continue;
+      const slots = orderedTargets.map(({ position }) => position[branchAxis]).sort((left, right) => left - right);
+      const center = slots.reduce((sum, value) => sum + value, 0) / slots.length;
+      const spacing = direction === 'LR' ? 264 : 370;
+      const firstSlot = center - (spacing * (slots.length - 1)) / 2;
+      orderedTargets.forEach(({ visualId, position }, index) => {
+        positions.set(visualId, { ...position, [branchAxis]: firstSlot + spacing * index });
+      });
+    }
+    for (const merge of state.workflow.nodes.filter((node) => node.category === 'merge')) {
+      const mergeId = `visual-${merge.id}`;
+      const mergePosition = positions.get(mergeId);
+      const incomingPositions = state.workflow.connections
+        .filter((edge) => edge.targetNodeId === merge.id)
+        .flatMap((edge) => {
+          const position = positions.get(`visual-${edge.sourceNodeId}`);
+          return position ? [position] : [];
+        });
+      if (!mergePosition || incomingPositions.length < 2) continue;
+      const center = incomingPositions.reduce((sum, position) => sum + position[branchAxis], 0) / incomingPositions.length;
+      positions.set(mergeId, { ...mergePosition, [branchAxis]: center });
+    }
     const domainPositions = new Map(state.nodes.flatMap((node) => {
       const position = positions.get(node.id);
       return position && !isAiAttachmentNode(node.data.node) ? [[node.data.domainNodeId, position] as const] : [];
