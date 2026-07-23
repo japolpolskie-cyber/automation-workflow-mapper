@@ -58,4 +58,17 @@ describe('ProjectRepository workflow-set persistence', () => {
     expect(repository.list()).toHaveLength(1);
     expect(repository.listArchived()).toHaveLength(0);
   });
+
+  it('permanently deletes only the selected project and cascades its saved versions', () => {
+    const database = createDatabase(':memory:'); databases.push(database);
+    const repository = new ProjectRepository(database);
+    const removed = repository.create({ name: 'Remove me', clientName: '', description: '', platform: 'n8n' });
+    const retained = repository.create({ name: 'Keep me', clientName: '', description: '', platform: 'make' });
+
+    expect(repository.delete(removed.id)?.id).toBe(removed.id);
+    expect(repository.findById(removed.id)).toBeNull();
+    expect(repository.findById(retained.id)?.id).toBe(retained.id);
+    expect(database.prepare('SELECT COUNT(*) AS count FROM project_versions WHERE project_id = ?').get(removed.id)).toEqual({ count: 0 });
+    expect(repository.delete(removed.id)).toBeNull();
+  });
 });

@@ -23,6 +23,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Workflow,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -64,6 +65,9 @@ export default function App() {
     useState<CustomWorkflowTemplate | null>(null);
   const [templatePendingDelete, setTemplatePendingDelete] =
     useState<CustomWorkflowTemplate | null>(null);
+  const [projectPendingDelete, setProjectPendingDelete] =
+    useState<Project | null>(null);
+  const [projectDeleteBusy, setProjectDeleteBusy] = useState(false);
 
   useEffect(() => {
     projectApi
@@ -180,6 +184,22 @@ export default function App() {
           ? cause.message
           : "The project could not be restored.",
       );
+    }
+  };
+  const deleteProject = async (project: Project) => {
+    setProjectDeleteBusy(true);
+    setError("");
+    try {
+      await projectApi.delete(project.id);
+      setProjects((current) => current.filter((item) => item.id !== project.id));
+      setArchivedProjects((current) => current.filter((item) => item.id !== project.id));
+      setSelectedProject((current) => current?.id === project.id ? null : current);
+      setEditorProject((current) => current?.id === project.id ? null : current);
+      setProjectPendingDelete(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The project could not be deleted.");
+    } finally {
+      setProjectDeleteBusy(false);
     }
   };
   const useCustomTemplate = async (template: CustomWorkflowTemplate) => {
@@ -529,6 +549,15 @@ export default function App() {
                         <Archive size={15} />
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="project-delete"
+                      aria-label={`Delete ${project.name}`}
+                      title="Delete project permanently"
+                      onClick={() => setProjectPendingDelete(project)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </article>
                 ))}
               </div>
@@ -702,6 +731,17 @@ export default function App() {
         template={editingTemplate ?? undefined}
         onClose={() => setEditingTemplate(null)}
         onSave={updateCustomTemplate}
+      />
+      <ConfirmationDialog
+        open={Boolean(projectPendingDelete)}
+        title="Delete this project permanently?"
+        message={`"${projectPendingDelete?.name ?? "This project"}" and its saved workflow history will be permanently removed. This cannot be undone.`}
+        confirmLabel="Delete project"
+        busy={projectDeleteBusy}
+        onCancel={() => setProjectPendingDelete(null)}
+        onConfirm={() => {
+          if (projectPendingDelete) void deleteProject(projectPendingDelete);
+        }}
       />
       <ConfirmationDialog
         open={Boolean(templatePendingDelete)}

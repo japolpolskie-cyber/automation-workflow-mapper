@@ -181,11 +181,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   applyProposedWorkflow(workflow) { set((state) => { const existing = new Map(state.nodes.map((item) => [item.data.domainNodeId, item])); const platform = state.nodes[0]?.data.platform ?? 'n8n'; const nodes = workflow.nodes.map((domain, index) => { const current = existing.get(domain.id); return current ? { ...current, data: nodeData(domain, current.data.platform), selected: false } : { id: `visual-${domain.id}`, type: 'workflow' as const, position: { x: 100 + (index % 4) * 350, y: 100 + Math.floor(index / 4) * 230 }, data: nodeData(domain, platform) }; }); const edges = workflow.connections.map((edge) => ({ id: `visual-${edge.id}`, source: `visual-${edge.sourceNodeId}`, target: `visual-${edge.targetNodeId}`, type: 'smoothstep', data: { domainConnectionId: edge.id }, ...edgePresentation(edge) })); return { ...record(state), workflow: structuredClone(workflow), nodes, edges, selectedNodeId: null }; }); },
   autoLayout(direction = 'LR', domainNodeIds) { set((state) => {
     const graph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-    graph.setGraph({ rankdir: direction, ranksep: 110, nodesep: 80, edgesep: 35 });
+    graph.setGraph({ rankdir: direction, ranksep: 150, nodesep: 100, edgesep: 45 });
     const includedVisualIds = new Set(state.nodes
       .filter((node) => !isAiAttachmentNode(node.data.node) && (!domainNodeIds || domainNodeIds.has(node.data.domainNodeId)))
       .map((node) => node.id));
-    state.nodes.filter((node) => includedVisualIds.has(node.id)).forEach((node) => graph.setNode(node.id, { width: 290, height: 184 }));
+    state.nodes.filter((node) => includedVisualIds.has(node.id)).forEach((node) => {
+      const mergeClearance = node.data.node.category === 'merge' ? 80 : 0;
+      graph.setNode(node.id, { width: 290 + mergeClearance, height: 184 + mergeClearance });
+    });
     state.edges.filter((edge) => includedVisualIds.has(edge.source) && includedVisualIds.has(edge.target)).forEach((edge) => graph.setEdge(edge.source, edge.target));
     dagre.layout(graph);
     const positions = new Map<string, XYPosition>();
@@ -219,7 +222,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (orderedTargets.length < 2) continue;
       const slots = orderedTargets.map(({ position }) => position[branchAxis]).sort((left, right) => left - right);
       const center = slots.reduce((sum, value) => sum + value, 0) / slots.length;
-      const spacing = direction === 'LR' ? 264 : 370;
+      const spacing = direction === 'LR' ? 284 : 390;
       const firstSlot = center - (spacing * (slots.length - 1)) / 2;
       orderedTargets.forEach(({ visualId, position }, index) => {
         positions.set(visualId, { ...position, [branchAxis]: firstSlot + spacing * index });

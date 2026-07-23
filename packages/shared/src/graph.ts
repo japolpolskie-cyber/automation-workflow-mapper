@@ -153,7 +153,7 @@ export function aiAttachmentPositions(workflow: CanonicalWorkflow, executionPosi
     const count = attachmentIds.length;
     attachmentIds.forEach((id, index) => positions.set(id, {
       x: origin.x + 40 + (index - (count - 1) / 2) * 240,
-      y: origin.y + 250,
+      y: origin.y + 310,
     }));
   }
   return positions;

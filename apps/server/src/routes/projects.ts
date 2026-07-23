@@ -31,6 +31,11 @@ export function projectRoutes(service: ProjectService): FastifyPluginAsync {
       if (!project) return reply.code(404).send({ success: false, data: null, error: { code: 'PROJECT_NOT_FOUND', message: 'The workflow project was not found.' }, meta: { requestId: request.id } });
       return { success: true, data: project, error: null, meta: { requestId: request.id } };
     });
+    app.delete<{ Params: { id: string } }>('/workflows/:id', async (request, reply) => {
+      const project = service.deleteProject(request.params.id);
+      if (!project) return reply.code(404).send({ success: false, data: null, error: { code: 'PROJECT_NOT_FOUND', message: 'The workflow project was not found.' }, meta: { requestId: request.id } });
+      return { success: true, data: project, error: null, meta: { requestId: request.id } };
+    });
     app.patch<{ Params: { id: string } }>('/workflows/:id/editor', async (request, reply) => {
       const project = service.updateEditor(request.params.id, request.body);
       if (!project) return reply.code(404).send({ success: false, data: null, error: { code: 'PROJECT_NOT_FOUND', message: 'The workflow project was not found.' }, meta: { requestId: request.id } });

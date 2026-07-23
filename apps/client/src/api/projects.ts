@@ -73,6 +73,10 @@ export const projectApi = {
       method: "PATCH",
       body: JSON.stringify({}),
     }),
+  delete: (id: string) =>
+    request<Project>(`/workflows/${id}`, {
+      method: "DELETE",
+    }),
   updateEditor: (
     id: string,
     workflow: Project["workflow"],

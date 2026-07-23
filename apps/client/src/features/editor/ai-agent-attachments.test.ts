@@ -79,11 +79,11 @@ describe('n8n AI Agent attachments', () => {
     const agentPosition = state.nodes.find((node) => node.data.domainNodeId === agentId)!.position;
     const attachmentPositions = state.nodes.filter((node) => node.data.node.nodeKind === 'ai-attachment').map((node) => node.position);
     expect(attachmentPositions).toHaveLength(4);
-    expect(attachmentPositions.every((position) => position.y > agentPosition.y)).toBe(true);
+    expect(new Set(attachmentPositions.map((position) => position.y - agentPosition.y))).toEqual(new Set([310]));
 
     state.autoLayout('LR');
     const laidOut = useEditorStore.getState();
     const laidOutAgent = laidOut.nodes.find((node) => node.data.domainNodeId === agentId)!.position;
-    expect(laidOut.nodes.filter((node) => node.data.node.nodeKind === 'ai-attachment').every((node) => node.position.y > laidOutAgent.y)).toBe(true);
+    expect(laidOut.nodes.filter((node) => node.data.node.nodeKind === 'ai-attachment').every((node) => node.position.y - laidOutAgent.y === 310)).toBe(true);
   });
 });

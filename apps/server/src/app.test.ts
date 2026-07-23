@@ -129,6 +129,24 @@ describe("API foundation", () => {
     expect(restored.json().data.status).toBe("draft");
   });
 
+  it("permanently deletes a project and its history without affecting other projects", async () => {
+    const app = await buildApp(testEnvironment);
+    apps.push(app);
+    const first = await app.inject({ method: "POST", url: "/api/workflows", payload: { name: "Delete me", platform: "n8n" } });
+    const second = await app.inject({ method: "POST", url: "/api/workflows", payload: { name: "Keep me", platform: "make" } });
+    const deletedId = first.json().data.id as string;
+    const retainedId = second.json().data.id as string;
+
+    const deleted = await app.inject({ method: "DELETE", url: `/api/workflows/${deletedId}` });
+    const missing = await app.inject({ method: "GET", url: `/api/workflows/${deletedId}` });
+    const retained = await app.inject({ method: "GET", url: `/api/workflows/${retainedId}` });
+
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().data.id).toBe(deletedId);
+    expect(missing.statusCode).toBe(404);
+    expect(retained.statusCode).toBe(200);
+  });
+
   it("preserves an explicit numbered workflow sequence through the analyze endpoint", async () => {
     const app = await buildApp(testEnvironment);
     apps.push(app);

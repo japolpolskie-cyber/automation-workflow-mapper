@@ -117,6 +117,13 @@ export class ProjectRepository {
     return updated;
   }
 
+  public delete(id: string): Project | null {
+    const current = this.findById(id);
+    if (!current) return null;
+    this.database.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    return current;
+  }
+
   public updateWorkflow(id: string, workflow: CanonicalWorkflow): Project | null {
     const current = this.findById(id); if (!current) return null;
     const now = new Date().toISOString();

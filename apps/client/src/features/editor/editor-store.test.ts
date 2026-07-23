@@ -299,9 +299,10 @@ describe('editor workflow layout isolation', () => {
     const targetYs = branches.map((branch) => positionByName(branch.target).y);
     expect(targetYs).toEqual([...targetYs].sort((left, right) => left - right));
     expect(targetYs.slice(1).map((value, index) => value - targetYs[index]!)).toEqual(
-      Array.from({ length: targetYs.length - 1 }, () => 264),
+      Array.from({ length: targetYs.length - 1 }, () => 284),
     );
     expect(positionByName('Continue combined flow').y).toBeCloseTo(targetYs.reduce((sum, value) => sum + value, 0) / targetYs.length);
+    expect(positionByName('Continue combined flow').x - Math.max(...branches.map((branch) => positionByName(branch.target).x))).toBeGreaterThanOrEqual(440);
     expect(useEditorStore.getState().workflow.connections).toEqual(semantics);
   });
 
@@ -327,6 +328,22 @@ describe('editor workflow layout isolation', () => {
     expect(firstOrder).toEqual([...firstOrder].sort((left, right) => left - right));
     expect(secondOrder).toEqual([...secondOrder].sort((left, right) => right - left));
     expect(useEditorStore.getState().workflow.connections).toEqual(semantics);
+  });
+
+  it('enforces generic minimum horizontal spacing between adjacent execution nodes', () => {
+    useEditorStore.getState().initialize(blankProject());
+    useEditorStore.getState().addNode('trigger');
+    useEditorStore.getState().addNode('action');
+    useEditorStore.getState().addNode('end');
+    const [trigger, action, end] = useEditorStore.getState().nodes;
+    useEditorStore.getState().connect({ source: trigger!.id, sourceHandle: 'default', target: action!.id, targetHandle: null });
+    useEditorStore.getState().connect({ source: action!.id, sourceHandle: 'default', target: end!.id, targetHandle: null });
+
+    useEditorStore.getState().autoLayout('LR');
+
+    const [first, second, third] = useEditorStore.getState().nodes.map((node) => node.position.x);
+    expect(second! - first!).toBeGreaterThanOrEqual(440);
+    expect(third! - second!).toBeGreaterThanOrEqual(440);
   });
 
   it('supports more than four router branches and preserves stable route handle IDs', () => {

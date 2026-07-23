@@ -426,9 +426,9 @@ h1 em {
   outline: 2px solid var(--color-focus, #2d9d72);
   outline-offset: 2px;
 }
-.project-archive {
+.project-archive,
+.project-delete {
   position: absolute;
-  right: 14px;
   bottom: 11px;
   z-index: 2;
   width: 28px;
@@ -441,8 +441,12 @@ h1 em {
   color: var(--color-text-muted, #69746e);
   cursor: pointer;
 }
+.project-archive { right: 14px; }
+.project-delete { right: 50px; }
 .project-archive:hover,
-.project-archive:focus-visible {
+.project-archive:focus-visible,
+.project-delete:hover,
+.project-delete:focus-visible {
   border-color: var(--color-accent, #177b59);
   color: var(--color-accent, #177b59);
 }
@@ -462,7 +466,8 @@ h1 em {
 .project-open-blank:hover,
 .project-open-blank:focus-visible { background: var(--surface-3, #edf4f0); }
 .scope-header-actions { display: flex; align-items: center; gap: 8px; }
-.project-archive:focus-visible {
+.project-archive:focus-visible,
+.project-delete:focus-visible {
   outline: 2px solid var(--color-focus, #2d9d72);
   outline-offset: 2px;
 }

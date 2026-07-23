@@ -21,6 +21,7 @@ export class ProjectService {
   public updateScope(id: string, input: unknown): Project | null { return this.repository.updateScope(id, updateProjectScopeSchema.parse(input).originalScope); }
   public archiveProject(id: string): Project | null { return this.repository.archive(id); }
   public restoreProject(id: string): Project | null { return this.repository.restore(id); }
+  public deleteProject(id: string): Project | null { return this.repository.delete(id); }
   public updateEditor(id: string, input: unknown): Project | null {
     const parsed = saveWorkflowEditorSchema.parse(input);
     const visibleNodeIds = new Set(parsed.visualGraph.nodes.map((node) => node.data.domainNodeId));
