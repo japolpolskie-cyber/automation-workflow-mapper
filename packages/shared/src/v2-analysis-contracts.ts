@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { semanticRequirementAnalysisSchema } from './semantic-requirements.js';
 
 const sourceReferenceSchema = z.object({
   segmentId: z.string().min(1),
@@ -94,6 +95,7 @@ export const controlFlowClassificationSchema = z.object({
 export const v21AnalysisArtifactsSchema = z.object({
   version: z.literal('2.1'),
   shadowMode: z.literal(true),
+  semanticAnalysis: semanticRequirementAnalysisSchema.optional(),
   requirementAnalysis: normalizedRequirementAnalysisSchema,
   capabilityGroups: z.array(lifecycleCapabilityGroupSchema),
   controlFlow: z.array(controlFlowClassificationSchema),
