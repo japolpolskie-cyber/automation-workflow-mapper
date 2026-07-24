@@ -1,3 +1,5 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadEnvironment } from './environment.js';
 
@@ -16,6 +18,23 @@ describe('AI environment validation', () => {
     });
   });
   it('allows local analysis without a key', () => { expect(loadEnvironment({ AI_PROVIDER: 'local' }).AI_PROVIDER).toBe('local'); });
+  it('resolves the default database relative to the server package', () => {
+    const expected = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      'data',
+      'automation-workflow-mapper.db',
+    );
+    const databasePath = loadEnvironment({
+      DATABASE_PATH: './data/automation-workflow-mapper.db',
+    }).DATABASE_PATH;
+
+    expect(databasePath).toBe(expected);
+    expect(databasePath).not.toContain(
+      resolve('apps', 'server', 'apps', 'server'),
+    );
+  });
   it('requires a server key for OpenAI mode', () => { expect(() => loadEnvironment({ AI_PROVIDER: 'openai' })).toThrow(/OPENAI_API_KEY/); });
   it('can remove K4 shadow planning without disabling K3 analysis', () => { const environment = loadEnvironment({ K3_SCOPE_INTELLIGENCE: 'true', K4_PLANNER_SHADOW: 'false' }); expect(environment.K3_SCOPE_INTELLIGENCE).toBe(true); expect(environment.K4_PLANNER_SHADOW).toBe(false); });
   it('provides bounded K4.2 runtime defaults', () => {

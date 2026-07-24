@@ -1,4 +1,12 @@
+import { dirname, isAbsolute, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+
+const serverPackageDirectory = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+);
 
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -59,10 +67,21 @@ const environmentSchema = z.object({
 
 export type Environment = z.infer<typeof environmentSchema>;
 
+export function resolveDatabasePath(databasePath: string): string {
+  if (databasePath === ':memory:' || isAbsolute(databasePath)) {
+    return databasePath;
+  }
+
+  return resolve(serverPackageDirectory, databasePath);
+}
+
 export function loadEnvironment(source: NodeJS.ProcessEnv = process.env): Environment {
   const result = environmentSchema.safeParse(source);
   if (!result.success) {
     throw new Error(`Invalid environment configuration: ${result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`);
   }
-  return result.data;
+  return {
+    ...result.data,
+    DATABASE_PATH: resolveDatabasePath(result.data.DATABASE_PATH),
+  };
 }

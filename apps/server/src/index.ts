@@ -8,6 +8,7 @@ const environmentCandidates = [resolve(process.cwd(), '.env'), resolve(process.c
 const environmentFile = environmentCandidates.find((candidate) => existsSync(candidate));
 if (environmentFile) loadEnvFile(environmentFile);
 const environment = loadEnvironment();
+console.log(`Resolved database path: ${environment.DATABASE_PATH}`);
 const app = await buildApp(environment);
 
 try {
