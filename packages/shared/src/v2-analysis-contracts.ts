@@ -1,43 +1,20 @@
 import { z } from 'zod';
 import { semanticRequirementAnalysisSchema } from './semantic-requirements.js';
+import { processAnalysisSchema } from './process-analysis.js';
+import {
+  normalizedRequirementAnalysisSchema,
+  requirementSourceReferenceSchema as sourceReferenceSchema,
+} from './normalized-requirement-analysis.js';
 
-const sourceReferenceSchema = z.object({
-  segmentId: z.string().min(1),
-  stepId: z.string().min(1),
-  start: z.number().int().nonnegative(),
-  end: z.number().int().positive(),
-  text: z.string().min(1),
-}).strict();
-
-const tracedValueSchema = z.object({
-  value: z.string().min(1),
-  factIds: z.array(z.string().min(1)),
-  evidenceIds: z.array(z.string().min(1)),
-  sourceReferences: z.array(sourceReferenceSchema),
-}).strict();
-
-export const normalizedRequirementAnalysisSchema = z.object({
-  version: z.literal('2.1'),
-  objective: z.string().min(1),
-  trigger: tracedValueSchema.nullable(),
-  endStates: z.array(tracedValueSchema),
-  entities: z.array(tracedValueSchema),
-  applications: z.array(tracedValueSchema),
-  actors: z.array(tracedValueSchema),
-  identifiers: z.array(tracedValueSchema),
-  lifecycleStages: z.array(tracedValueSchema),
-  statuses: z.array(tracedValueSchema),
-  decisions: z.array(tracedValueSchema),
-  waits: z.array(tracedValueSchema),
-  repetitions: z.array(tracedValueSchema),
-  approvals: z.array(tracedValueSchema),
-  retries: z.array(tracedValueSchema),
-  errorHandling: z.array(tracedValueSchema),
-  duplicatePrevention: z.array(tracedValueSchema),
-  auditRequirements: z.array(tracedValueSchema),
-  assumptions: z.array(tracedValueSchema),
-  uncertainties: z.array(tracedValueSchema),
-}).strict();
+export {
+  normalizedRequirementAnalysisSchema,
+  requirementSourceReferenceSchema,
+  tracedRequirementValueSchema,
+} from './normalized-requirement-analysis.js';
+export type {
+  NormalizedRequirementAnalysis,
+  RequirementSourceReference,
+} from './normalized-requirement-analysis.js';
 
 export const lifecycleCapabilityGroupSchema = z.object({
   id: z.string().min(1),
@@ -95,14 +72,13 @@ export const controlFlowClassificationSchema = z.object({
 export const v21AnalysisArtifactsSchema = z.object({
   version: z.literal('2.1'),
   shadowMode: z.literal(true),
+  processAnalysis: processAnalysisSchema.optional(),
   semanticAnalysis: semanticRequirementAnalysisSchema.optional(),
   requirementAnalysis: normalizedRequirementAnalysisSchema,
   capabilityGroups: z.array(lifecycleCapabilityGroupSchema),
   controlFlow: z.array(controlFlowClassificationSchema),
 }).strict();
 
-export type RequirementSourceReference = z.infer<typeof sourceReferenceSchema>;
-export type NormalizedRequirementAnalysis = z.infer<typeof normalizedRequirementAnalysisSchema>;
 export type LifecycleCapabilityGroup = z.infer<typeof lifecycleCapabilityGroupSchema>;
 export type ControlFlowType = z.infer<typeof controlFlowTypeSchema>;
 export type ControlFlowClassification = z.infer<typeof controlFlowClassificationSchema>;

@@ -8,6 +8,11 @@ describe('V2.1 shadow analysis service', () => {
     const analysis = new ScopeIntelligenceService().analyze(scope, new Date('2026-07-19T00:00:00.000Z'));
     const result = new V21AnalysisService().analyze(scope, analysis);
     expect(result).toMatchObject({ version: '2.1', shadowMode: true });
+    expect(result.processAnalysis).toMatchObject({
+      version: '1.0',
+      businessObjective: 'Qualify leads.',
+    });
+    expect(result.requirementAnalysis).toEqual(result.processAnalysis?.requirementAnalysis);
     expect(result.requirementAnalysis.objective).toBe('Qualify leads.');
     expect(result.requirementAnalysis.trigger?.value).toMatch(/form is submitted/i);
     expect(result.requirementAnalysis.entities.some((item) => item.value === 'lead')).toBe(true);
