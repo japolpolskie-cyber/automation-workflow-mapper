@@ -269,6 +269,7 @@ If there is no reply, send a follow-up message.`;
       rulesVersion: '1.0',
       applicationsAndSystems: expect.arrayContaining(['Asana']),
     });
+    expect(result.clarificationRecommendations).toEqual(expect.any(Array));
     expect(groundedPrompt).not.toMatch(/"confidence"|"coverage"|"reliability"|"weight"/);
     const persisted = repository.findById(project.id)!; expect('plannerShadow' in persisted.workflow).toBe(false); expect('plannerShadow' in result.workflow).toBe(false);
     expect('v22ConceptualGraph' in persisted.workflow).toBe(false); expect('v22ConceptualGraph' in result.workflow).toBe(false);

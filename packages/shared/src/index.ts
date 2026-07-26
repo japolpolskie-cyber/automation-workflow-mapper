@@ -34,3 +34,4 @@ export * from "./v2-promotion.js";
 export * from "./semantic-requirements.js";
 export * from "./process-analysis.js";
 export * from "./process-analysis-diagnostics.js";
+export * from "./process-clarification-recommendation.js";

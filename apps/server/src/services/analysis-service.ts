@@ -12,6 +12,7 @@ import { countExplicitWorkflowSteps } from '../ai/prompts/workflow-analysis.js';
 import { V2PromotionService } from '../planner/v2-promotion-service.js';
 import type { HybridRAGPlannerRollout } from '../hybrid-rag/hybrid-rag-planner-rollout.js';
 import { ProcessAnalysisDiagnosticsService } from '../process-intelligence/process-analysis-diagnostics.js';
+import { ClarificationReadinessService } from '../process-intelligence/clarification-readiness-service.js';
 
 export class AnalysisError extends Error {
   public constructor(public readonly code: string, message: string, public readonly statusCode = 422) { super(message); this.name = 'AnalysisError'; }
@@ -136,13 +137,16 @@ export class AnalysisService {
     const processAnalysisDiagnostics = v21Analysis?.processAnalysis
       ? new ProcessAnalysisDiagnosticsService().create(v21Analysis.processAnalysis)
       : undefined;
+    const clarificationRecommendations = v21Analysis?.processAnalysis && processAnalysisDiagnostics
+      ? new ClarificationReadinessService().create(v21Analysis.processAnalysis, processAnalysisDiagnostics)
+      : undefined;
     const v22ConceptualGraph = plannerResult.v22ConceptualGraph;
     const v23PlatformTranslation = plannerResult.v23PlatformTranslation;
     const v24GraphCritique = plannerResult.v24GraphCritique;
     const v24GraphRepair = plannerResult.v24GraphRepair;
     const v25AcceptanceMatrix = plannerResult.v25AcceptanceMatrix;
     this.repository.updateWorkflow(project.id, parsed.data);
-    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(processAnalysisDiagnostics ? { processAnalysisDiagnostics } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}), ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), ...(v24GraphCritique ? { v24GraphCritique } : {}), ...(v24GraphRepair ? { v24GraphRepair } : {}), ...(v25AcceptanceMatrix ? { v25AcceptanceMatrix } : {}) });
+    return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(processAnalysisDiagnostics ? { processAnalysisDiagnostics } : {}), ...(clarificationRecommendations ? { clarificationRecommendations } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}), ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), ...(v24GraphCritique ? { v24GraphCritique } : {}), ...(v24GraphRepair ? { v24GraphRepair } : {}), ...(v25AcceptanceMatrix ? { v25AcceptanceMatrix } : {}) });
   }
 }
 

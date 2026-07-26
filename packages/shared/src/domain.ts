@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { detectedProcessSummarySchema } from './detected-process.js';
 import { v21AnalysisArtifactsSchema } from './v2-analysis-contracts.js';
 import { processAnalysisDiagnosticsSchema } from './process-analysis-diagnostics.js';
+import { processClarificationRecommendationsSchema } from './process-clarification-recommendation.js';
 import { v22ConceptualGraphResultSchema } from './v2-conceptual-graph.js';
 import { platformTranslationResultSchema } from './v2-platform-translation.js';
 import { graphCritiqueBundleSchema } from './v2-graph-critique.js';
@@ -286,6 +287,7 @@ export const workflowAnalysisResultSchema = z.object({
   analyzedAt: z.string().datetime(),
   detectedProcess: detectedProcessSummarySchema.optional(),
   processAnalysisDiagnostics: processAnalysisDiagnosticsSchema.optional(),
+  clarificationRecommendations: processClarificationRecommendationsSchema.optional(),
   plannerShadow: plannerShadowComparisonSchema.optional(),
   v21Analysis: v21AnalysisArtifactsSchema.optional(),
   v22ConceptualGraph: v22ConceptualGraphResultSchema.optional(),
