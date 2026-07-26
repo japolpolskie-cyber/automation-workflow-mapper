@@ -32,6 +32,7 @@ export const processClarificationRecommendationSchema = z.object({
   importance: z.enum(['required', 'recommended', 'optional']),
   sourceRequirementIds: z.array(z.string().min(1)),
   suggestedAnswerType: clarificationAnswerTypeSchema,
+  options: z.array(z.string().min(1)).min(1).optional(),
 }).strict();
 
 export const processClarificationRecommendationsSchema =

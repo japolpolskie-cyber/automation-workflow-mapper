@@ -3691,6 +3691,100 @@ h1 em {
   font-size: 9px;
   text-transform: capitalize;
 }
+.clarification-answer-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+.clarification-answer-status {
+  margin-left: auto;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+.clarification-answer-status.answered {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+.clarification-answer-status.unanswered {
+  color: var(--color-unresolved);
+  background: var(--color-unresolved-soft);
+}
+.clarification-answer-control,
+.clarification-duration input,
+.clarification-duration select {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 11px;
+}
+.clarification-answer-control:focus-visible,
+.clarification-duration :is(input, select):focus-visible,
+.clarification-boolean button:focus-visible,
+.clarification-multi-choice input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.clarification-boolean {
+  display: flex;
+  gap: 7px;
+  margin-top: 9px;
+}
+.clarification-boolean button {
+  min-width: 64px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.clarification-boolean button[aria-pressed='true'] {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+  background: var(--color-brand-soft);
+}
+.clarification-duration {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 7px;
+}
+.clarification-multi-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 9px 0 0;
+  border: 0;
+  padding: 0;
+}
+.clarification-multi-choice legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+.clarification-multi-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+.clarification-clear-answer {
+  margin-top: 6px;
+  font-size: 9px;
+}
 .clarification-empty {
   display: flex;
   gap: 9px;
