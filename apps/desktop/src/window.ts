@@ -1,6 +1,15 @@
 import { BrowserWindow, shell } from 'electron';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { desktopConfig } from './config.js';
 import { waitForClient } from './runtime.js';
+
+const iconPath = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'assets',
+  'app-icon.png',
+);
 
 function isAllowedInternalNavigation(url: string): boolean {
   if (desktopConfig.useDevClient) {
@@ -28,6 +37,7 @@ export async function createMainWindow(): Promise<BrowserWindow> {
     minHeight: desktopConfig.window.minHeight,
     show: false,
     title: desktopConfig.window.title,
+    icon: iconPath,
     backgroundColor: desktopConfig.window.backgroundColor,
     webPreferences: {
       contextIsolation: true,

@@ -8,7 +8,7 @@ export default defineConfig({
   base: './',
 
   server: {
-    port: 5173,
+    port: 5174,
 
     // Huwag tahimik na lumipat sa 5174 kapag occupied ang 5173.
     strictPort: true,

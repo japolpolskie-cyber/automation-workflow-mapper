@@ -12,3 +12,4 @@ coverage/
 .agents/
 .cache/
 tmp/
+release/

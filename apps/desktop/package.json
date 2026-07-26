@@ -8,6 +8,156 @@
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && electron dist/main.js --dev-client",
     "start:built": "npm run build && electron dist/main.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "npm run package:win",
+    "package:dir": "npm run build --prefix ../.. && npm run build && electron-builder --win --dir",
+    "package:win": "npm run build --prefix ../.. && npm run build && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.kaizen.automationworkflowmapper",
+    "productName": "Automation Workflow Mapper",
+    "executableName": "AutomationWorkflowMapper",
+    "electronVersion": "43.2.0",
+    "directories": {
+      "output": "../../release"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/app-icon.png",
+      "assets/app-icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../client/dist",
+        "to": "client/dist"
+      },
+      {
+        "from": "../server/dist",
+        "to": "server/dist"
+      },
+      {
+        "from": "../../packages/shared",
+        "to": "node_modules/@awm/shared",
+        "filter": [
+          "dist/**/*",
+          "package.json"
+        ]
+      },
+      {
+        "from": "../../packages/knowledge",
+        "to": "node_modules/@awm/knowledge",
+        "filter": [
+          "dist/**/*",
+          "package.json"
+        ]
+      },
+      {
+        "from": "../../packages/platforms",
+        "to": "node_modules/@awm/platforms",
+        "filter": [
+          "dist/**/*",
+          "package.json"
+        ]
+      },
+      {
+        "from": "../../node_modules",
+        "to": "node_modules",
+        "filter": [
+          "@fastify/**/*",
+          "@lukeed/**/*",
+          "@pinojs/**/*",
+          "@xmldom/**/*",
+          "abstract-logging/**/*",
+          "ajv/**/*",
+          "ajv-formats/**/*",
+          "argparse/**/*",
+          "atomic-sleep/**/*",
+          "avvio/**/*",
+          "base64-js/**/*",
+          "bluebird/**/*",
+          "cookie/**/*",
+          "core-util-is/**/*",
+          "dequal/**/*",
+          "dingbat-to-unicode/**/*",
+          "duck/**/*",
+          "fast-decode-uri-component/**/*",
+          "fast-deep-equal/**/*",
+          "fastify/**/*",
+          "fastify-plugin/**/*",
+          "fast-json-stringify/**/*",
+          "fastq/**/*",
+          "fast-querystring/**/*",
+          "fast-uri/**/*",
+          "find-my-way/**/*",
+          "helmet/**/*",
+          "immediate/**/*",
+          "inherits/**/*",
+          "ipaddr.js/**/*",
+          "isarray/**/*",
+          "json-schema-ref-resolver/**/*",
+          "json-schema-traverse/**/*",
+          "jszip/**/*",
+          "lie/**/*",
+          "light-my-request/**/*",
+          "lop/**/*",
+          "mammoth/**/*",
+          "node-ensure/**/*",
+          "on-exit-leak-free/**/*",
+          "option/**/*",
+          "pako/**/*",
+          "path-is-absolute/**/*",
+          "pdf-parse/**/*",
+          "pino/**/*",
+          "pino-abstract-transport/**/*",
+          "pino-std-serializers/**/*",
+          "process-nextick-args/**/*",
+          "process-warning/**/*",
+          "quick-format-unescaped/**/*",
+          "readable-stream/**/*",
+          "real-require/**/*",
+          "require-from-string/**/*",
+          "ret/**/*",
+          "reusify/**/*",
+          "rfdc/**/*",
+          "safe-buffer/**/*",
+          "safe-regex2/**/*",
+          "safe-stable-stringify/**/*",
+          "secure-json-parse/**/*",
+          "semver/**/*",
+          "set-cookie-parser/**/*",
+          "setimmediate/**/*",
+          "sonic-boom/**/*",
+          "split2/**/*",
+          "sprintf-js/**/*",
+          "string_decoder/**/*",
+          "thread-stream/**/*",
+          "toad-cache/**/*",
+          "underscore/**/*",
+          "util-deprecate/**/*",
+          "xmlbuilder/**/*",
+          "zod/**/*",
+          "zod-to-json-schema/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "assets/app-icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "allowToChangeInstallationDirectory": false,
+      "artifactName": "AutomationWorkflowMapper-Setup-${version}.${ext}"
+    }
   }
 }

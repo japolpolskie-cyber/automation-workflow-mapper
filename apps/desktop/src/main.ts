@@ -1,6 +1,15 @@
 import { app, BrowserWindow } from 'electron';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createMainWindow } from './window.js';
 import { startServer, stopServer } from './services/server.js';
+
+const userDataPath = resolve(
+  app.getPath('appData'),
+  'Automation Workflow Mapper',
+);
+mkdirSync(userDataPath, { recursive: true });
+app.setPath('userData', userDataPath);
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;

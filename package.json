@@ -10,6 +10,7 @@
   "scripts": {
     "predev": "npm run build -w @awm/shared && npm run build -w @awm/knowledge && npm run build -w @awm/platforms",
     "dev": "concurrently -n client,server -c cyan,magenta \"npm:dev -w @awm/client\" \"npm:dev -w @awm/server\"",
+    "predev:desktop": "npm run build -w @awm/shared && npm run build -w @awm/knowledge && npm run build -w @awm/platforms && npm run build -w @awm/server",
     "dev:desktop": "concurrently -k -n client,server,desktop -c cyan,magenta,yellow \"npm:dev -w @awm/client\" \"npm:dev -w @awm/server\" \"npm:dev -w @awm/desktop\"",
     "build": "npm run build -w @awm/shared && npm run build -w @awm/knowledge && npm run build -w @awm/platforms && npm run build -w @awm/server && npm run build -w @awm/client",
     "test": "npm run test -w @awm/shared && npm run build -w @awm/shared && npm run test -w @awm/knowledge && npm run build -w @awm/knowledge && npm run test -w @awm/platforms && npm run build -w @awm/platforms && npm run test -w @awm/server && npm run test -w @awm/client",
