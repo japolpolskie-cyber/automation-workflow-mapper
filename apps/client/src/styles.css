@@ -65,7 +65,7 @@ a {
   place-items: center;
   border-radius: 9px;
   color: #183426;
-  background: #b8e3c9;
+  background: transparent;
 }
 .brand-mark img {
   width: 32px;
@@ -1416,9 +1416,9 @@ h1 em {
   color: var(--green);
 }
 .palette-brand > img {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   display: block;
 }
 .palette-brand div {

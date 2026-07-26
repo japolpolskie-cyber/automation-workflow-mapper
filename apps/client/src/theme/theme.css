@@ -211,7 +211,7 @@ input::placeholder, textarea::placeholder { color: var(--color-text-muted); opac
 .kaizen-export-surface .workflow-node :is(strong, p, small, em) { color: #334139 !important; }
 
 :root[data-theme='dark'] .sidebar { background: #0b100d; }
-:root[data-theme='dark'] .brand-mark, :root[data-theme='dark'] .account > span { color: #102019; background: #83d5a9; }
+:root[data-theme='dark'] .account > span { color: #102019; background: #83d5a9; }
 :root[data-theme='dark'] .nav-item { color: #b7c3bc; }
 :root[data-theme='dark'] .nav-item:hover, :root[data-theme='dark'] .nav-item.active { color: #f2f6f3; background: #1b3025; }
 :root[data-theme='dark'] .canvas-wrap .react-flow { background: linear-gradient(135deg, #111814, #0f1713); }
