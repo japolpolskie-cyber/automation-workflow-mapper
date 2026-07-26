@@ -1,4 +1,4 @@
-import { aiWorkflowOutputSchema, compileAutomationArchitecture, inferWorkflowConnections, validateWorkflowGraph, workflowAnalysisResultSchema, type CanonicalWorkflow, type WorkflowAnalysisResult, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
+import { aiWorkflowOutputSchema, compileAutomationArchitecture, inferWorkflowConnections, validateWorkflowGraph, workflowAnalysisResultSchema, type CanonicalWorkflow, type ProcessAnalysisDiagnostics, type ProcessClarificationRecommendation, type SubmittedClarificationAnswer, type WorkflowAnalysisResult, type WorkflowConnection, type WorkflowNode } from '@awm/shared';
 import { parseJsonWithRepair } from '../ai/repair/json-repair.js';
 import { repairWorkflowCandidate } from '../ai/repair/workflow-repair.js';
 import type { AnalysisProvider } from '../ai/providers/analysis-provider.js';
@@ -21,10 +21,10 @@ export class AnalysisError extends Error {
 export class AnalysisService {
   public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null), private readonly promotion = new V2PromotionService({ mode: 'disabled', allowPassWithWarnings: false }), private readonly hybridRAGRollout: HybridRAGPlannerRollout | null = null) {}
   public getProviderStatus() { return this.provider.getStatus(); }
-  public async analyze(projectId: string, workflowMode: 'auto' | 'single' = 'auto', requestCorrelationId: string | null = null): Promise<WorkflowAnalysisResult> {
-    return this.pipeline.run(() => this.analyzeCurrent(projectId, workflowMode, requestCorrelationId));
+  public async analyze(projectId: string, workflowMode: 'auto' | 'single' = 'auto', requestCorrelationId: string | null = null, clarificationAnswers: SubmittedClarificationAnswer[] = []): Promise<WorkflowAnalysisResult> {
+    return this.pipeline.run(() => this.analyzeCurrent(projectId, workflowMode, requestCorrelationId, clarificationAnswers));
   }
-  private async analyzeCurrent(projectId: string, workflowMode: 'auto' | 'single', requestCorrelationId: string | null): Promise<WorkflowAnalysisResult> {
+  private async analyzeCurrent(projectId: string, workflowMode: 'auto' | 'single', requestCorrelationId: string | null, clarificationAnswers: SubmittedClarificationAnswer[]): Promise<WorkflowAnalysisResult> {
     const project = this.repository.findById(projectId);
     if (!project) throw new AnalysisError('PROJECT_NOT_FOUND', 'The workflow project was not found.', 404);
     if (!project.originalScope.trim()) throw new AnalysisError('SCOPE_REQUIRED', 'Add and save a Scope of Work before analysis.', 400);
@@ -134,12 +134,13 @@ export class AnalysisService {
     }
     const plannerShadow = plannerResult.plannerShadow;
     const v21Analysis = plannerResult.v21Analysis;
-    const processAnalysisDiagnostics = v21Analysis?.processAnalysis
+    const baseProcessAnalysisDiagnostics = v21Analysis?.processAnalysis
       ? new ProcessAnalysisDiagnosticsService().create(v21Analysis.processAnalysis)
       : undefined;
-    const clarificationRecommendations = v21Analysis?.processAnalysis && processAnalysisDiagnostics
-      ? new ClarificationReadinessService().create(v21Analysis.processAnalysis, processAnalysisDiagnostics)
+    const clarificationRecommendations = v21Analysis?.processAnalysis && baseProcessAnalysisDiagnostics
+      ? new ClarificationReadinessService().create(v21Analysis.processAnalysis, baseProcessAnalysisDiagnostics)
       : undefined;
+    const processAnalysisDiagnostics = addClarificationAnswerContext(baseProcessAnalysisDiagnostics, clarificationRecommendations, clarificationAnswers);
     const v22ConceptualGraph = plannerResult.v22ConceptualGraph;
     const v23PlatformTranslation = plannerResult.v23PlatformTranslation;
     const v24GraphCritique = plannerResult.v24GraphCritique;
@@ -148,6 +149,28 @@ export class AnalysisService {
     this.repository.updateWorkflow(project.id, parsed.data);
     return workflowAnalysisResultSchema.parse({ workflow: parsed.data, graphValidation: { valid: true, errorCount: 0, warningCount: validation.issues.filter((issue) => issue.severity === 'warning').length }, provider: providerUsed, analyzedAt: new Date().toISOString(), ...(detectedProcess ? { detectedProcess } : {}), ...(processAnalysisDiagnostics ? { processAnalysisDiagnostics } : {}), ...(clarificationRecommendations ? { clarificationRecommendations } : {}), ...(plannerShadow ? { plannerShadow } : {}), ...(v21Analysis ? { v21Analysis } : {}), ...(v22ConceptualGraph ? { v22ConceptualGraph } : {}), ...(v23PlatformTranslation ? { v23PlatformTranslation } : {}), ...(v24GraphCritique ? { v24GraphCritique } : {}), ...(v24GraphRepair ? { v24GraphRepair } : {}), ...(v25AcceptanceMatrix ? { v25AcceptanceMatrix } : {}) });
   }
+}
+
+function addClarificationAnswerContext(
+  diagnostics: ProcessAnalysisDiagnostics | undefined,
+  recommendations: ProcessClarificationRecommendation[] | undefined,
+  submittedAnswers: SubmittedClarificationAnswer[],
+): ProcessAnalysisDiagnostics | undefined {
+  if (!diagnostics || !recommendations || submittedAnswers.length === 0) return diagnostics;
+  const recommendationById = new Map(recommendations.map((recommendation) => [recommendation.id, recommendation]));
+  const acceptedCategories = submittedAnswers
+    .map((answer) => {
+      const recommendation = recommendationById.get(answer.recommendationId);
+      return recommendation?.suggestedAnswerType === answer.answerType ? recommendation.category : undefined;
+    })
+    .filter((category): category is ProcessClarificationRecommendation['category'] => Boolean(category));
+  return {
+    ...diagnostics,
+    clarificationAnswerContext: {
+      acceptedAnswerCount: acceptedCategories.length,
+      acceptedAnswerCategories: [...new Set(acceptedCategories)],
+    },
+  };
 }
 
 function prepareWorkflowForPersistence(input: CanonicalWorkflow, requireSingleEntry: boolean) {

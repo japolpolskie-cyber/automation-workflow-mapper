@@ -5,22 +5,30 @@ import {
 } from '@awm/shared';
 import { AlertTriangle, CheckCircle2, ChevronRight, CircleHelp, Gauge } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
-type DurationAnswer = { value: string; unit: 'minutes' | 'hours' | 'days' | 'weeks' };
-type LocalAnswer = string | string[] | DurationAnswer;
-type LocalAnswers = Record<string, LocalAnswer>;
+import {
+  isDurationAnswer,
+  normalizeClarificationAnswers,
+  type DurationAnswer,
+  type LocalClarificationAnswer,
+  type LocalClarificationAnswers,
+} from './clarification-answer-state';
 
 export function ClarificationReviewPanel({
   diagnostics,
   recommendations,
   analysisKey = 'current-analysis',
+  onAnswersChange,
 }: {
   diagnostics: unknown;
   recommendations: unknown;
   analysisKey?: string;
+  onAnswersChange?: (answers: ReturnType<typeof normalizeClarificationAnswers>) => void;
 }) {
-  const [answers, setAnswers] = useState<LocalAnswers>({});
-  useEffect(() => setAnswers({}), [analysisKey]);
+  const [answers, setAnswers] = useState<LocalClarificationAnswers>({});
+  useEffect(() => {
+    setAnswers({});
+    onAnswersChange?.([]);
+  }, [analysisKey, onAnswersChange]);
 
   const parsedDiagnostics = processAnalysisDiagnosticsSchema.safeParse(diagnostics);
   if (!parsedDiagnostics.success) return null;
@@ -30,12 +38,21 @@ export function ClarificationReviewPanel({
   const required = requiredCount > 0;
   const summary = parsedDiagnostics.data.summary;
   const answeredCount = items.filter((item) => isAnswered(answers[item.id])).length;
-  const update = (id: string, answer: LocalAnswer) => setAnswers((current) => ({ ...current, [id]: answer }));
-  const clear = (id: string) => setAnswers((current) => {
-    const next = { ...current };
+  const update = (id: string, answer: LocalClarificationAnswer) => {
+    const next = { ...answers, [id]: answer };
+    setAnswers(next);
+    onAnswersChange?.(normalizeClarificationAnswers(items, next));
+  };
+  const clear = (id: string) => {
+    const next = { ...answers };
     delete next[id];
-    return next;
-  });
+    setAnswers(next);
+    onAnswersChange?.(normalizeClarificationAnswers(items, next));
+  };
+  const clearAll = () => {
+    setAnswers({});
+    onAnswersChange?.([]);
+  };
 
   return <section className={`clarification-review ${required ? 'required' : ''}`} aria-label="Clarification Review">
     <details {...(required ? { open: true } : {})}>
@@ -62,7 +79,7 @@ export function ClarificationReviewPanel({
         {items.length > 0 ? <>
           <div className="clarification-answer-summary" role="status">
             <span><strong>{answeredCount}</strong> of <strong>{items.length}</strong> answered locally</span>
-            <button type="button" className="text-button" disabled={answeredCount === 0} onClick={() => setAnswers({})}>Clear all answers</button>
+            <button type="button" className="text-button" disabled={answeredCount === 0} onClick={clearAll}>Clear all answers</button>
           </div>
           <div className="clarification-recommendation-list">
             {items.map((item) => {
@@ -96,17 +113,17 @@ function AnswerControl({
   onChange,
 }: {
   item: ProcessClarificationRecommendation;
-  answer: LocalAnswer | undefined;
-  onChange: (answer: LocalAnswer) => void;
+  answer: LocalClarificationAnswer | undefined;
+  onChange: (answer: LocalClarificationAnswer) => void;
 }) {
   const label = `Answer: ${item.question}`;
   if (item.suggestedAnswerType === 'boolean') {
     return <div className="clarification-boolean" role="group" aria-label={label}>
-      {['Yes', 'No'].map((value) => <button key={value} type="button" aria-pressed={answer === value.toLowerCase()} onClick={() => onChange(value.toLowerCase())}>{value}</button>)}
+      {[{ label: 'Yes', value: true }, { label: 'No', value: false }].map((option) => <button key={option.label} type="button" aria-pressed={answer === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}
     </div>;
   }
   if (item.suggestedAnswerType === 'duration') {
-    const duration = isDuration(answer) ? answer : { value: '', unit: 'hours' as const };
+    const duration = isDurationAnswer(answer) ? answer : { value: '', unit: 'hours' as const };
     return <div className="clarification-duration">
       <input aria-label={`${label} value`} type="number" min="0" value={duration.value} onChange={(event) => onChange({ ...duration, value: event.target.value })} />
       <select aria-label={`${label} unit`} value={duration.unit} onChange={(event) => onChange({ ...duration, unit: event.target.value as DurationAnswer['unit'] })}>
@@ -133,12 +150,9 @@ function AnswerControl({
   />;
 }
 
-function isDuration(answer: LocalAnswer | undefined): answer is DurationAnswer {
-  return Boolean(answer && typeof answer === 'object' && !Array.isArray(answer) && 'value' in answer && 'unit' in answer);
-}
-
-function isAnswered(answer: LocalAnswer | undefined): boolean {
+function isAnswered(answer: LocalClarificationAnswer | undefined): boolean {
+  if (typeof answer === 'boolean') return true;
   if (typeof answer === 'string') return answer.trim().length > 0;
   if (Array.isArray(answer)) return answer.length > 0;
-  return isDuration(answer) && answer.value.trim().length > 0;
+  return isDurationAnswer(answer) && answer.value.trim().length > 0;
 }

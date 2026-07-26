@@ -257,7 +257,8 @@ If there is no reply, send a follow-up message.`;
     const provider: AnalysisProvider = { name: 'ollama', async analyze(input) { productionInput = input; return structuredClone(leadQualificationWorkflow); }, async planGrounded(request) { groundedPrompt = request.user; const clarificationIds = [...new Set(request.user.match(/clarification-[a-z0-9-]+/g) ?? [])]; const factId = request.user.match(/fact-[a-z0-9-]+/)?.[0] ?? 'missing'; return { version: '1.1', objective: 'Plan the stated workflow.', platform: 'n8n', entryNodeId: 'step-1', nodes: [{ id: 'step-1', canonicalFunctionId: 'trigger', title: 'Receive lead', applicationRef: null, operationRef: null, inputs: [], outputs: ['lead'], factIds: [factId], patternIds: [], knowledgeIds: [], capabilityIds: [], blockedByClarificationIds: [], limitationAcknowledgements: [] }], edges: [], binaryConditions: [], routers: [], merges: [], loops: [], retries: [], blockedByClarificationIds: clarificationIds, warnings: [] }; }, async getStatus() { return { provider: 'ollama', available: true, models: ['qwen3:8b'], message: 'ready' }; } };
     const database = createDatabase(':memory:'); databases.push(database); const repository = new ProjectRepository(database);
     const project = repository.create({ name: 'Asana CRM', clientName: '', description: '', platform: 'n8n' }); const scope = 'When an Asana lead arrives, retrieve the task details.'; repository.updateScope(project.id, scope);
-    const result = await new AnalysisService(repository, provider, undefined, new ScopeIntelligenceService()).analyze(project.id);
+    const service = new AnalysisService(repository, provider, undefined, new ScopeIntelligenceService());
+    const result = await service.analyze(project.id);
     expect(productionInput).toEqual({ scope, projectName: 'Asana CRM', platform: 'n8n' }); expect(result.plannerShadow?.status).toBe('completed');
     expect(result.v22ConceptualGraph).toMatchObject({ graph: { version: '2.2', shadowMode: true }, validation: { valid: true } });
     expect(result.v23PlatformTranslation).toMatchObject({ version: '2.3A', shadowMode: true, selectedPlatform: 'n8n' });
@@ -271,6 +272,43 @@ If there is no reply, send a follow-up message.`;
     });
     expect(result.clarificationRecommendations).toEqual(expect.any(Array));
     expect(groundedPrompt).not.toMatch(/"confidence"|"coverage"|"reliability"|"weight"/);
+    const recommendation = result.clarificationRecommendations![0]!;
+    const withAnswers = await service.analyze(project.id, 'auto', null, [
+      { recommendationId: recommendation.id, answerType: 'text', value: 'sensitive answer', sourceRecommendationCategory: recommendation.category },
+      { recommendationId: 'process-clarification-unknown', answerType: 'text', value: 'unknown sensitive answer' },
+    ]);
+    expect(withAnswers.workflow.nodes.map((node) => ({
+      name: node.name,
+      category: node.category,
+      service: node.service,
+      operation: node.operation,
+      description: node.description,
+    }))).toEqual(
+      result.workflow.nodes.map((node) => ({
+        name: node.name,
+        category: node.category,
+        service: node.service,
+        operation: node.operation,
+        description: node.description,
+      })),
+    );
+    expect(withAnswers.workflow.connections.map((connection) => ({
+      label: connection.label,
+      condition: connection.condition,
+      connectionKind: connection.connectionKind,
+    }))).toEqual(
+      result.workflow.connections.map((connection) => ({
+        label: connection.label,
+        condition: connection.condition,
+        connectionKind: connection.connectionKind,
+      })),
+    );
+    expect(withAnswers.processAnalysisDiagnostics?.clarificationAnswerContext).toEqual({
+      acceptedAnswerCount: 1,
+      acceptedAnswerCategories: [recommendation.category],
+    });
+    expect(JSON.stringify(withAnswers.processAnalysisDiagnostics)).not.toContain('sensitive answer');
+    expect(productionInput).toEqual({ scope, projectName: 'Asana CRM', platform: 'n8n' });
     const persisted = repository.findById(project.id)!; expect('plannerShadow' in persisted.workflow).toBe(false); expect('plannerShadow' in result.workflow).toBe(false);
     expect('v22ConceptualGraph' in persisted.workflow).toBe(false); expect('v22ConceptualGraph' in result.workflow).toBe(false);
     expect('v23PlatformTranslation' in persisted.workflow).toBe(false); expect('v23PlatformTranslation' in result.workflow).toBe(false);

@@ -1,4 +1,4 @@
-import type { AnalysisProviderStatus, ExtractedDocument, Project, WorkflowAnalysisResult } from '@awm/shared';
+import type { AnalysisProviderStatus, ExtractedDocument, Project, SubmittedClarificationAnswer, WorkflowAnalysisResult } from '@awm/shared';
 import { AlertCircle, ArrowLeft, Bot, Check, File, FileText, GitBranch, Info, KeyRound, Layers3, Lightbulb, LoaderCircle, Sparkles, Trash2, UploadCloud, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { documentApi } from '../api/documents';
@@ -24,6 +24,7 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
   const [analysisPhase, setAnalysisPhase] = useState<'idle' | 'saving' | 'generating' | 'processing' | 'complete'>('idle');
   const [analysis, setAnalysis] = useState<WorkflowAnalysisResult | null>(project.workflow.nodes.length ? { workflow: project.workflow, graphValidation: { valid: true, errorCount: 0, warningCount: 0 }, provider: 'local', analyzedAt: project.updatedAt } : null);
   const [providerStatus, setProviderStatus] = useState<AnalysisProviderStatus | null>(null);
+  const [clarificationAnswers, setClarificationAnswers] = useState<SubmittedClarificationAnswer[]>([]);
   const analysisRequest = useRef(false);
   useEffect(() => {
     let active = true;
@@ -93,7 +94,7 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
     try {
       await projectApi.updateScope(project.id, text);
       setAnalysisPhase('generating');
-      const result = await projectApi.analyze(project.id, workflowMode);
+      const result = await projectApi.analyze(project.id, workflowMode, clarificationAnswers);
       setAnalysisPhase('processing');
       setAnalysis(result);
       const updated = await projectApi.get(project.id); onSaved(updated); setSaved(true);
@@ -125,7 +126,7 @@ export function ScopeWorkspace({ project, onBack, onSaved, onOpenBuilder }: { pr
       {analysis ? <section className="analysis-results"><div className="draft-plan-notice" role="note"><Info size={18} /><div><strong>Choose how to continue</strong><p>Use the saved workflow, regenerate it from the requirements currently shown above, or start with an empty requirements editor for a different workflow.</p></div></div><header className="sticky-workspace-toolbar"><div><span className="analysis-icon"><Bot size={20} /></span><div><p className="eyebrow">Analysis complete · {analysis.analyzedAt === project.updatedAt ? 'Saved analysis' : analysis.provider === 'local' ? 'Local preview' : analysis.provider === 'ollama' ? 'Free local AI' : 'OpenAI provider'}</p><h2>{analysis.workflow.name}</h2><p>{analysis.workflow.summary || analysis.workflow.objective}</p></div></div><strong>{Math.round((analysis.workflow.confidence ?? 0) * 100)}% confidence</strong></header>
         <div className="analysis-metrics"><article><Layers3 size={17} /><div><strong>{analysis.workflow.nodes.length}</strong><span>Workflow steps</span></div></article><article><GitBranch size={17} /><div><strong>{analysis.workflow.branches.length}</strong><span>Branches</span></div></article><article><KeyRound size={17} /><div><strong>{new Set(analysis.workflow.nodes.flatMap((node) => node.credentials)).size}</strong><span>Credentials</span></div></article><article><Sparkles size={17} /><div><strong className="capitalize">{analysis.workflow.complexity}</strong><span>Complexity</span></div></article></div>
         {analysis.detectedProcess && <DetectedProcessSummary summary={analysis.detectedProcess} />}
-        <ClarificationReviewPanel analysisKey={`${analysis.workflow.id}:${analysis.analyzedAt}`} diagnostics={analysis.processAnalysisDiagnostics} recommendations={analysis.clarificationRecommendations} />
+        <ClarificationReviewPanel analysisKey={`${analysis.workflow.id}:${analysis.analyzedAt}`} diagnostics={analysis.processAnalysisDiagnostics} recommendations={analysis.clarificationRecommendations} onAnswersChange={setClarificationAnswers} />
         {analysis.workflow.clarificationQuestions.length > 0 && <div className="clarifications"><h3>More information will improve this plan</h3><p>These are business decisions—not technical errors. Add the answers to your requirements, then regenerate the analysis.</p>{analysis.workflow.clarificationQuestions.map((question, index) => <div className="question" key={question.id}><span>{index + 1}</span><div><strong>{question.question}</strong><small>Missing detail · {question.category.replace('_', ' ')}</small></div></div>)}</div>}
         <footer className="sticky-analysis-actions"><span>{analysis.graphValidation.valid ? <Check size={15} /> : <AlertCircle size={15} />} Graph structure validated</span><div className="analysis-actions"><button className="button secondary" disabled={analyzing} onClick={startNewWorkflow}>Start new workflow</button><button className="button secondary" disabled={analyzing || !text.trim()} onClick={() => void analyze(true, 'single')}>{analyzing ? 'Analyzing…' : 'Generate as single workflow'}</button><button className="button secondary" disabled={analyzing || !text.trim()} onClick={() => void analyze(true)}>{analyzing ? 'Analyzing…' : 'Regenerate automatically'}</button>{onOpenBuilder && <button className="button primary" onClick={onOpenBuilder}>Use existing workflow</button>}</div></footer>
       </section> : <section className="analysis-next sticky-workspace-toolbar"><div><span>Next step</span><h3>Analyze requirements</h3><p>Generate a reviewable workflow draft and identify missing business information. One independent trigger produces one workflow; multiple independent triggers may produce separate workflow tabs. Nothing is deployed automatically.{providerStatus ? ` ${providerStatus.message}` : ''}</p></div><div className="analysis-actions"><button className="button secondary" disabled={analyzing || !text.trim() || providerStatus?.available === false} onClick={() => void analyze(false, 'single')}>{analyzing ? 'Analyzing…' : 'Generate as single workflow'}</button><button className="button primary" disabled={analyzing || !text.trim() || providerStatus?.available === false} onClick={() => void analyze()}>{analyzing ? <><LoaderCircle className="spin" size={16} />Analyzing…</> : 'Analyze automatically'}</button></div></section>}

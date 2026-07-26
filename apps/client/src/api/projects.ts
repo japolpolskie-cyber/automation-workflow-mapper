@@ -9,6 +9,7 @@ import type {
   Project,
   UpdateCustomTemplateInput,
   WorkflowAnalysisResult,
+  SubmittedClarificationAnswer,
   WorkflowPatchProposal,
   WorkflowValidationResult,
 } from "@awm/shared";
@@ -87,10 +88,10 @@ export const projectApi = {
       method: "PATCH",
       body: JSON.stringify({ workflow, workflowSet, visualGraph }),
     }),
-  analyze: (projectId: string, workflowMode: "auto" | "single" = "auto") =>
+  analyze: (projectId: string, workflowMode: "auto" | "single" = "auto", clarificationAnswers?: SubmittedClarificationAnswer[]) =>
     request<WorkflowAnalysisResult>("/workflows/analyze", {
       method: "POST",
-      body: JSON.stringify({ projectId, workflowMode }),
+      body: JSON.stringify({ projectId, workflowMode, ...(clarificationAnswers?.length ? { clarificationAnswers } : {}) }),
     }),
   convert: (projectId: string, platform: Platform) =>
     request<PlatformBuildPlan>("/workflows/convert", {

@@ -30,4 +30,25 @@ describe('API error handling', () => {
       workflowMode: 'single',
     });
   });
+
+  it('submits only provided normalized clarification answers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ success: true, data: {}, error: null, meta: { requestId: 'test' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await projectApi.analyze('00000000-0000-4000-8000-000000000001', 'auto', [
+      { recommendationId: 'process-clarification-actor-owner', answerType: 'actor', value: 'Operations', sourceRecommendationCategory: 'actor-owner' },
+    ]);
+
+    expect(JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string)).toMatchObject({
+      clarificationAnswers: [{ recommendationId: 'process-clarification-actor-owner', answerType: 'actor', value: 'Operations' }],
+    });
+
+    await projectApi.analyze('00000000-0000-4000-8000-000000000001', 'auto', []);
+    expect(JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string)).not.toHaveProperty('clarificationAnswers');
+  });
 });

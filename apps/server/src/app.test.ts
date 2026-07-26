@@ -65,6 +65,25 @@ afterEach(async () => {
 });
 
 describe("API foundation", () => {
+  it("rejects structurally invalid clarification answer payloads", async () => {
+    const app = await buildApp(testEnvironment);
+    apps.push(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/workflows/analyze",
+      payload: {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        clarificationAnswers: [
+          { recommendationId: "duplicate", answerType: "text", value: "one" },
+          { recommendationId: "duplicate", answerType: "text", value: "two" },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.body).not.toContain("one");
+    expect(response.body).not.toContain("two");
+  });
+
   it("reports health with the response envelope", async () => {
     const app = await buildApp(testEnvironment);
     apps.push(app);

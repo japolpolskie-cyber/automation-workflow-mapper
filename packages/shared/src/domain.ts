@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { detectedProcessSummarySchema } from './detected-process.js';
 import { v21AnalysisArtifactsSchema } from './v2-analysis-contracts.js';
 import { processAnalysisDiagnosticsSchema } from './process-analysis-diagnostics.js';
+import { submittedClarificationAnswersSchema } from './submitted-clarification-answer.js';
 import { processClarificationRecommendationsSchema } from './process-clarification-recommendation.js';
 import { v22ConceptualGraphResultSchema } from './v2-conceptual-graph.js';
 import { platformTranslationResultSchema } from './v2-platform-translation.js';
@@ -277,6 +278,7 @@ export const extractedDocumentSchema = z.object({
 export const analyzeWorkflowRequestSchema = z.object({
   projectId: z.string().uuid(),
   workflowMode: z.enum(['auto', 'single']).default('auto'),
+  clarificationAnswers: submittedClarificationAnswersSchema.optional(),
 }).strict();
 export const convertWorkflowRequestSchema = z.object({ projectId: z.string().uuid(), platform: platformSchema }).strict();
 export const saveWorkflowEditorSchema = z.object({ workflow: canonicalWorkflowSchema, workflowSet: workflowSetSchema.optional(), visualGraph: visualGraphSchema }).strict();

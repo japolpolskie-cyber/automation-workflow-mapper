@@ -24,6 +24,10 @@ export const processAnalysisDiagnosticsSchema = z.object({
   loops: z.array(z.string().min(1)),
   synchronizationSignals: z.array(z.string().min(1)),
   missingInformation: z.array(z.string().min(1)),
+  clarificationAnswerContext: z.object({
+    acceptedAnswerCount: z.number().int().nonnegative(),
+    acceptedAnswerCategories: z.array(z.string().min(1)),
+  }).strict().optional(),
   summary: z.object({
     confidence: scoreSummarySchema.extend({
       tracedSignals: z.number().int().nonnegative(),
