@@ -264,6 +264,11 @@ If there is no reply, send a follow-up message.`;
     expect(result.v24GraphCritique).toMatchObject({ conceptual: { version: '2.4A' }, platform: { platform: 'n8n' } });
     expect(result.v24GraphRepair).toMatchObject({ conceptual: { report: { version: '2.4B' } }, platform: { report: { platform: 'n8n' } } });
     expect(result.v25AcceptanceMatrix).toMatchObject({ version: '2.5', shadowMode: true });
+    expect(result.processAnalysisDiagnostics).toMatchObject({
+      version: '1.0',
+      rulesVersion: '1.0',
+      applicationsAndSystems: expect.arrayContaining(['Asana']),
+    });
     expect(groundedPrompt).not.toMatch(/"confidence"|"coverage"|"reliability"|"weight"/);
     const persisted = repository.findById(project.id)!; expect('plannerShadow' in persisted.workflow).toBe(false); expect('plannerShadow' in result.workflow).toBe(false);
     expect('v22ConceptualGraph' in persisted.workflow).toBe(false); expect('v22ConceptualGraph' in result.workflow).toBe(false);

@@ -33,3 +33,4 @@ export * from "./v2-acceptance-matrix.js";
 export * from "./v2-promotion.js";
 export * from "./semantic-requirements.js";
 export * from "./process-analysis.js";
+export * from "./process-analysis-diagnostics.js";
