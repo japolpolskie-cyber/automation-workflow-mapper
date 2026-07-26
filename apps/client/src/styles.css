@@ -67,6 +67,11 @@ a {
   color: #183426;
   background: #b8e3c9;
 }
+.brand-mark img {
+  width: 32px;
+  height: 32px;
+  display: block;
+}
 .button {
   border: 0;
   border-radius: 9px;
@@ -1409,6 +1414,12 @@ h1 em {
   display: flex;
   gap: 9px;
   color: var(--green);
+}
+.palette-brand > img {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: block;
 }
 .palette-brand div {
   display: flex;

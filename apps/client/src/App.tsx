@@ -42,6 +42,7 @@ import { WorkflowEditor } from "./features/editor/WorkflowEditor";
 import { ThemeSelector } from "./theme/ThemeSelector";
 import { TemplateGallery } from "./components/TemplateGallery";
 import type { WorkflowTemplate } from "./data/workflow-templates";
+import workflowMapperIcon from "./assets/workflow-mapper-icon.png";
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -301,7 +302,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">
-            <Workflow size={20} />
+            <img src={workflowMapperIcon} alt="" aria-hidden="true" />
           </span>
           <span>FlowMapper</span>
         </div>
