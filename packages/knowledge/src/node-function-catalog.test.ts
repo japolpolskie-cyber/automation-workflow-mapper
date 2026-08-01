@@ -1,4 +1,4 @@
-import { aiChatbotDraftWorkflowBrief, collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, websiteEnquiryWorkflowBrief, type CanonicalWorkflowBrief } from '@awm/shared';
+import { aiChatbotDraftWorkflowBrief, collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, websiteEnquiryWorkflowBrief, WORKFLOW_BRIEF_CAPABILITY_TYPES, WORKFLOW_BRIEF_ENTITY_TYPES, type CanonicalWorkflowBrief } from '@awm/shared';
 import { describe, expect, it } from 'vitest';
 import * as publicKnowledge from './index.js';
 import {
@@ -12,6 +12,7 @@ import {
   approvalNodeFunctionContract,
   binaryDecisionNodeFunctionContract,
   errorHandlerNodeFunctionContract,
+  DETAILED_NODE_FUNCTION_IDS,
   filterNodeFunctionContract,
   followUpLoopNodeFunctionContract,
   getNodeFunctionContract,
@@ -21,6 +22,9 @@ import {
   mergeNodeFunctionContract,
   nodeFunctionCatalogSchema,
   nodeFunctionContractSchema,
+  NODE_FUNCTION_CATEGORIES_IN_USE,
+  NODE_FUNCTION_COUNT,
+  NODE_FUNCTION_IDS,
   parseNodeFunctionContract,
   pollingLoopNodeFunctionContract,
   retryNodeFunctionContract,
@@ -31,6 +35,7 @@ import {
   subWorkflowNodeFunctionContract,
   terminalNodeFunctionContract,
   triggerNodeFunctionContract,
+  validateNodeFunctionCatalog,
   waitNodeFunctionContract,
 } from './node-function-catalog.js';
 
@@ -88,6 +93,189 @@ describe('conceptual node-function catalog', () => {
   it('exports the catalog contract through the knowledge package index', () => {
     expect(publicKnowledge.nodeFunctionContractSchema).toBe(nodeFunctionContractSchema);
     expect(publicKnowledge.getNodeFunctionContract('router')).toEqual(routerNodeFunctionContract);
+    expect(publicKnowledge.NODE_FUNCTION_IDS).toBe(NODE_FUNCTION_IDS);
+    expect(publicKnowledge.NODE_FUNCTION_COUNT).toBe(NODE_FUNCTION_COUNT);
+    expect(publicKnowledge.DETAILED_NODE_FUNCTION_IDS).toBe(DETAILED_NODE_FUNCTION_IDS);
+    expect(publicKnowledge.NODE_FUNCTION_CATEGORIES_IN_USE).toBe(NODE_FUNCTION_CATEGORIES_IN_USE);
+    expect(publicKnowledge.validateNodeFunctionCatalog).toBe(validateNodeFunctionCatalog);
+  });
+});
+
+describe('catalog public constants and audit helper', () => {
+  it('derives stable constants from the complete catalog', () => {
+    expect([...NODE_FUNCTION_IDS].sort()).toEqual([...expectedCatalogIds].sort());
+    expect(NODE_FUNCTION_COUNT).toBe(expectedCatalogIds.length);
+    expect(DETAILED_NODE_FUNCTION_IDS).toEqual(NODE_FUNCTION_IDS);
+    expect(new Set(NODE_FUNCTION_CATEGORIES_IN_USE)).toEqual(new Set(listNodeFunctionContracts().map((contract) => contract.category)));
+    expect(Object.isFrozen(NODE_FUNCTION_IDS)).toBe(true);
+    expect(Object.isFrozen(DETAILED_NODE_FUNCTION_IDS)).toBe(true);
+    expect(Object.isFrozen(NODE_FUNCTION_CATEGORIES_IN_USE)).toBe(true);
+  });
+
+  it('reports the production catalog as complete and internally consistent', () => {
+    expect(validateNodeFunctionCatalog()).toEqual({ success: true, issues: [] });
+  });
+
+  it('reports missing, unexpected, non-detailed, relationship, and contradiction defects', () => {
+    const contracts = listNodeFunctionContracts();
+    const missing = validateNodeFunctionCatalog(contracts.slice(1));
+    expect(missing.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'missing-contract', contractId: contracts[0]!.id })]));
+
+    const unexpectedContracts = structuredClone(contracts);
+    unexpectedContracts[0]!.id = 'undocumented-function';
+    const unexpected = validateNodeFunctionCatalog(unexpectedContracts);
+    expect(unexpected.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'missing-contract', contractId: contracts[0]!.id }),
+      expect.objectContaining({ code: 'unexpected-contract', contractId: 'undocumented-function' }),
+    ]));
+
+    const inconsistent = structuredClone(contracts);
+    inconsistent[0]!.status = 'foundation';
+    inconsistent[0]!.relatedWorkflowBriefEntityTypes = [];
+    inconsistent[0]!.exclusionCriteria.push(inconsistent[0]!.selectionCriteria[0]!);
+    const result = validateNodeFunctionCatalog(inconsistent);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'not-detailed', contractId: inconsistent[0]!.id }),
+      expect.objectContaining({ code: 'missing-relationship', contractId: inconsistent[0]!.id }),
+      expect.objectContaining({ code: 'contradictory-criterion', contractId: inconsistent[0]!.id }),
+    ]));
+  });
+
+  it('reports schema-level nested IDs, output bounds, example flags, and forbidden terminology', () => {
+    const cases = [
+      (contract: typeof routerNodeFunctionContract) => contract.inputRequirements.push({ ...contract.inputRequirements[0]! }),
+      (contract: typeof routerNodeFunctionContract) => { contract.outputRequirements[0]!.minimumCount = 3; contract.outputRequirements[0]!.maximumCount = 2; },
+      (contract: typeof routerNodeFunctionContract) => { contract.positiveExamples[0]!.valid = false; },
+      (contract: typeof routerNodeFunctionContract) => { contract.purpose = 'Use a system prompt for this function.'; },
+    ];
+    for (const mutate of cases) {
+      const contracts = listNodeFunctionContracts();
+      mutate(contracts[0]!);
+      expect(validateNodeFunctionCatalog(contracts)).toMatchObject({ success: false, issues: [expect.objectContaining({ code: 'schema-invalid' })] });
+    }
+  });
+
+  it.each([
+    'Use an n8n node.',
+    'Select an OpenAI model.',
+    'Construct a system prompt.',
+    'Store runtime memory.',
+    'Grant unrestricted tools.',
+    'Read API credentials.',
+    'Attach a canvas ID.',
+    'Call an execution endpoint.',
+    'Autonomously publish the result.',
+  ])('rejects implementation leakage: %s', (purpose) => {
+    expect(safeParseNodeFunctionContract({ ...routerNodeFunctionContract, purpose }).success).toBe(false);
+  });
+
+  it('does not mutate audited input or expose catalog state through exported collections', () => {
+    const contracts = listNodeFunctionContracts();
+    const before = JSON.stringify(contracts);
+    validateNodeFunctionCatalog(contracts);
+    expect(JSON.stringify(contracts)).toBe(before);
+    expect(() => (NODE_FUNCTION_IDS as string[]).push('changed')).toThrow();
+    expect(() => (NODE_FUNCTION_CATEGORIES_IN_USE as string[]).splice(0, 1)).toThrow();
+    expect(listNodeFunctionContracts()).toHaveLength(NODE_FUNCTION_COUNT);
+  });
+
+  it('keeps parse and safe-parse behavior stable', () => {
+    expect(parseNodeFunctionContract(routerNodeFunctionContract)).toEqual(routerNodeFunctionContract);
+    expect(safeParseNodeFunctionContract(routerNodeFunctionContract).success).toBe(true);
+    expect(() => parseNodeFunctionContract({ ...routerNodeFunctionContract, unknown: true })).toThrow();
+    expect(safeParseNodeFunctionContract({ ...routerNodeFunctionContract, unknown: true }).success).toBe(false);
+  });
+});
+
+const expectedCategories: Record<string, string> = {
+  trigger: 'trigger', action: 'action', 'binary-decision': 'decision', router: 'routing', filter: 'decision',
+  iterator: 'collection', aggregator: 'collection', merge: 'synchronization', wait: 'timing', approval: 'human',
+  retry: 'resilience', 'follow-up-loop': 'timing', 'revision-loop': 'human', 'polling-loop': 'timing',
+  'return-to-step-loop': 'orchestration', 'error-handler': 'resilience', 'sub-workflow': 'orchestration', terminal: 'terminal',
+  'ai-agent': 'ai', 'ai-classification': 'ai', 'ai-extraction': 'ai', 'ai-summarization': 'ai', 'ai-generation': 'ai',
+};
+
+const workflowBriefCompatibility: Record<string, readonly string[]> = {
+  trigger: ['trigger', 'application', 'actor', 'action', 'decision'],
+  action: ['action', 'application', 'actor'],
+  'binary-decision': ['decision', 'route'],
+  router: ['decision', 'route'],
+  filter: ['decision', 'route', 'action', 'iterator'],
+  iterator: ['iterator', 'action', 'aggregator'],
+  aggregator: ['aggregator', 'iterator', 'action'],
+  merge: ['merge', 'route', 'action'],
+  wait: ['wait', 'action'],
+  approval: ['approval', 'actor', 'action', 'route'],
+  retry: ['loop', 'action'],
+  'follow-up-loop': ['loop', 'wait', 'decision', 'action'],
+  'revision-loop': ['loop', 'approval', 'decision', 'action'],
+  'polling-loop': ['loop', 'wait', 'action'],
+  'return-to-step-loop': ['loop', 'action', 'decision'],
+  'error-handler': ['capability', 'action', 'loop', 'route'],
+  'sub-workflow': ['capability', 'action'],
+  terminal: ['capability', 'action', 'route', 'loop'],
+  'ai-agent': ['capability', 'action'],
+  'ai-classification': ['capability', 'action', 'route'],
+  'ai-extraction': ['capability', 'action'],
+  'ai-summarization': ['capability', 'action', 'aggregator'],
+  'ai-generation': ['capability', 'action', 'approval'],
+};
+
+describe('complete Workflow Brief compatibility matrix', () => {
+  it('assigns the reviewed category and supported relationships to all 23 contracts', () => {
+    expect(Object.keys(expectedCategories).sort()).toEqual([...expectedCatalogIds].sort());
+    expect(Object.keys(workflowBriefCompatibility).sort()).toEqual([...expectedCatalogIds].sort());
+    for (const contract of listNodeFunctionContracts()) {
+      expect(contract.category).toBe(expectedCategories[contract.id]);
+      expect(contract.relatedWorkflowBriefEntityTypes).toEqual(workflowBriefCompatibility[contract.id]);
+      expect(contract.relatedWorkflowBriefEntityTypes.length).toBeGreaterThan(0);
+      expect(contract.relatedWorkflowBriefEntityTypes.every((type) => WORKFLOW_BRIEF_ENTITY_TYPES.includes(type))).toBe(true);
+    }
+  });
+
+  it('maps every AI contract to its matching Workflow Brief capability suggestion type', () => {
+    for (const id of ['ai-agent', 'ai-classification', 'ai-extraction', 'ai-summarization', 'ai-generation'] as const) {
+      expect(WORKFLOW_BRIEF_CAPABILITY_TYPES).toContain(id);
+      expect(getNodeFunctionContract(id)?.relatedWorkflowBriefEntityTypes).toContain('capability');
+    }
+  });
+});
+
+const conceptualText = (id: string) => {
+  const contract = getNodeFunctionContract(id)!;
+  return [contract.purpose, ...contract.selectionCriteria, ...contract.exclusionCriteria, ...contract.safeguards.flatMap((item) => [item.description, item.reason]), ...contract.negativeExamples.flatMap((item) => [item.requirementText, item.expectedInterpretation])].join(' ');
+};
+
+describe('cross-contract consistency audit', () => {
+  it.each([
+    ['trigger', /Wait.*Follow-up.*Polling/i],
+    ['action', /routing|decision.*Wait.*Iterator/i],
+    ['filter', /Binary Decision.*Router.*Action/i],
+    ['binary-decision', /Router.*parallel/i],
+    ['router', /binary decision.*parallel/i],
+    ['iterator', /Retry.*Follow-up.*Polling/i],
+    ['aggregator', /Merge.*Iterator/i],
+    ['merge', /Router.*Aggregator/i],
+    ['approval', /approved.status.*Binary Decision.*notification.*Revision/i],
+    ['revision-loop', /Approval|approval/i],
+    ['wait', /Polling.*Follow-up/i],
+    ['retry', /Follow-up.*Polling/i],
+    ['error-handler', /negative business outcome|business rejection.*Retry/i],
+    ['sub-workflow', /Action.*Return-to-step/i],
+    ['terminal', /Error Handler|recoverable/i],
+    ['ai-agent', /AI Classification.*AI Extraction.*AI Summarization.*AI Generation.*Router.*Action/i],
+    ['ai-classification', /deterministic.*Router|Router.*deterministic/i],
+    ['ai-extraction', /structured.*deterministic|deterministic.*structured/i],
+    ['ai-summarization', /AI Extraction.*AI Generation.*Aggregator/i],
+    ['ai-generation', /AI Summarization.*template.*AI Agent/i],
+  ] as const)('preserves the documented boundary for %s', (id, boundary) => {
+    expect(conceptualText(id)).toMatch(boundary);
+  });
+
+  it('states a deterministic-first alternative for every conceptual AI capability', () => {
+    for (const id of ['ai-agent', 'ai-classification', 'ai-extraction', 'ai-summarization', 'ai-generation']) {
+      expect(conceptualText(id)).toMatch(/deterministic/i);
+    }
   });
 });
 

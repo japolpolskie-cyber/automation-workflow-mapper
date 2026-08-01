@@ -8,7 +8,7 @@ A conceptual function is not a platform node. Catalog contracts contain no conne
 
 ## Relationship to the Workflow Brief
 
-Catalog contracts describe the meaning of concepts represented by the Canonical Workflow Brief. The Router contract maps to a multi-route `WorkflowBriefDecision`; its semantic outcomes map to `WorkflowBriefRoute` entries. The knowledge package reuses the shared Workflow Brief entity-type schema, preserving alignment without introducing a circular dependency.
+Catalog contracts describe the meaning of concepts represented by the Canonical Workflow Brief. Every catalog entry declares at least one valid Workflow Brief relationship. Direct entity mappings cover triggers, actions, decisions, routes, loops, waits, approvals, merges, iterators, and aggregators. Error Handler, Sub-workflow, Terminal, and the five AI functions may remain capability-level concepts where the brief has no dedicated entity. The knowledge package reuses the shared Workflow Brief entity-type schema, preserving alignment without introducing a circular dependency.
 
 The catalog does not currently detect requirements or change a Workflow Brief.
 
@@ -18,33 +18,34 @@ The catalog does not currently detect requirements or change a Workflow Brief.
 - `detailed`: selection, exclusion, inputs, outputs, safeguards, and examples are fully specified.
 - `deprecated`: retained for compatibility but no longer intended for new selection.
 
-## Current inventory
+## Complete inventory by category
 
-All 23 contracts are detailed after Phase C Sprint 5:
+All 23 contracts are detailed after Phase C Sprint 6:
 
-- `router`
-- `binary-decision`
-- `retry`
-- `follow-up-loop`
-- `revision-loop`
-- `polling-loop`
-- `return-to-step-loop`
-- `wait`
-- `approval`
-- `merge`
-- `iterator`
-- `aggregator`
-- `trigger`
-- `action`
-- `filter`
-- `error-handler`
-- `sub-workflow`
-- `terminal`
-- `ai-agent`
-- `ai-classification`
-- `ai-extraction`
-- `ai-summarization`
-- `ai-generation`
+- Start: `trigger`
+- Business operation: `action`
+- Decision and routing: `binary-decision`, `router`, `filter`
+- Collection: `iterator`, `aggregator`
+- Synchronization: `merge`
+- Timing: `wait`, `follow-up-loop`, `polling-loop`
+- Human boundary: `approval`, `revision-loop`
+- Resilience: `retry`, `error-handler`
+- Orchestration: `return-to-step-loop`, `sub-workflow`
+- Finality: `terminal`
+- Conceptual AI: `ai-agent`, `ai-classification`, `ai-extraction`, `ai-summarization`, `ai-generation`
+
+The catalog contains no undocumented extra entries and no foundation-status entries.
+
+## Public catalog contract
+
+`@awm/knowledge` exports strict schemas, inferred types, individual detailed contracts, and pure catalog access:
+
+- `listNodeFunctionContracts()` returns a defensive copy of the complete catalog.
+- `getNodeFunctionContract(id)` performs normalized lookup and returns a defensive copy or `undefined`.
+- `hasNodeFunctionContract(id)` reports whether a normalized ID exists.
+- `parseNodeFunctionContract(input)` and `safeParseNodeFunctionContract(input)` preserve strict validation behavior.
+- `validateNodeFunctionCatalog(input?)` performs a pure, structured whole-catalog audit without file access or mutation.
+- `NODE_FUNCTION_IDS`, `NODE_FUNCTION_COUNT`, `DETAILED_NODE_FUNCTION_IDS`, and `NODE_FUNCTION_CATEGORIES_IN_USE` are frozen values derived from the parsed catalog source of truth.
 
 ## Router behavior contract
 
@@ -126,6 +127,19 @@ The five AI contracts describe reviewed business behavior only. They contain no 
 
 Deterministic behavior remains preferred whenever structured rules, known fields, fixed templates, or ordinary business actions are sufficient. AI wording alone does not select an AI contract, and ambiguity about scope or authority requires clarification and review.
 
+## Major cross-contract distinctions
+
+- Trigger begins a new execution; Wait pauses an existing one; Polling repeatedly checks; Follow-up repeatedly communicates.
+- Action performs one business operation; Filter is a one-sided gate; Binary Decision preserves two meaningful outcomes; Router selects among multiple semantic outcomes.
+- Router is mutually exclusive routing, not parallel fan-out or branch synchronization.
+- Iterator repeats by collection membership, not failure, outreach cadence, or repeated state checking.
+- Aggregator recombines item results; Merge synchronizes workflow branches.
+- Approval requires an active human decision. Descriptive approved status is not Approval, and return-for-changes behavior belongs to Revision Loop.
+- Retry repeats an operation under a bound; Error Handler owns final operational failure handling. Normal negative business outcomes are not errors.
+- Sub-workflow delegates a reusable multi-step process; Action is one operation; Return-to-step Loop stays within the current process.
+- Terminal has no continuation; recoverable failure belongs to Error Handler.
+- AI Agent handles bounded open-ended interaction. Classification assigns known labels, Extraction identifies defined fields, Summarization faithfully compresses source content, and Generation creates one bounded artifact.
+
 ## Semantic route-label rule
 
 Route labels describe business outcomes. Labels such as `IT`, `Marketing`, `Customer Support`, `Paid`, `Pending`, `Overdue`, and priority names are valid when supported by the requirement.
@@ -152,4 +166,8 @@ Excluded examples:
 
 ## Non-goals
 
-This catalog does not implement requirement detection, platform translation, runtime execution, UI behavior, provider prompts, graph compilation, or catalog-to-runtime integration.
+This catalog does not implement requirement detection, prompt construction, runtime execution, platform translation, UI review behavior, graph compilation, or catalog-to-runtime integration.
+
+## Lifecycle and versioning
+
+Phase C establishes the complete initial public catalog contract. Existing IDs and meanings should remain stable. Additive helpers and strictly compatible validation hardening may be introduced without renaming concepts. A new function requires a verified business-level coverage gap that cannot be represented by an existing contract; alternate wording or a platform-specific node is not sufficient justification. Deprecation must preserve compatibility and be documented before removal.

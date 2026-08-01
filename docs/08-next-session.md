@@ -2,26 +2,25 @@
 
 ## Exact task
 
-Phase C Sprint 6 — catalog completion audit, missing conceptual functions, consistency hardening, and public catalog contract finalization only.
+Phase D Sprint 1 — capability-detection foundation only: evidence-bearing detection result schema and detector interface, with no actual node-function detection rules yet.
 
 ## Scope
 
-- Audit the 23 detailed conceptual contracts against the existing canonical business-function model and documented workflow requirements.
-- Add a conceptual function only when a verified repository gap exists and no current contract already represents it.
-- Harden consistency across names, categories, required information, semantic outputs, safeguards, examples, related Workflow Brief entities, and public exports.
-- Preserve the Canonical Workflow Brief v1.0 boundary and all existing detailed behavior unless a verified consistency defect requires a narrow correction.
+- Define the strict, business-level result contract for future node-function capability detection.
+- Require traceable evidence, confidence, ambiguity, and clarification information appropriate to the existing Canonical Workflow Brief.
+- Define a deterministic detector interface without implementing detection rules.
+- Preserve the finalized 23-entry conceptual catalog as the only allowed node-function vocabulary.
 
 ## Explicit exclusions
 
-- No requirement detection or analysis logic.
-- No provider or Ollama calls.
-- No runtime AI configuration, prompts, models, tools, memory, embeddings, or vector stores.
-- No Workflow Brief UI or interactive review implementation.
-- No graph generation, compiler integration, or platform translation changes.
+- No actual node-function detection rules.
+- No requirement-analysis behavior changes.
+- No prompts, providers, Ollama calls, models, tools, or runtime memory.
+- No UI or interactive review implementation.
+- No graph generation, compiler integration, planner changes, or platform translation.
 - No capability-pack expansion.
-- No two-step generation experiment.
-- No broad planner or workflow-schema refactor.
+- No Workflow Brief schema change unless a separately proven compatibility defect requires an independently scoped decision.
 
 ## Completion standard
 
-The result should finish the public conceptual catalog contract through a repository-evidenced completeness and consistency audit, with strict focused tests and no runtime integration.
+The result should add only a strict evidence-bearing detection-result schema and detector interface, with focused tests and no production detection behavior.

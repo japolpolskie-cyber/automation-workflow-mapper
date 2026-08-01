@@ -14,7 +14,7 @@
 | Ollama and OpenAI-compatible providers | Implemented | Optional single-request generation paths. |
 | V2 shadow and promotion pipeline | Partially implemented | Shadow artifacts and promotion gates exist; promotion is disabled by default. |
 | Canonical internal Workflow Brief schema | Implemented | Phase B Sprints 1–4 define, harden, test, and document the strict v1.0 business contract, including compatibility fixtures and pure serialization. Detection and runtime integration remain planned. |
-| Conceptual node-function catalog | Partially implemented | Phase C Sprints 1–5 establish 23 detailed contracts. Sprint 5 adds business-level AI Agent, Classification, Extraction, Summarization, and Generation behavior without runtime AI configuration. Catalog completion and consistency audit remains planned. |
+| Conceptual node-function catalog | Implemented | Phase C Sprints 1–6 finalize 23 detailed contracts, stable public constants, pure whole-catalog validation, complete Workflow Brief compatibility coverage, defensive-copy guarantees, and cross-contract consistency tests. Detection and runtime integration remain planned. |
 | Interactive Workflow Brief review | Planned | Must follow schema and confidence design. |
 | Brief-to-graph compiler integration | Planned | Mapper will consume a locked brief. |
 | Ollama two-step skeleton/enrichment generation | Deferred | Re-evaluate only after brief integration and platform validation. |

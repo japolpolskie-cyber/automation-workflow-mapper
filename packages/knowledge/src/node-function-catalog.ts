@@ -4,7 +4,7 @@ import { z } from 'zod';
 const idSchema = z.string().trim().min(1, 'ID must not be empty.');
 const nameSchema = z.string().trim().min(1, 'Name must not be empty.');
 const textSchema = z.string().trim().min(1);
-const implementationLanguage = /\b(?:n8n|make(?:\.com)?|zapier|reactflow|nodeType|provider|modelId|runtime configuration)\b/i;
+const implementationLanguage = /\b(?:n8n|make(?:\.com)?|zapier|reactflow|nodeType|provider|modelId|runtime configuration|system prompt|developer prompt|runtime memory|unrestricted tools?|api (?:key|credential)s?|canvas ids?|execution endpoints?|autonomous(?:ly)? (?:send|publish|execute)|ollama|openai|chatgpt|claude|gemini|gpt(?:-\d[\w.-]*)?)\b/i;
 
 export const nodeFunctionCategorySchema = z.enum([
   'trigger', 'action', 'decision', 'routing', 'transformation', 'collection',
@@ -1025,25 +1025,6 @@ export const aiGenerationNodeFunctionContract: NodeFunctionContract = {
   relatedWorkflowBriefEntityTypes: ['capability', 'action', 'approval'], notes: ['Maps to ai-generation and grants no delivery or publication authority.'],
 };
 
-type FoundationSeed = { id: string; name: string; category: NodeFunctionCategory; entities: NodeFunctionContract['relatedWorkflowBriefEntityTypes'] };
-const foundationSeeds: FoundationSeed[] = [
-];
-
-const foundationContract = (seed: FoundationSeed): NodeFunctionContract => ({
-  id: seed.id,
-  name: seed.name,
-  category: seed.category,
-  status: 'foundation',
-  purpose: `Represent the conceptual business function ${seed.name}.`,
-  selectionCriteria: [`Use when the reviewed business requirement explicitly needs ${seed.name}.`],
-  exclusionCriteria: [`Do not use when the requirement does not establish ${seed.name} behavior.`],
-  inputRequirements: [], outputRequirements: [], safeguards: [],
-  positiveExamples: [{ requirementText: `The process explicitly requires ${seed.name}.`, expectedInterpretation: `Record ${seed.name} as a conceptual function for later detailed review.`, valid: true }],
-  negativeExamples: [{ requirementText: `The process does not require ${seed.name}.`, expectedInterpretation: `Do not select ${seed.name}.`, valid: false }],
-  relatedWorkflowBriefEntityTypes: seed.entities,
-  notes: ['Detailed behavior is intentionally deferred.'],
-});
-
 const deepFreeze = <T>(value: T): T => {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -1053,7 +1034,6 @@ const deepFreeze = <T>(value: T): T => {
 };
 
 const internalNodeFunctionCatalog = deepFreeze(nodeFunctionCatalogSchema.parse([
-  ...foundationSeeds.map(foundationContract),
   routerNodeFunctionContract,
   binaryDecisionNodeFunctionContract,
   retryNodeFunctionContract,
@@ -1078,6 +1058,55 @@ const internalNodeFunctionCatalog = deepFreeze(nodeFunctionCatalogSchema.parse([
   aiSummarizationNodeFunctionContract,
   aiGenerationNodeFunctionContract,
 ]));
+
+export const NODE_FUNCTION_IDS: readonly string[] = deepFreeze(internalNodeFunctionCatalog.map((contract) => contract.id));
+export const NODE_FUNCTION_COUNT = NODE_FUNCTION_IDS.length;
+export const DETAILED_NODE_FUNCTION_IDS: readonly string[] = deepFreeze(internalNodeFunctionCatalog
+  .filter((contract) => contract.status === 'detailed')
+  .map((contract) => contract.id));
+export const NODE_FUNCTION_CATEGORIES_IN_USE: readonly NodeFunctionCategory[] = deepFreeze(
+  [...new Set(internalNodeFunctionCatalog.map((contract) => contract.category))],
+);
+
+export interface NodeFunctionCatalogAuditIssue {
+  code: 'schema-invalid' | 'missing-contract' | 'unexpected-contract' | 'not-detailed' | 'missing-relationship' | 'contradictory-criterion';
+  message: string;
+  contractId?: string;
+  path?: readonly (string | number)[];
+}
+
+export interface NodeFunctionCatalogAuditResult {
+  success: boolean;
+  issues: readonly NodeFunctionCatalogAuditIssue[];
+}
+
+export function validateNodeFunctionCatalog(input: unknown = internalNodeFunctionCatalog): NodeFunctionCatalogAuditResult {
+  const parsed = nodeFunctionCatalogSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      issues: parsed.error.issues.map((issue) => ({ code: 'schema-invalid', message: issue.message, path: issue.path })),
+    };
+  }
+
+  const issues: NodeFunctionCatalogAuditIssue[] = [];
+  const expectedIds = new Set(NODE_FUNCTION_IDS);
+  const actualIds = new Set(parsed.data.map((contract) => contract.id));
+  for (const id of NODE_FUNCTION_IDS) {
+    if (!actualIds.has(id)) issues.push({ code: 'missing-contract', contractId: id, message: `Expected node-function contract "${id}" is missing.` });
+  }
+  for (const contract of parsed.data) {
+    if (!expectedIds.has(contract.id)) issues.push({ code: 'unexpected-contract', contractId: contract.id, message: `Undocumented node-function contract "${contract.id}" is not allowed.` });
+    if (contract.status !== 'detailed') issues.push({ code: 'not-detailed', contractId: contract.id, message: `Node-function contract "${contract.id}" must be detailed.` });
+    if (contract.relatedWorkflowBriefEntityTypes.length === 0) issues.push({ code: 'missing-relationship', contractId: contract.id, message: `Node-function contract "${contract.id}" requires a Workflow Brief relationship.` });
+    const exclusions = new Set(contract.exclusionCriteria.map((criterion) => criterion.trim().toLowerCase()));
+    for (const criterion of contract.selectionCriteria) {
+      if (exclusions.has(criterion.trim().toLowerCase())) issues.push({ code: 'contradictory-criterion', contractId: contract.id, message: `Node-function contract "${contract.id}" repeats the same selection and exclusion criterion.` });
+    }
+  }
+
+  return { success: issues.length === 0, issues };
+}
 
 export function parseNodeFunctionContract(input: unknown): NodeFunctionContract {
   return nodeFunctionContractSchema.parse(input);
