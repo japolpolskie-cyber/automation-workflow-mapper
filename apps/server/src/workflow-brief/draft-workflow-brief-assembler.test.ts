@@ -36,6 +36,45 @@ describe('assembleDraftWorkflowBrief', () => {
     expect(brief.decisions[0]).toMatchObject({ decisionType: 'binary', fallbackRouteId: brief.routes[1]?.id });
   });
 
+  it('creates a complete Wait entity only when its boundary is sufficient', () => {
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Wait three days before following up.' });
+    expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
+    expect(brief.capabilitySuggestions[0]?.capabilityType).toBe('wait');
+    expect(brief.waits[0]).toMatchObject({ waitType: 'duration', boundaryDescription: 'three days', durationDescription: 'three days', resumeActionId: brief.actions[0]?.id });
+  });
+
+  it('keeps an incomplete Wait as a suggestion with clarification and no invalid entity', () => {
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Wait until ready.' });
+    expect(brief.capabilitySuggestions[0]?.capabilityType).toBe('wait');
+    expect(brief.waits).toEqual([]);
+    expect(brief.clarificationQuestions).toHaveLength(1);
+    expect(brief.reviewState.status).toBe('needs-clarification');
+  });
+
+  it('keeps incomplete Approval as a suggestion without invented references', () => {
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Send the proposal to the manager for approval.' });
+    expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
+    expect(brief.capabilitySuggestions[0]).toMatchObject({ capabilityType: 'approval', relatedEntityIds: [] });
+    expect(brief.approvals).toEqual([]);
+    expect(brief.actors).toEqual([]);
+    expect(brief.clarificationQuestions[0]?.question).toMatch(/approved or rejected/i);
+  });
+
+  it('materializes Approval only when approver, subject, and both outcomes are explicit', () => {
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Wait for the client to approve or reject the design.' });
+    expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
+    expect(brief.capabilitySuggestions.map((item) => item.capabilityType)).toEqual(['approval']);
+    expect(brief.approvals[0]).toMatchObject({ approverActorId: brief.actors[0]?.id, requestActionId: brief.actions[0]?.id });
+    expect(brief.routes.map((route) => route.label)).toEqual(['Approved', 'Rejected']);
+    expect(brief.waits).toEqual([]);
+  });
+
+  it('preserves a distinct explicit resume boundary alongside Approval', () => {
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Resume after manager approval.' });
+    expect(brief.capabilitySuggestions.map((item) => item.capabilityType)).toEqual(['wait']);
+    expect(brief.waits[0]?.waitType).toBe('until-approval');
+  });
+
   it('turns ambiguous routing into open clarification and needs-clarification state', () => {
     const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Route enquiries to Sales, Enterprise Sales, or Support.' });
     expect(brief.reviewState.status).toBe('needs-clarification');
@@ -63,5 +102,6 @@ describe('assembleDraftWorkflowBrief', () => {
     const second = assembleDraftWorkflowBrief(structuredClone(input));
     expect(input).toEqual(before);
     expect(first).toEqual(second);
+    expect(first.reviewState.status).not.toBe('locked');
   });
 });

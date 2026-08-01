@@ -4,7 +4,7 @@
 
 The server exposes an isolated, internal path from raw business requirement text to validated draft `CanonicalWorkflowBrief` JSON:
 
-1. The deterministic Router and Binary Decision detectors inspect the requirement.
+1. The deterministic Router, Binary Decision, Wait, and Approval detectors inspect the requirement.
 2. Exact-scope results are merged without duplicate suggestions.
 3. Detection evidence, confidence, ambiguity, review decisions, and business-level decision/route hints are assembled into a draft brief.
 4. The complete result is parsed through the canonical shared schema before it is returned.
@@ -19,7 +19,7 @@ The request requires `sourceRequirement` and accepts optional `name`, `summary`,
 
 ## Detection and review behavior
 
-Only Router and Binary Decision detection is enabled. Router outcomes retain their semantic labels, and binary decisions retain semantic labels when available with TRUE/FALSE only as detector fallback. Router results take precedence only when the same exact evidence scope would otherwise produce both forms.
+Router, Binary Decision, Wait, and Approval detection are enabled. Router and binary outcomes retain semantic labels. Complete Wait boundaries become business-level wait entities using the draft review action as the explicitly scaffolded resume reference. Approval entities are created only when approver, subject, and approved/rejected outcomes are explicit; incomplete detections remain capability suggestions with clarification.
 
 Detected capabilities are system-suggested or required for review. The brief is never confirmed or locked automatically. Open high-priority or blocking ambiguity produces `needs-clarification`; otherwise the review state is `draft`.
 
@@ -31,8 +31,7 @@ Their names and descriptions explicitly identify them as scaffolding rather than
 
 ## Known limitations
 
-- No detector families beyond Router and Binary Decision are used.
+- No detector families beyond Router, Binary Decision, Wait, and Approval are used.
 - No ordinary business trigger, action, actor, or application extraction is performed.
 - No production Mapper integration, UI, persistence, provider call, graph generation, or platform translation exists.
 - The draft remains reviewable JSON only and must not be treated as confirmed requirements.
-

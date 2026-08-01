@@ -2,13 +2,13 @@
 
 ## Current status
 
-The Mapper and internal Workflow Brief vertical slice are usable. The internal preview page can generate and inspect validated draft briefs. Further detector families and production integration remain deferred.
+The Mapper remains production-usable. The internal Workflow Brief endpoint and preview support Router, Binary Decision, Wait, and Approval detection. Loop-family and other detectors remain deferred.
 
 ## Current boundary
 
-- `/internal/workflow-brief` is an unlisted, internal inspection page.
-- Only Router and Binary Decision detection is represented.
-- Drafts remain unconfirmed, unlocked, unpersisted, and separate from production Mapper generation.
+- Drafts remain unlocked, unconfirmed, unpersisted, and separate from production Mapper generation.
+- Wait and Approval are suggestion-first; entities are materialized only from sufficient explicit business information.
+- No Loop-family, collection, merge, filter, action, trigger, error, terminal, sub-workflow, or AI detection is implemented.
 - No provider calls, graph compilation, platform translation, or canvas integration is included.
 
-Any next sprint must explicitly select one deferred improvement and must not treat the preview page as authorization for production integration.
+Any next sprint must select one deferred detector family explicitly.

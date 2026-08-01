@@ -8,6 +8,13 @@ describe('WorkflowBriefService', () => {
     expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
   });
 
+  it('returns validated Wait and Approval suggestions through the isolated service', () => {
+    const wait = generateDraftWorkflowBrief({ sourceRequirement: 'Wait until the customer replies.' });
+    const approval = generateDraftWorkflowBrief({ sourceRequirement: 'Send the proposal to the manager for approval.' });
+    expect(parseCanonicalWorkflowBrief(wait).capabilitySuggestions[0]?.capabilityType).toBe('wait');
+    expect(parseCanonicalWorkflowBrief(approval).capabilitySuggestions[0]?.capabilityType).toBe('approval');
+  });
+
   it.each(['', '   '])('rejects empty source requirements', (sourceRequirement) => {
     expect(() => new WorkflowBriefService().generateDraft({ sourceRequirement })).toThrow();
   });
@@ -17,4 +24,3 @@ describe('WorkflowBriefService', () => {
     expect(() => new WorkflowBriefService().generateDraft({ sourceRequirement: 'Review it.', provider: 'anything' })).toThrow();
   });
 });
-

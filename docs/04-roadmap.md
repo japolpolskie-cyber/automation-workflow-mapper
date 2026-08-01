@@ -44,6 +44,8 @@ A minimum usable vertical slice is implemented: an isolated internal server endp
 
 The vertical slice now includes a small internal preview page at `/internal/workflow-brief`. It provides read-only inspection of validated draft JSON and its detection metadata without adding production navigation, persistence, review mutation, graph generation, or Mapper integration.
 
+Phase D Sprint 3A is implemented: deterministic Wait and Approval detectors add exact evidence, bounded confidence, clarification, and overlap precedence. The isolated assembler materializes complete wait boundaries and fully explicit human approvals while retaining incomplete detections as review suggestions; the internal preview displays both without changing production generation.
+
 ## Phase E — Interactive Brief review
 
 Design and implement review behavior for users to confirm, edit, reject, or lock business needs and unresolved decisions before compilation.

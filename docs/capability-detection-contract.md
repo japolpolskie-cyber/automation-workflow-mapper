@@ -4,7 +4,7 @@
 
 The capability-detection foundation defines how future deterministic detectors may suggest conceptual node functions from raw requirement text. A result records what may be needed, why it was suggested, the exact supporting text, confidence, ambiguity, and clarification needs.
 
-The included no-op detector always returns an empty result. Phase D Sprint 2 adds the first two bounded deterministic rules: Router and Binary Decision only.
+The included no-op detector always returns an empty result. Phase D Sprints 2 and 3A add four bounded deterministic rules: Router, Binary Decision, Wait, and Approval.
 
 ## Detection-result lifecycle
 
@@ -53,6 +53,14 @@ Duplicate candidates for one node-function ID require distinct non-empty `metada
 
 Both detectors are synchronous and pure. Candidate, evidence, ambiguity, and temporary entity IDs are derived deterministically from exact source offsets. Explicit complete structures use high confidence and `required` provenance; emitted Router candidates needing clarification use medium confidence. Multiple separate source scopes remain separate candidates.
 
+## Implemented Wait and Approval detectors
+
+`WaitDetector` detects explicit internal pause boundaries for fixed durations, dates or deadlines, events, responses, and approval-based resumption. It rejects schedules, repeated checking, reminder cadence, retry timing, and arrival triggers. A stated but unclassified resume boundary remains a suggestion with evidence-linked clarification rather than receiving an invented wait type.
+
+`ApprovalDetector` requires active human approval, review, or decision language. It preserves explicitly named approvers, approval subjects, and approved/rejected outcome hints. Missing approvers or outcomes produce clarification; descriptive approved status, automatic validation, manager notification, and system binary conditions are rejected.
+
+When Approval and Wait cover the same exact human-decision scope, Approval owns that semantic boundary. Wait is retained only when an explicit pause/resume boundary is separately stated and representable.
+
 ## Relationship to the catalog and Workflow Brief
 
 The finalized node-function catalog is the source of truth for candidate IDs. Unknown IDs are rejected.
@@ -77,7 +85,7 @@ The finalized node-function catalog is the source of truth for candidate IDs. Un
 
 ## Non-goals
 
-- No detectors beyond Router and Binary Decision
+- No detectors beyond Router, Binary Decision, Wait, and Approval
 - No provider prompts or model configuration
 - No UI
 - No Workflow Brief generation or mutation

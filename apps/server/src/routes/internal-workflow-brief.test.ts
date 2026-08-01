@@ -50,6 +50,14 @@ describe('internal Workflow Brief endpoint', () => {
     expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
   });
 
+  it('returns Wait and Approval in the backward-compatible detection summary', async () => {
+    const app = await testApp();
+    const wait = await app.inject({ method: 'POST', url: '/api/internal/workflow-brief/draft', payload: { sourceRequirement: 'Wait until the customer replies.' } });
+    const approval = await app.inject({ method: 'POST', url: '/api/internal/workflow-brief/draft', payload: { sourceRequirement: 'Send the proposal to the manager for approval.' } });
+    expect(wait.json().data.detectionSummary).toMatchObject({ candidateCount: 1, detectedFunctions: ['wait'] });
+    expect(approval.json().data.detectionSummary).toMatchObject({ candidateCount: 1, detectedFunctions: ['approval'] });
+  });
+
   it('calls only the isolated service supplied to the route', async () => {
     const generateDraft = vi.fn((input: unknown) => new WorkflowBriefService().generateDraft(input));
     const app = await testApp({ generateDraft } as WorkflowBriefService);
@@ -63,4 +71,3 @@ describe('internal Workflow Brief endpoint', () => {
     expect(response.statusCode).toBe(404);
   });
 });
-

@@ -100,6 +100,44 @@ describe('WorkflowBriefPreviewPage', () => {
     expect(screen.getByText(/Priority:/).closest('p')).toHaveTextContent('high');
   });
 
+  it('renders complete Wait details and confidence', async () => {
+    const result = routerResult();
+    result.brief.decisions = [];
+    result.brief.routes = [];
+    result.brief.waits = [{ id: 'customer-response-wait', name: 'Wait for customer response', description: 'Pause until the customer replies.', waitType: 'until-response', boundaryDescription: 'the customer replies', resumeActionId: 'draft-action', eventDescription: 'the customer replies' }];
+    result.brief.capabilitySuggestions[0] = { ...result.brief.capabilitySuggestions[0]!, capabilityType: 'wait', name: 'Wait for customer response', relatedEntityIds: ['customer-response-wait'] };
+    result.detectionSummary = { candidateCount: 1, detectedFunctions: ['wait'], clarificationCount: 0 };
+    generateDraft.mockResolvedValue(result);
+    render(<WorkflowBriefPreviewPage generateDraft={generateDraft} />);
+    await submit('Wait until the customer replies.');
+    expect(await screen.findByText('Wait Boundaries')).toBeInTheDocument();
+    expect(screen.getByText('until-response')).toBeInTheDocument();
+    expect(screen.getAllByText('the customer replies').length).toBeGreaterThan(0);
+    expect(screen.getByText('Review and refine detected workflow requirements')).toBeInTheDocument();
+  });
+
+  it('renders complete Approval subject, approver, outcomes, and confidence', async () => {
+    const result = routerResult();
+    result.brief.actors = [{ id: 'client', name: 'client', role: 'Approver' }];
+    result.brief.decisions = [];
+    result.brief.routes = [
+      { id: 'approved', decisionId: 'approval-decision', label: 'Approved', condition: 'design is approved', outcomeDescription: 'Approved design.', isFallback: false },
+      { id: 'rejected', decisionId: 'approval-decision', label: 'Rejected', condition: 'design is rejected', outcomeDescription: 'Rejected design.', isFallback: true },
+    ];
+    result.brief.decisions = [{ id: 'approval-decision', name: 'Decide design approval', description: 'Client decision.', decisionType: 'binary', conditionDescription: 'Client approves or rejects design', routeIds: ['approved', 'rejected'], fallbackRouteId: 'rejected' }];
+    result.brief.approvals = [{ id: 'design-approval', name: 'Approval for design', description: 'Request active human approval for design.', approverActorId: 'client', requestActionId: 'draft-action', approvedRouteId: 'approved', rejectedRouteId: 'rejected' }];
+    result.brief.capabilitySuggestions[0] = { ...result.brief.capabilitySuggestions[0]!, capabilityType: 'approval', name: 'Approve design', relatedEntityIds: ['design-approval'] };
+    result.detectionSummary = { candidateCount: 1, detectedFunctions: ['approval'], clarificationCount: 0 };
+    generateDraft.mockResolvedValue(result);
+    render(<WorkflowBriefPreviewPage generateDraft={generateDraft} />);
+    await submit('Wait for the client to approve or reject the design.');
+    expect(await screen.findByText('Approval Boundaries')).toBeInTheDocument();
+    expect(screen.getByText('design')).toBeInTheDocument();
+    expect(screen.getByText('client')).toBeInTheDocument();
+    expect(screen.getByText('Approved / Rejected')).toBeInTheDocument();
+    expect(screen.getAllByText('high (0.96)').length).toBeGreaterThan(0);
+  });
+
   it('clears the requirement and response', async () => {
     generateDraft.mockResolvedValue(noCapabilityResult());
     render(<WorkflowBriefPreviewPage generateDraft={generateDraft} />);

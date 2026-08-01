@@ -38,7 +38,7 @@ export function WorkflowBriefPreviewPage({
       <header className="workflow-brief-preview__header">
         <span>Internal development tool</span>
         <h1>Workflow Brief Preview</h1>
-        <p>Generate review-only business-level JSON using the current Router and Binary Decision detectors.</p>
+        <p>Generate review-only business-level JSON using the current Router, Binary Decision, Wait, and Approval detectors.</p>
       </header>
 
       <form className="workflow-brief-preview__form" onSubmit={(event) => void generate(event)}>
@@ -103,6 +103,43 @@ export function WorkflowBriefPreviewPage({
                 return route ? <li key={route.id}><strong>{route.label}</strong><span>{route.condition}</span><small>{route.outcomeDescription}</small></li> : null;
               })}</ul>
             </article>)}
+        </section>
+
+        <section>
+          <h2>Wait Boundaries</h2>
+          {brief.waits.length === 0
+            ? <p>No complete Wait boundary was detected.</p>
+            : brief.waits.map((wait) => {
+              const capability = brief.capabilitySuggestions.find((item) => item.relatedEntityIds.includes(wait.id));
+              const confidence = brief.confidence.find((item) => item.id === capability?.confidenceId);
+              return <article key={wait.id} className="workflow-brief-preview__card">
+                <h3>{wait.name}</h3>
+                <p><strong>Wait type:</strong> {wait.waitType}</p>
+                <p><strong>Boundary:</strong> {wait.boundaryDescription}</p>
+                <p><strong>Resume meaning:</strong> {brief.actions.find((item) => item.id === wait.resumeActionId)?.name ?? 'Requires review'}</p>
+                <p><strong>Confidence:</strong> {confidence ? `${confidence.level} (${confidence.score})` : 'Unavailable'}</p>
+              </article>;
+            })}
+        </section>
+
+        <section>
+          <h2>Approval Boundaries</h2>
+          {brief.approvals.length === 0
+            ? <p>No complete Approval boundary was detected. Approval suggestions may still require clarification.</p>
+            : brief.approvals.map((approval) => {
+              const capability = brief.capabilitySuggestions.find((item) => item.relatedEntityIds.includes(approval.id));
+              const confidence = brief.confidence.find((item) => item.id === capability?.confidenceId);
+              const approver = brief.actors.find((item) => item.id === approval.approverActorId);
+              const approved = brief.routes.find((item) => item.id === approval.approvedRouteId);
+              const rejected = brief.routes.find((item) => item.id === approval.rejectedRouteId);
+              return <article key={approval.id} className="workflow-brief-preview__card">
+                <h3>{approval.name}</h3>
+                <p><strong>Approval subject:</strong> {approval.name.replace(/^Approval for\s+/i, '')}</p>
+                <p><strong>Approver role:</strong> {approver?.name ?? 'Requires clarification'}</p>
+                <p><strong>Outcome hints:</strong> {[approved?.label, rejected?.label].filter(Boolean).join(' / ') || 'Requires clarification'}</p>
+                <p><strong>Confidence:</strong> {confidence ? `${confidence.level} (${confidence.score})` : 'Unavailable'}</p>
+              </article>;
+            })}
         </section>
 
         <section>

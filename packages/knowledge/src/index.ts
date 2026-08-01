@@ -12,6 +12,7 @@ export * from './platform-node-knowledge.js';
 export * from './node-function-catalog.js';
 export * from './capability-detection.js';
 export * from './detectors/decision-detectors.js';
+export * from './detectors/wait-approval-detectors.js';
 
 export const knowledgeCatalog: KnowledgeCatalog = {
   version: KNOWLEDGE_CATALOG_VERSION,
