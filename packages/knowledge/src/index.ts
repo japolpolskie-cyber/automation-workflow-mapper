@@ -9,6 +9,7 @@ export * from './application-packs.js';
 export * from './platform-capabilities.js';
 export * from './patterns.js';
 export * from './platform-node-knowledge.js';
+export * from './node-function-catalog.js';
 
 export const knowledgeCatalog: KnowledgeCatalog = {
   version: KNOWLEDGE_CATALOG_VERSION,

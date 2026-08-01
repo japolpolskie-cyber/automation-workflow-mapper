@@ -20,6 +20,8 @@ Sprint 4 is implemented: the v1.0 public contract now exposes stable version and
 
 Compare brief concepts against the existing canonical function model and close only demonstrated conceptual gaps without duplicating functions.
 
+Sprint 1 is implemented: the knowledge package now exposes a strict conceptual node-function catalog with 23 entries, pure defensive-copy lookup helpers, and a detailed Router contract covering semantic routes, exclusions, safeguards, and Workflow Brief compatibility. Binary Decision and Loop-family contracts remain foundation entries for the next sprint.
+
 ## Phase D — Capability detection and confidence
 
 Define how verified application operations, platform mappings, unsupported states, ambiguity, and confidence attach to brief requirements.
