@@ -15,7 +15,7 @@
 | V2 shadow and promotion pipeline | Partially implemented | Shadow artifacts and promotion gates exist; promotion is disabled by default. |
 | Canonical internal Workflow Brief schema | Implemented | Phase B Sprints 1–4 define, harden, test, and document the strict v1.0 business contract, including compatibility fixtures and pure serialization. Detection and runtime integration remain planned. |
 | Conceptual node-function catalog | Implemented | Phase C Sprints 1–6 finalize 23 detailed contracts, stable public constants, pure whole-catalog validation, complete Workflow Brief compatibility coverage, defensive-copy guarantees, and cross-contract consistency tests. Detection and runtime integration remain planned. |
-| Capability-detection contract | Implemented | Phase D Sprint 1 adds strict evidence-bearing detection results, a synchronous detector interface, a no-op reference detector, and Workflow Brief metadata previews. No actual detection rules exist yet. |
+| Capability-detection contract | Partially implemented | Phase D Sprints 1–2 provide the strict detection contract plus deterministic Router and Binary Decision detectors with exact evidence, semantic route labels, ambiguity handling, and temporary entity hints. Other catalog functions remain undetected. |
 | Interactive Workflow Brief review | Planned | Must follow schema and confidence design. |
 | Brief-to-graph compiler integration | Planned | Mapper will consume a locked brief. |
 | Ollama two-step skeleton/enrichment generation | Deferred | Re-evaluate only after brief integration and platform validation. |

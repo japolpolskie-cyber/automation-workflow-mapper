@@ -38,6 +38,8 @@ Define how verified application operations, platform mappings, unsupported state
 
 Sprint 1 is implemented: the knowledge package now exposes a strict v1.0 evidence-bearing capability-detection result, synchronous detector interface, no-op reference detector, catalog-backed ID validation, and pure Workflow Brief metadata preview. Empty results are valid, and no actual node-function detection rule, Workflow Brief generation, or runtime behavior was added.
 
+Sprint 2 is implemented: deterministic Router and Binary Decision detectors now produce catalog-backed, evidence-bearing suggestions with exact offsets, stable IDs, semantic route hints, bounded confidence, and ambiguity clarification. They reject two-versus-many overlap, parallel fan-out, sequential and collection wording, one-sided conditions, descriptive approval status, and multi-outcome alternatives without generating a Workflow Brief or changing planner behavior.
+
 ## Phase E — Interactive Brief review
 
 Design and implement review behavior for users to confirm, edit, reject, or lock business needs and unresolved decisions before compilation.

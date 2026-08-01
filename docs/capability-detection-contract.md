@@ -4,7 +4,7 @@
 
 The capability-detection foundation defines how future deterministic detectors may suggest conceptual node functions from raw requirement text. A result records what may be needed, why it was suggested, the exact supporting text, confidence, ambiguity, and clarification needs.
 
-This contract does not contain detection rules. The included no-op detector always returns an empty result.
+The included no-op detector always returns an empty result. Phase D Sprint 2 adds the first two bounded deterministic rules: Router and Binary Decision only.
 
 ## Detection-result lifecycle
 
@@ -45,6 +45,14 @@ Duplicate candidates for one node-function ID require distinct non-empty `metada
 
 `NoopNodeFunctionDetector` is a reference implementation for contract testing. It validates input and returns no candidates, evidence, or ambiguities.
 
+## Implemented decision detectors
+
+`RouterDetector` detects explicit routing or classification with at least three semantic business outcomes. It preserves outcome labels independently from downstream actions, emits one decision hint and one route hint per outcome, and rejects two-way decisions, parallel fan-out, sequential action lists, collection wording, and generic route labels. An unclear routing basis or overlapping outcome set produces evidence-linked ambiguity and clarification with medium confidence.
+
+`BinaryDecisionDetector` detects a condition with an explicit `otherwise`, `else`, or `if not` alternate and two branch actions. It emits one decision hint and exactly two route hints. Semantic labels such as `Success`/`Failure`, `Interested`/`Not Interested`, `Valid`/`Invalid`, and `Approved`/`Rejected` are preferred; `TRUE`/`FALSE` are fallback labels only. One-sided `if` clauses, descriptive approved status, parallel fan-out, and multi-outcome `else if` structures are not detected.
+
+Both detectors are synchronous and pure. Candidate, evidence, ambiguity, and temporary entity IDs are derived deterministically from exact source offsets. Explicit complete structures use high confidence and `required` provenance; emitted Router candidates needing clarification use medium confidence. Multiple separate source scopes remain separate candidates.
+
 ## Relationship to the catalog and Workflow Brief
 
 The finalized node-function catalog is the source of truth for candidate IDs. Unknown IDs are rejected.
@@ -69,7 +77,7 @@ The finalized node-function catalog is the source of truth for candidate IDs. Un
 
 ## Non-goals
 
-- No detection rules yet
+- No detectors beyond Router and Binary Decision
 - No provider prompts or model configuration
 - No UI
 - No Workflow Brief generation or mutation

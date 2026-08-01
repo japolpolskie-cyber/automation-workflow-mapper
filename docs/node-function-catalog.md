@@ -10,7 +10,7 @@ A conceptual function is not a platform node. Catalog contracts contain no conne
 
 Catalog contracts describe the meaning of concepts represented by the Canonical Workflow Brief. Every catalog entry declares at least one valid Workflow Brief relationship. Direct entity mappings cover triggers, actions, decisions, routes, loops, waits, approvals, merges, iterators, and aggregators. Error Handler, Sub-workflow, Terminal, and the five AI functions may remain capability-level concepts where the brief has no dedicated entity. The knowledge package reuses the shared Workflow Brief entity-type schema, preserving alignment without introducing a circular dependency.
 
-The catalog does not currently detect requirements or change a Workflow Brief.
+The catalog itself does not detect requirements or change a Workflow Brief. The separate capability-detection layer currently implements bounded Router and Binary Decision detectors that return catalog-backed suggestions only.
 
 ## Contract lifecycle
 
@@ -139,6 +139,10 @@ Deterministic behavior remains preferred whenever structured rules, known fields
 - Sub-workflow delegates a reusable multi-step process; Action is one operation; Return-to-step Loop stays within the current process.
 - Terminal has no continuation; recoverable failure belongs to Error Handler.
 - AI Agent handles bounded open-ended interaction. Classification assigns known labels, Extraction identifies defined fields, Summarization faithfully compresses source content, and Generation creates one bounded artifact.
+
+## Current detection coverage
+
+Detection is implemented only for `router` and `binary-decision`. Router requires explicit multi-outcome routing with at least three semantic labels. Binary Decision requires a condition and explicit alternate behavior. Both return evidence-bearing suggestions and temporary business-level hints; neither creates Workflow Brief entities, graph topology, or platform nodes. Every other catalog function remains detection-deferred.
 
 ## Semantic route-label rule
 
