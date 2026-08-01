@@ -33,6 +33,42 @@ describe('RouterDetector', () => {
     expect(routeHints(result).map((hint) => hint.description)).toEqual(['The High Priority outcome leads to escalation.', 'The Medium Priority outcome leads to review.', 'The Low Priority outcome leads to the normal queue.']);
   });
 
+  it('detects the natural multi-sentence acceptance challenge once with semantic outcomes', () => {
+    const sourceRequirement = 'When a customer submits a support request, review the message and determine whether it is related to billing, technical support, or account access. Send billing concerns to the finance team, technical concerns to the IT support queue, and account-access concerns to the customer success team.';
+    const result = detector.detect({ sourceRequirement });
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]).toMatchObject({
+      nodeFunctionId: 'router', suggestedReviewState: 'required',
+      metadata: { routingBasis: 'category', routeLabels: 'Billing | Technical Support | Account Access' },
+    });
+    expect(routeHints(result).map((hint) => hint.description)).toEqual([
+      'The Billing outcome for message.',
+      'The Technical Support outcome for message.',
+      'The Account Access outcome for message.',
+    ]);
+    expect(sourceRequirement.slice(result.evidence[0]!.sourceStart, result.evidence[0]!.sourceEnd)).toBe(result.evidence[0]!.sourceText);
+  });
+
+  it.each([
+    'Determine whether the request concerns Billing, Technical Support, or Account Access.',
+    'Identify which department applies: IT, Marketing, or Customer Support.',
+    'Classify the message into Product Question, Service Issue, or Refund Request.',
+    'Assign cases according to priority levels: High, Medium, or Low.',
+  ])('detects natural semantic routing: %s', (sourceRequirement) => {
+    expect(detector.detect({ sourceRequirement }).candidates).toHaveLength(1);
+  });
+
+  it('uses suggested review with clarification when exclusivity is only strongly implied', () => {
+    const result = detector.detect({ sourceRequirement: 'Classify the message into Product Question, Service Issue, and Refund Request.' });
+    expect(result.candidates[0]).toMatchObject({ suggestedReviewState: 'suggested', metadata: { requirementBasis: 'inferred' } });
+    expect(result.unresolvedQuestions.join(' ')).toMatch(/mutually exclusive/i);
+  });
+
+  it('does not duplicate a semantic fact and overlapping exact-pattern fallback', () => {
+    const sourceRequirement = 'Classify the message into Billing, Technical Support, or Account Access. Send billing messages to Finance, technical support messages to IT, and account access messages to Customer Success.';
+    expect(detector.detect({ sourceRequirement }).candidates).toHaveLength(1);
+  });
+
   it('never emits generic route labels', () => {
     expect(detector.detect({ sourceRequirement: 'Route requests to Route 1, Route 2, or Route 3.' }).candidates).toEqual([]);
   });
@@ -47,6 +83,10 @@ describe('RouterDetector', () => {
     'Create a lead, notify sales, and archive the request.',
     'For each attachment, save the file.',
     'Create a Finance ticket.',
+    'Publish the post to Facebook, Instagram, and LinkedIn.',
+    'Send the alert to Slack, Email, and Teams.',
+    'The supported departments are IT, Marketing, and Customer Support.',
+    'Send billing concerns to Finance, support concerns to IT, and account concerns to Success.',
   ])('does not detect non-routing behavior: %s', (sourceRequirement) => {
     expect(detector.detect({ sourceRequirement }).candidates).toEqual([]);
   });

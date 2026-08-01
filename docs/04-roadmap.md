@@ -46,6 +46,8 @@ The vertical slice now includes a small internal preview page at `/internal/work
 
 Phase D Sprint 3A is implemented: deterministic Wait and Approval detectors add exact evidence, bounded confidence, clarification, and overlap precedence. The isolated assembler materializes complete wait boundaries and fully explicit human approvals while retaining incomplete detections as review suggestions; the internal preview displays both without changing production generation.
 
+A narrow Router semantic correction is implemented: bounded clause facts recognize natural three-or-more-outcome classification and optional category-to-destination evidence before the existing exact-pattern fallback. Fan-out, sequential, collection, descriptive, destination-only, and binary structures remain excluded. This proof is Router-only and adds no AI/provider analysis or production Mapper integration.
+
 ## Phase E — Interactive Brief review
 
 Design and implement review behavior for users to confirm, edit, reject, or lock business needs and unresolved decisions before compilation.

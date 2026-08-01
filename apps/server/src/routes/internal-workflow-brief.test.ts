@@ -50,6 +50,16 @@ describe('internal Workflow Brief endpoint', () => {
     expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
   });
 
+  it('returns the natural Router acceptance challenge through the existing endpoint', async () => {
+    const app = await testApp();
+    const sourceRequirement = 'When a customer submits a support request, review the message and determine whether it is related to billing, technical support, or account access. Send billing concerns to the finance team, technical concerns to the IT support queue, and account-access concerns to the customer success team.';
+    const response = await app.inject({ method: 'POST', url: '/api/internal/workflow-brief/draft', payload: { sourceRequirement } });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.detectionSummary).toMatchObject({ candidateCount: 1, detectedFunctions: ['multi-route-decision'], clarificationCount: 0 });
+    expect(body.data.brief.routes.map((route: { label: string }) => route.label)).toEqual(['Billing', 'Technical Support', 'Account Access']);
+  });
+
   it('returns Wait and Approval in the backward-compatible detection summary', async () => {
     const app = await testApp();
     const wait = await app.inject({ method: 'POST', url: '/api/internal/workflow-brief/draft', payload: { sourceRequirement: 'Wait until the customer replies.' } });

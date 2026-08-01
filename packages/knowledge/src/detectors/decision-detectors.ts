@@ -10,6 +10,7 @@ import {
   type NodeFunctionDetector,
   type NodeFunctionDetectorInput,
 } from '../capability-detection.js';
+import { extractSemanticRoutingFacts, type SemanticRoutingFact } from './semantic-routing-facts.js';
 
 interface SourceScope {
   text: string;
@@ -73,6 +74,7 @@ interface RouterMatch {
   basis?: string;
   labels: string[];
   targets?: string[];
+  semanticFact?: SemanticRoutingFact;
 }
 
 const matchRouterScope = (scope: SourceScope): RouterMatch | undefined => {
@@ -122,7 +124,15 @@ const buildRouterResult = (sourceRequirement: string, detectorId: string, detect
       ambiguityIds.push(id);
       unresolvedQuestions.push(question);
     }
+    if (match.semanticFact && match.semanticFact.exclusivity !== 'explicit') {
+      const id = `router-exclusivity-ambiguity-${scopeKey}`;
+      const question = `Are the stated outcomes for ${match.subject} mutually exclusive routing choices?`;
+      ambiguities.push({ id, description: `Exclusive routing for ${match.subject} is strongly implied but not explicit.`, severity: 'high', clarificationQuestion: question, affectedEvidenceIds: [evidenceId] });
+      ambiguityIds.push(id);
+      unresolvedQuestions.push(question);
+    }
     const basis = match.basis ?? 'an unresolved business attribute';
+    const semanticNeedsReview = Boolean(match.semanticFact && ambiguityIds.length > 0);
     const routeHints = match.labels.map((label, index) => ({
       entityType: 'route' as const,
       temporaryId: `router-route-${scope.start}-${index + 1}-${slug(label)}`,
@@ -138,14 +148,14 @@ const buildRouterResult = (sourceRequirement: string, detectorId: string, detect
       evidenceIds: [evidenceId],
       confidence: ambiguityIds.length > 0
         ? { score: 0.72, level: 'medium', reason: 'Multiple outcomes are explicit, but routing semantics require clarification.' }
-        : { score: 0.96, level: 'high', reason: 'Routing language, basis, and at least three outcomes are explicit.' },
+        : { score: 0.96, level: 'high', reason: match.semanticFact?.confidenceReason ?? 'Routing language, basis, and at least three outcomes are explicit.' },
       ambiguityIds,
-      suggestedReviewState: 'required',
+      suggestedReviewState: semanticNeedsReview ? 'suggested' : 'required',
       relatedEntityHints: [
         { entityType: 'decision', temporaryId: `router-decision-${scope.start}`, description: `A multi-outcome business decision for ${match.subject}.` },
         ...routeHints,
       ],
-      metadata: { scope: `${scope.start}:${scope.end}`, requirementBasis: 'explicit', routingBasis: basis, routeLabels: match.labels.join(' | ') },
+      metadata: { scope: `${scope.start}:${scope.end}`, requirementBasis: semanticNeedsReview ? 'inferred' : 'explicit', routingBasis: basis, routeLabels: match.labels.join(' | ') },
     });
   }
 
@@ -159,10 +169,23 @@ export class RouterDetector implements NodeFunctionDetector {
 
   detect(input: NodeFunctionDetectorInput): CapabilityDetectionResult {
     const parsed = nodeFunctionDetectorInputSchema.parse(input);
-    const matches = statementScopes(parsed.sourceRequirement)
+    const semanticMatches: Array<{ scope: SourceScope; match: RouterMatch }> = extractSemanticRoutingFacts(parsed.sourceRequirement).map((fact) => {
+      const basis = fact.routingBasis ?? inferRoutingBasis(fact.subject ?? '', fact.outcomes);
+      return {
+        scope: { text: fact.evidenceText, start: fact.sourceStart, end: fact.sourceEnd },
+        match: {
+          subject: fact.subject ?? 'business item',
+          ...(basis ? { basis } : {}),
+          labels: [...fact.outcomes],
+          semanticFact: fact,
+        },
+      };
+    });
+    const fallbackMatches = statementScopes(parsed.sourceRequirement)
       .map((scope) => ({ scope, match: matchRouterScope(scope) }))
-      .filter((item): item is { scope: SourceScope; match: RouterMatch } => Boolean(item.match));
-    return buildRouterResult(parsed.sourceRequirement, this.id, this.version, matches);
+      .filter((item): item is { scope: SourceScope; match: RouterMatch } => Boolean(item.match))
+      .filter(({ scope }) => !semanticMatches.some((semantic) => scope.start < semantic.scope.end && semantic.scope.start < scope.end));
+    return buildRouterResult(parsed.sourceRequirement, this.id, this.version, [...semanticMatches, ...fallbackMatches].sort((left, right) => left.scope.start - right.scope.start));
   }
 }
 

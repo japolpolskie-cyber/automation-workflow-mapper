@@ -47,11 +47,11 @@ Duplicate candidates for one node-function ID require distinct non-empty `metada
 
 ## Implemented decision detectors
 
-`RouterDetector` detects explicit routing or classification with at least three semantic business outcomes. It preserves outcome labels independently from downstream actions, emits one decision hint and one route hint per outcome, and rejects two-way decisions, parallel fan-out, sequential action lists, collection wording, and generic route labels. An unclear routing basis or overlapping outcome set produces evidence-linked ambiguity and clarification with medium confidence.
+`RouterDetector` detects explicit routing or classification with at least three semantic business outcomes. A bounded Router-only semantic fact pass also recognizes natural classification language and an immediately following category-to-destination mapping. It preserves exact offsets and outcome labels, then retains the original exact-pattern detector as fallback. Two-way decisions, parallel fan-out, sequential action lists, collections, descriptive lists, destination lists without classification, and generic labels are rejected. Unclear routing basis, implied exclusivity, or overlapping outcomes produce clarification.
 
 `BinaryDecisionDetector` detects a condition with an explicit `otherwise`, `else`, or `if not` alternate and two branch actions. It emits one decision hint and exactly two route hints. Semantic labels such as `Success`/`Failure`, `Interested`/`Not Interested`, `Valid`/`Invalid`, and `Approved`/`Rejected` are preferred; `TRUE`/`FALSE` are fallback labels only. One-sided `if` clauses, descriptive approved status, parallel fan-out, and multi-outcome `else if` structures are not detected.
 
-Both detectors are synchronous and pure. Candidate, evidence, ambiguity, and temporary entity IDs are derived deterministically from exact source offsets. Explicit complete structures use high confidence and `required` provenance; emitted Router candidates needing clarification use medium confidence. Multiple separate source scopes remain separate candidates.
+Both detectors are synchronous and pure. Candidate, evidence, ambiguity, and temporary entity IDs are derived deterministically from exact source offsets. Explicit complete structures use high confidence and `required` provenance; semantic Router candidates needing clarification use medium confidence and `suggested` review. Semantic preprocessing is Router-only; Binary Decision, Wait, and Approval retain their existing rules. No provider or AI semantic analysis is used.
 
 ## Implemented Wait and Approval detectors
 

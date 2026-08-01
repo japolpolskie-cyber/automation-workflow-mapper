@@ -29,6 +29,24 @@ describe('assembleDraftWorkflowBrief', () => {
     expect(brief.decisions[0]?.decisionType).toBe('multi-route');
   });
 
+  it('assembles the natural Router acceptance challenge with no duplicate decision', () => {
+    const sourceRequirement = 'When a customer submits a support request, review the message and determine whether it is related to billing, technical support, or account access. Send billing concerns to the finance team, technical concerns to the IT support queue, and account-access concerns to the customer success team.';
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement });
+    expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
+    expect(brief.capabilitySuggestions.map((item) => item.capabilityType)).toEqual(['multi-route-decision']);
+    expect(brief.decisions).toHaveLength(1);
+    expect(brief.routes.map((route) => route.label)).toEqual(['Billing', 'Technical Support', 'Account Access']);
+  });
+
+  it('detects Router from its own scope in the longer requirement without expanding Approval behavior', () => {
+    const sourceRequirement = 'When a customer submits a support request, review the message and determine whether it is related to billing, technical support, or account access. Send billing concerns to the finance team, technical concerns to the IT support queue, and account-access concerns to the customer success team. Before any refund is issued, a manager must approve the request.';
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement });
+    expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
+    expect(brief.capabilitySuggestions.map((item) => item.capabilityType)).toContain('multi-route-decision');
+    expect(brief.decisions).toHaveLength(1);
+    expect(brief.routes.slice(0, 3).map((route) => route.label)).toEqual(['Billing', 'Technical Support', 'Account Access']);
+  });
+
   it('creates a Binary Decision suggestion with its semantic branches', () => {
     const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'If payment succeeds, send a receipt; otherwise notify finance.' });
     expect(brief.capabilitySuggestions[0]?.capabilityType).toBe('binary-decision');
