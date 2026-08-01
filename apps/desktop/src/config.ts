@@ -6,7 +6,7 @@ const desktopDistDirectory = dirname(fileURLToPath(import.meta.url));
 export const desktopConfig = {
   useDevClient: process.argv.includes('--dev-client'),
 
-  clientUrl: 'http://localhost:5173',
+  clientUrl: 'http://localhost:5174',
 
   clientIndexPath: resolve(
     desktopDistDirectory,
@@ -29,3 +29,4 @@ export const desktopConfig = {
     backgroundColor: '#0b1020',
   },
 } as const;
+
