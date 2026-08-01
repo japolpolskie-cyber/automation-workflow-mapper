@@ -1,24 +1,13 @@
 # Next session
 
-## Exact task
+## Current status
 
-Phase D Sprint 3 — Wait, Approval, and Loop-family deterministic detectors only.
+The Mapper remains production-usable. A separate internal endpoint can now generate validated draft Workflow Brief JSON using Router and Binary Decision detection. Further detector families and Mapper integration remain optional future work.
 
-## Scope
+## Current boundary
 
-- Implement deterministic Wait and active human Approval detection against the existing capability-detection contract.
-- Implement only the existing Retry, Follow-up, Revision, Polling, and Return-to-step Loop-family concepts.
-- Preserve exact evidence offsets, bounded confidence, ambiguity, clarification, and temporary business-level entity hints.
-- Keep every result at suggestion level for future Workflow Brief review.
+- The draft endpoint is experimental, review-only, and separate from production generation.
+- Draft scaffolding supplies the schema-required start boundary and review action until ordinary trigger/action detection is explicitly scoped.
+- No provider calls, UI, graph generation, platform translation, persistence, automatic confirmation, or locking are part of this slice.
 
-## Explicit exclusions
-
-- No Filter, Iterator, Aggregator, Merge, Trigger, Action, Error Handler, Sub-workflow, Terminal, or AI detectors.
-- No Workflow Brief generation, mutation, confirmation, or locking.
-- No prompts, providers, Ollama calls, models, tools, or runtime memory.
-- No UI, graph compilation, planner integration, or platform translation.
-- No catalog or shared-schema expansion unless a separately verified compatibility defect is found.
-
-## Completion standard
-
-The result should add only Wait, Approval, and the five Loop-family deterministic detectors with evidence-bearing suggestions and focused boundary/false-positive coverage, without generating a Workflow Brief or changing runtime planning behavior.
+Any next sprint must select one optional future improvement explicitly rather than treating this vertical slice as authorization for broader Mapper integration.

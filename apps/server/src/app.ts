@@ -43,6 +43,8 @@ import {
 } from "./dependencies.js";
 import { PlannerRAGIntegration } from "./hybrid-rag/planner-rag-integration.js";
 import { HybridRAGPlannerRollout } from "./hybrid-rag/hybrid-rag-planner-rollout.js";
+import { internalWorkflowBriefRoutes } from "./routes/internal-workflow-brief.js";
+import { WorkflowBriefService } from "./services/workflow-brief-service.js";
 
 export async function buildApp(environment: Environment) {
   const app = Fastify({
@@ -89,6 +91,7 @@ export async function buildApp(environment: Environment) {
         : new LocalAnalysisProvider();
   await app.register(healthRoutes, { prefix: "/api" });
   await app.register(documentRoutes(new DocumentService()), { prefix: "/api" });
+  await app.register(internalWorkflowBriefRoutes(new WorkflowBriefService()), { prefix: "/api" });
   const scopeIntelligence = environment.K3_SCOPE_INTELLIGENCE
     ? new ScopeIntelligenceService(environment.K3_KNOWLEDGE_BUDGET)
     : null;
