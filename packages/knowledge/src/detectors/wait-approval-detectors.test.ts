@@ -22,12 +22,56 @@ describe('WaitDetector', () => {
   });
 
   it.each([
+    ['If approval is not received within two business days, keep the request pending.', 'until-approval'],
+    ['Allow the customer 48 hours to reply before escalating the case.', 'until-response'],
+    ['The request remains pending until the manager responds.', 'until-response'],
+    ['Do not process the refund before manager approval.', 'until-approval'],
+    ['Continue once the signed agreement has been received.', 'until-event'],
+    ['Hold the invoice until its due date.', 'until-date'],
+    ['After seven days without a response, notify the account owner.', 'until-response'],
+  ])('detects a natural semantic wait boundary: %s', (sourceRequirement, waitType) => {
+    const result = detector.detect({ sourceRequirement });
+    expect(parseCapabilityDetectionResult(result)).toEqual(result);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]).toMatchObject({ nodeFunctionId: 'wait', metadata: { waitType } });
+  });
+
+  it('preserves duration, event, timeout outcome, and exact evidence for an approval timeout', () => {
+    const sourceRequirement = 'Before any refund is issued, a manager must approve the request. If approval is not received within two business days, keep the request pending and notify the case owner.';
+    const result = detector.detect({ sourceRequirement });
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.metadata).toMatchObject({
+      waitType: 'until-approval',
+      boundaryDescription: 'manager approval within two business days',
+      durationDescription: 'two business days',
+      eventDescription: 'manager approval',
+      timeoutOutcome: 'keep the request pending and notify the case owner',
+    });
+    expect(sourceRequirement.slice(result.evidence[0]!.sourceStart, result.evidence[0]!.sourceEnd)).toBe(result.evidence[0]!.sourceText);
+  });
+
+  it('preserves response timeout handling', () => {
+    const result = detector.detect({ sourceRequirement: 'Allow the customer 48 hours to reply before escalating the case.' });
+    expect(result.candidates[0]?.metadata).toMatchObject({ durationDescription: '48 hours', eventDescription: 'customer reply', timeoutOutcome: 'escalate the case' });
+    expect(result.candidates[0]?.explanation).toMatch(/times out, escalate the case/i);
+  });
+
+  it('does not duplicate semantic and fallback Wait candidates', () => {
+    expect(detector.detect({ sourceRequirement: 'Hold the invoice until its due date.' }).candidates).toHaveLength(1);
+  });
+
+  it.each([
     'Run every Monday.',
     'Check every five minutes until complete.',
     'Send reminders every two days.',
     'Retry after ten seconds.',
     'When a new email arrives, process it.',
     'Hold this for later.',
+    'Start at 9 AM each day.',
+    'Poll the payment status every minute.',
+    'Send reminders every two days until the form is submitted.',
+    'Retry the failed request after ten seconds.',
+    'The customer replied after two days.',
   ])('rejects non-Wait or unbounded wording: %s', (sourceRequirement) => {
     expect(detector.detect({ sourceRequirement }).candidates).toEqual([]);
   });
@@ -120,4 +164,3 @@ describe('Wait and Approval detector boundaries', () => {
     expect(new BinaryDecisionDetector().detect({ sourceRequirement: 'If payment succeeds, send a receipt; otherwise notify finance.' }).candidates[0]?.nodeFunctionId).toBe('binary-decision');
   });
 });
-

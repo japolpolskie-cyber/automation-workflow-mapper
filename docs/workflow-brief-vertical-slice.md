@@ -19,7 +19,7 @@ The request requires `sourceRequirement` and accepts optional `name`, `summary`,
 
 ## Detection and review behavior
 
-Router, Binary Decision, Wait, and Approval detection are enabled. Router supports bounded natural-language multi-outcome classification facts before its original exact-pattern fallback; Router and binary outcomes retain semantic labels. The Router fact pass rejects fan-out, sequential, collection, descriptive-list, destination-only, and binary wording. Complete Wait boundaries become business-level wait entities using the draft review action as the explicitly scaffolded resume reference. Approval entities are created only when approver, subject, and approved/rejected outcomes are explicit; incomplete detections remain capability suggestions with clarification.
+Router, Binary Decision, Wait, and Approval detection are enabled. Router supports bounded natural-language multi-outcome classification facts before its original exact-pattern fallback; Router and binary outcomes retain semantic labels. Wait supports bounded natural-language facts for response, approval, event, date, and duration boundaries before its explicit-pattern fallback, preserving stated timeout handling in detection metadata and descriptions. Their safeguards reject fan-out routing and schedule, polling, follow-up, retry, historical, or vague timing respectively. Complete Wait boundaries become business-level wait entities using the draft review action as the explicitly scaffolded resume reference. Approval entities are created only when approver, subject, and approved/rejected outcomes are explicit; incomplete detections remain capability suggestions with clarification.
 
 Detected capabilities are system-suggested or required for review. The brief is never confirmed or locked automatically. Open high-priority or blocking ambiguity produces `needs-clarification`; otherwise the review state is `draft`.
 
@@ -33,6 +33,6 @@ Their names and descriptions explicitly identify them as scaffolding rather than
 
 - No detector families beyond Router, Binary Decision, Wait, and Approval are used.
 - No ordinary business trigger, action, actor, or application extraction is performed.
-- Semantic fact preprocessing is Router-only; Binary Decision, Wait, and Approval have not been migrated, and no AI/provider semantic analysis exists.
+- Semantic fact preprocessing supports Router and Wait only; Binary Decision and Approval retain their current detection strategies, and no AI/provider semantic analysis exists.
 - No production Mapper integration, UI, persistence, provider call, graph generation, or platform translation exists.
 - The draft remains reviewable JSON only and must not be treated as confirmed requirements.

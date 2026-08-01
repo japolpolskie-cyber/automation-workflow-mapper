@@ -68,6 +68,17 @@ describe('internal Workflow Brief endpoint', () => {
     expect(approval.json().data.detectionSummary).toMatchObject({ candidateCount: 1, detectedFunctions: ['approval'] });
   });
 
+  it('returns the natural Wait acceptance challenge through the existing endpoint', async () => {
+    const app = await testApp();
+    const sourceRequirement = 'When a customer submits a support request, determine whether it concerns billing, technical support, or account access. Before any refund is issued, a manager must approve the request. If approval is not received within two business days, keep the request pending and notify the case owner.';
+    const response = await app.inject({ method: 'POST', url: '/api/internal/workflow-brief/draft', payload: { sourceRequirement } });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.detectionSummary.detectedFunctions).toEqual(expect.arrayContaining(['multi-route-decision', 'wait']));
+    expect(body.data.brief.reviewState.status).not.toBe('locked');
+    expect(body.data.brief.waits[0]).toMatchObject({ waitType: 'until-approval', boundaryDescription: 'manager approval within two business days' });
+  });
+
   it('calls only the isolated service supplied to the route', async () => {
     const generateDraft = vi.fn((input: unknown) => new WorkflowBriefService().generateDraft(input));
     const app = await testApp({ generateDraft } as WorkflowBriefService);

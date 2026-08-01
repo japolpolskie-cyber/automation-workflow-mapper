@@ -51,15 +51,17 @@ Duplicate candidates for one node-function ID require distinct non-empty `metada
 
 `BinaryDecisionDetector` detects a condition with an explicit `otherwise`, `else`, or `if not` alternate and two branch actions. It emits one decision hint and exactly two route hints. Semantic labels such as `Success`/`Failure`, `Interested`/`Not Interested`, `Valid`/`Invalid`, and `Approved`/`Rejected` are preferred; `TRUE`/`FALSE` are fallback labels only. One-sided `if` clauses, descriptive approved status, parallel fan-out, and multi-outcome `else if` structures are not detected.
 
-Both detectors are synchronous and pure. Candidate, evidence, ambiguity, and temporary entity IDs are derived deterministically from exact source offsets. Explicit complete structures use high confidence and `required` provenance; semantic Router candidates needing clarification use medium confidence and `suggested` review. Semantic preprocessing is Router-only; Binary Decision, Wait, and Approval retain their existing rules. No provider or AI semantic analysis is used.
+Both detectors are synchronous and pure. Candidate, evidence, ambiguity, and temporary entity IDs are derived deterministically from exact source offsets. Explicit complete structures use high confidence and `required` provenance; semantic Router candidates needing clarification use medium confidence and `suggested` review. No provider or AI semantic analysis is used.
 
 ## Implemented Wait and Approval detectors
 
-`WaitDetector` detects explicit internal pause boundaries for fixed durations, dates or deadlines, events, responses, and approval-based resumption. It rejects schedules, repeated checking, reminder cadence, retry timing, and arrival triggers. A stated but unclassified resume boundary remains a suggestion with evidence-linked clarification rather than receiving an invented wait type.
+`WaitDetector` detects internal pause boundaries for fixed durations, dates or deadlines, events, responses, and approval-based resumption. A bounded semantic fact pass recognizes natural unmet-event timeouts, response windows, pending-until-response wording, before-approval gates, once-event continuation, and hold-until-date language before retaining the original explicit Wait patterns as fallback. Exact offsets, stated duration/event details, and timeout outcomes are preserved. Schedules, repeated checking, reminder cadence, retry timing, historical timing, arrival triggers, and vague boundaries are rejected or clarified.
 
 `ApprovalDetector` requires active human approval, review, or decision language. It preserves explicitly named approvers, approval subjects, and approved/rejected outcome hints. Missing approvers or outcomes produce clarification; descriptive approved status, automatic validation, manager notification, and system binary conditions are rejected.
 
 When Approval and Wait cover the same exact human-decision scope, Approval owns that semantic boundary. Wait is retained only when an explicit pause/resume boundary is separately stated and representable.
+
+Semantic preprocessing currently supports Router and Wait only. Binary Decision and Approval retain their existing deterministic strategies.
 
 ## Relationship to the catalog and Workflow Brief
 

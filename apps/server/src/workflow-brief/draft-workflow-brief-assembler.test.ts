@@ -61,6 +61,21 @@ describe('assembleDraftWorkflowBrief', () => {
     expect(brief.waits[0]).toMatchObject({ waitType: 'duration', boundaryDescription: 'three days', durationDescription: 'three days', resumeActionId: brief.actions[0]?.id });
   });
 
+  it('materializes a natural approval-timeout Wait without inventing a new Approval', () => {
+    const sourceRequirement = 'Before any refund is issued, a manager must approve the request. If approval is not received within two business days, keep the request pending and notify the case owner.';
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement });
+    expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
+    expect(brief.waits[0]).toMatchObject({ waitType: 'until-approval', boundaryDescription: 'manager approval within two business days', eventDescription: 'manager approval within two business days' });
+    expect(brief.waits[0]?.description).toMatch(/keep the request pending and notify the case owner/i);
+  });
+
+  it('materializes the bounded customer-response Wait and timeout meaning', () => {
+    const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Allow the customer 48 hours to reply before escalating the case.' });
+    expect(parseCanonicalWorkflowBrief(brief)).toEqual(brief);
+    expect(brief.waits[0]).toMatchObject({ waitType: 'until-response', boundaryDescription: 'customer reply within 48 hours' });
+    expect(brief.waits[0]?.description).toMatch(/escalate the case/i);
+  });
+
   it('keeps an incomplete Wait as a suggestion with clarification and no invalid entity', () => {
     const brief = assembleDraftWorkflowBrief({ sourceRequirement: 'Wait until ready.' });
     expect(brief.capabilitySuggestions[0]?.capabilityType).toBe('wait');

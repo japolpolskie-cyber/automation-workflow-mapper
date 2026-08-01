@@ -48,6 +48,8 @@ Phase D Sprint 3A is implemented: deterministic Wait and Approval detectors add 
 
 A narrow Router semantic correction is implemented: bounded clause facts recognize natural three-or-more-outcome classification and optional category-to-destination evidence before the existing exact-pattern fallback. Fan-out, sequential, collection, descriptive, destination-only, and binary structures remain excluded. This proof is Router-only and adds no AI/provider analysis or production Mapper integration.
 
+A narrow Wait semantic correction is implemented: bounded facts recognize natural response windows, unmet approval/event timeouts, pending-until-response wording, before-approval gates, once-event continuation, and hold-until-date boundaries before the existing explicit-pattern fallback. Schedule, polling, follow-up, retry, historical, and vague timing remain excluded. Semantic preprocessing now covers Router and Wait only, with no AI/provider or production integration.
+
 ## Phase E — Interactive Brief review
 
 Design and implement review behavior for users to confirm, edit, reject, or lock business needs and unresolved decisions before compilation.

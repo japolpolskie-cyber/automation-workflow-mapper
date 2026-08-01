@@ -10,6 +10,7 @@ import {
   type NodeFunctionDetector,
   type NodeFunctionDetectorInput,
 } from '../capability-detection.js';
+import { extractSemanticWaitFacts, type SemanticWaitFact } from './semantic-wait-facts.js';
 
 interface SourceScope { text: string; start: number; end: number }
 const statementScopes = (source: string): SourceScope[] => {
@@ -34,7 +35,17 @@ const arrivalTrigger = /^when\b[\s\S]*\b(?:arrives?|received|created|submitted)\
 const durationPattern = /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?)\b/i;
 
 type WaitType = 'duration' | 'until-date' | 'until-event' | 'until-response' | 'until-approval';
-interface WaitMatch { waitType?: WaitType; boundary: string; resumeMeaning: string; explicitResumeBoundary: boolean; duration?: string }
+interface WaitMatch {
+  waitType?: WaitType;
+  boundary: string;
+  resumeMeaning: string;
+  explicitResumeBoundary: boolean;
+  duration?: string;
+  date?: string;
+  event?: string;
+  timeoutOutcome?: string;
+  semanticFact?: SemanticWaitFact;
+}
 
 const classifyBoundary = (boundary: string): WaitType | undefined => {
   if (/\b(?:approv(?:al|ed)|authori[sz](?:ation|ed)|consent)\b/i.test(boundary)) return 'until-approval';
@@ -93,10 +104,12 @@ const buildWaitResult = (sourceRequirement: string, matches: Array<{ scope: Sour
       id: `wait-candidate-${key}`,
       nodeFunctionId: 'wait',
       name: match.waitType ? `Wait ${match.boundary}` : 'Wait for a clarified boundary',
-      explanation: match.waitType ? `Pause work at the stated ${match.waitType} boundary and ${match.resumeMeaning.toLowerCase()}.` : `Pause work until the stated boundary is clarified.`,
+      explanation: match.waitType
+        ? `Pause work at the stated ${match.waitType} boundary and ${match.resumeMeaning.toLowerCase()}${match.timeoutOutcome ? `; if the boundary times out, ${match.timeoutOutcome}.` : '.'}`
+        : `Pause work until the stated boundary is clarified.`,
       evidenceIds: [evidenceId],
       confidence: match.waitType
-        ? { score: 0.95, level: 'high', reason: 'The pause boundary and resume meaning are explicit.' }
+        ? { score: 0.95, level: 'high', reason: match.semanticFact?.confidenceReason ?? 'The pause boundary and resume meaning are explicit.' }
         : { score: 0.68, level: 'medium', reason: 'Pause language is explicit, but the resume boundary type is unclear.' },
       ambiguityIds,
       suggestedReviewState: 'required',
@@ -109,6 +122,9 @@ const buildWaitResult = (sourceRequirement: string, matches: Array<{ scope: Sour
         explicitResumeBoundary: String(match.explicitResumeBoundary),
         ...(match.waitType ? { waitType: match.waitType } : {}),
         ...(match.duration ? { durationDescription: match.duration } : {}),
+        ...(match.date ? { dateDescription: match.date } : {}),
+        ...(match.event ? { eventDescription: match.event } : {}),
+        ...(match.timeoutOutcome ? { timeoutOutcome: match.timeoutOutcome } : {}),
       },
     });
   }
@@ -121,9 +137,24 @@ export class WaitDetector implements NodeFunctionDetector {
   readonly supportedNodeFunctionIds = Object.freeze(['wait'] as const);
   detect(input: NodeFunctionDetectorInput): CapabilityDetectionResult {
     const parsed = nodeFunctionDetectorInputSchema.parse(input);
-    const matches = statementScopes(parsed.sourceRequirement).map((scope) => ({ scope, match: matchWait(scope) }))
+    const semanticMatches: Array<{ scope: SourceScope; match: WaitMatch }> = extractSemanticWaitFacts(parsed.sourceRequirement).map((fact) => ({
+      scope: { text: fact.evidenceText, start: fact.sourceStart, end: fact.sourceEnd },
+      match: {
+        waitType: fact.waitType,
+        boundary: fact.boundaryDescription,
+        resumeMeaning: `Resume after ${fact.eventDescription ?? fact.dateDescription ?? fact.durationDescription ?? fact.boundaryDescription}`,
+        explicitResumeBoundary: true,
+        ...(fact.durationDescription ? { duration: fact.durationDescription } : {}),
+        ...(fact.dateDescription ? { date: fact.dateDescription } : {}),
+        ...(fact.eventDescription ? { event: fact.eventDescription } : {}),
+        ...(fact.timeoutOutcome ? { timeoutOutcome: fact.timeoutOutcome } : {}),
+        semanticFact: fact,
+      },
+    }));
+    const fallbackMatches = statementScopes(parsed.sourceRequirement).map((scope) => ({ scope, match: matchWait(scope) }))
       .filter((item): item is { scope: SourceScope; match: WaitMatch } => Boolean(item.match));
-    return buildWaitResult(parsed.sourceRequirement, matches);
+    const deduplicatedFallback = fallbackMatches.filter(({ scope }) => !semanticMatches.some((semantic) => scope.start < semantic.scope.end && semantic.scope.start < scope.end));
+    return buildWaitResult(parsed.sourceRequirement, [...semanticMatches, ...deduplicatedFallback].sort((left, right) => left.scope.start - right.scope.start));
   }
 }
 
