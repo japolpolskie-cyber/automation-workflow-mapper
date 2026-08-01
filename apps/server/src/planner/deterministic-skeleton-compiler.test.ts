@@ -154,4 +154,22 @@ describe('P4 deterministic skeleton compiler', () => {
     expect(result.plan.edges.some((edge) => edge.source === iterator.id && edge.label === 'DONE')).toBe(true);
     expect(result.issues).toEqual([]);
   });
+
+  it.each([
+    ['Wait 3 days before sending the second follow-up.', 'Wait 3 days before second follow-up'],
+    ['Pause until the customer replies.', 'Wait until customer response'],
+    ['Delay processing until the invoice due date.', 'Wait until invoice due date'],
+    ['Resume after manager approval.', 'Wait for manager approval'],
+    ['Wait.', 'Wait for specified boundary'],
+  ])('uses the stated delay boundary in the compiled title: %s', (scope, expectedTitle) => {
+    const result = compileCollection(scope);
+    expect(result.plan.nodes.find((node) => node.canonicalFunctionId === 'delay')?.title).toBe(expectedTitle);
+    expect(result.issues.some((issue) => issue.code === 'P4_DELAY_BOUNDARY_MISSING')).toBe(false);
+  });
+
+  it('keeps recurring reminder cadence in its existing scheduled pattern', () => {
+    const result = compileCollection('Send a reminder every 2 days.');
+    expect(result.appliedPatterns).toContain('scheduled-reminder');
+    expect(result.plan.nodes.filter((node) => node.canonicalFunctionId === 'delay').map((node) => node.title)).toEqual(['Wait until reminder schedule']);
+  });
 });

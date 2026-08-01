@@ -144,6 +144,23 @@ describe('K3 deterministic scope intelligence', () => {
   });
 
   it.each([
+    'Wait 3 days before sending the second follow-up.',
+    'Pause until the customer replies.',
+    'Delay processing until the invoice due date.',
+    'Resume after manager approval.',
+  ])('recognizes an explicit wait boundary: %s', (scope) => {
+    expect(run(scope).facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_function', value: 'delay' }),
+    ]));
+  });
+
+  it('leaves recurring reminder cadence with the scheduled-reminder pattern', () => {
+    const result = run('Send a reminder every 2 days.');
+    expect(result.facts.some((fact) => fact.kind === 'pattern' && fact.value === 'Scheduled Reminder')).toBe(true);
+    expect(result.facts.some((fact) => fact.kind === 'workflow_function' && fact.value === 'delay')).toBe(false);
+  });
+
+  it.each([
     ['Route Hardware, Software, and Access requests to separate Slack channels.', ['Hardware', 'Software', 'Access']],
     ['Route Contracts, Invoices, and Other files to matching folders.', ['Contracts', 'Invoices', 'Other']],
     ['Switch by priority: Low, Normal, High, Default.', ['Low', 'Normal', 'High', 'Default']],

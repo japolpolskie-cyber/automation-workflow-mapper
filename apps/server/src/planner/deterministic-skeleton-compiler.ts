@@ -207,7 +207,7 @@ export class DeterministicSkeletonCompiler {
     let itemTail = graph.node('action', 'Process current item', pattern);
     graph.edge(iterator, itemTail, 'ITEM', 'A collection item is available.', 'pattern.collection.item');
     if (functions.has('delay')) {
-      const delay = graph.node('delay', 'Wait for the specified item timing', pattern, blockers.filter((id) => /timing|interval/.test(id)));
+      const delay = graph.node('delay', this.delayTitle(context), pattern, blockers.filter((id) => /timing|interval/.test(id)));
       graph.edge(itemTail, delay, 'WAIT', null, 'pattern.collection.delay');
       itemTail = delay;
     }
@@ -283,6 +283,7 @@ export class DeterministicSkeletonCompiler {
       }
       if (functionId === 'loop') {
         if (/\bretry\b/i.test(context.objective) && !/follow[ -]?up|remind|until (?:response|(?:the )?(?:lead |client )?respond)/i.test(context.objective)) continue;
+        if (functions.includes('delay') && !/\bfollow[ -]?up\b|\bremind(?:er)?\b|\brepeat\b/i.test(context.objective)) continue;
         tail = this.followUp(graph, tail, blockers);
       } else if (functionId === 'multi-route-decision') {
         tail = this.serviceRouting(graph, tail, blockers, context);
@@ -306,7 +307,7 @@ export class DeterministicSkeletonCompiler {
         graph.merges.push({ nodeId: merge.id, incomingBranches: [yesIn.id, noIn.id], mergeStrategy: 'first_available', continuationEdgeId: continuationEdge.id });
         tail = continuation;
       } else {
-        const title = functionId === 'delay' ? 'Wait for the specified duration'
+        const title = functionId === 'delay' ? this.delayTitle(context)
           : functionId === 'aggregator' ? 'Aggregate collection results'
             : `Perform ${functionId.replaceAll('-', ' ')}`;
         const next = graph.node(functionId, title, [], blockers);
@@ -352,6 +353,31 @@ export class DeterministicSkeletonCompiler {
       .map((fact) => ({ fact, distance: Math.abs(this.factPosition(context, fact) - functionPosition) }))
       .sort((left, right) => left.distance - right.distance)[0]?.fact;
     return application && !title.toLowerCase().includes(application.value.toLowerCase()) ? `${title} from ${application.value}` : title;
+  }
+
+  private delayTitle(context: PlannerContext): string {
+    const scope = context.objective;
+    const duration = /\bwait\s+((?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:minutes?|hours?|days?|weeks?))(?:\s+before\s+([^,.;]+))?/i.exec(scope);
+    if (duration?.[1]) {
+      const boundary = duration[2] ? this.shortWaitBoundary(duration[2]) : '';
+      return boundary ? `Wait ${duration[1]} before ${boundary}` : `Wait ${duration[1]}`;
+    }
+    const until = /\b(?:wait|pause|delay(?:\s+processing)?)\s+until\s+([^,.;]+)/i.exec(scope);
+    if (until?.[1]) return `Wait until ${this.shortWaitBoundary(until[1], true)}`;
+    const waitFor = /\bwait\s+for\s+([^,.;]+)/i.exec(scope);
+    if (waitFor?.[1]) return `Wait for ${this.shortWaitBoundary(waitFor[1], true)}`;
+    const resume = /\bresume\s+after\s+([^,.;]+)/i.exec(scope);
+    if (resume?.[1]) return `Wait for ${this.shortWaitBoundary(resume[1], true)}`;
+    return 'Wait for specified boundary';
+  }
+
+  private shortWaitBoundary(value: string, normalizeEvent = false): string {
+    let boundary = value.trim().replace(/^(?:the|a|an)\s+/i, '').replace(/^(?:sending?|send)\s+(?:the\s+)?/i, '');
+    if (normalizeEvent) boundary = boundary
+      .replace(/\b(?:customer|client|lead)\s+(?:repl(?:y|ies)|responds?)\b/i, (match) => `${match.split(/\s+/)[0]} response`)
+      .replace(/\b(?:is\s+)?received\b/i, 'received');
+    const words = boundary.split(/\s+/).filter(Boolean).slice(0, 8);
+    return words.join(' ') || 'specified boundary';
   }
 
   private technicalRetry(graph: GraphBuilder, previous: Node, blockers: string[], objective: string): Node {
