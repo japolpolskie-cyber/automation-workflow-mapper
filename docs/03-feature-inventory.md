@@ -13,9 +13,8 @@
 | Local deterministic fallback provider | Implemented | Builds from owned semantic artifacts when model generation is unavailable or not selected. |
 | Ollama and OpenAI-compatible providers | Implemented | Optional single-request generation paths. |
 | V2 shadow and promotion pipeline | Partially implemented | Shadow artifacts and promotion gates exist; promotion is disabled by default. |
-| Canonical internal Workflow Brief schema | Planned | Next design task; no schema exists yet. |
+| Canonical internal Workflow Brief schema | Partially implemented | Phase B Sprint 1 adds strict actors, applications, triggers, actions, cross-reference validation, and parse helpers. Control-flow contracts remain planned. |
 | Interactive Workflow Brief review | Planned | Must follow schema and confidence design. |
 | Brief-to-graph compiler integration | Planned | Mapper will consume a locked brief. |
 | Ollama two-step skeleton/enrichment generation | Deferred | Re-evaluate only after brief integration and platform validation. |
 | Broad application-pack expansion | Deferred | Add only repository-verified operations in isolated sprints. |
-

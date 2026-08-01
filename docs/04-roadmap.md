@@ -8,6 +8,8 @@ Establish the verified project status, architecture boundary, feature inventory,
 
 Design the internal, versioned business-requirement contract only. Define evidence, decisions, semantic routes, cardinality, wait boundaries, applications, capability requirements, confidence, clarifications, and lock/review state. Do not add provider calls, UI, or graph generation in this phase.
 
+Sprint 1 is implemented: the shared package now provides the strict `CanonicalWorkflowBrief` foundation for actors, applications, business-level triggers, and actions, including unique-ID and cross-reference validation. Control-flow, evidence, confidence, clarification, and review/lock contracts remain for later explicitly scoped sprints.
+
 ## Phase C — Complete conceptual node-function catalog
 
 Compare brief concepts against the existing canonical function model and close only demonstrated conceptual gaps without duplicating functions.
@@ -31,4 +33,3 @@ Validate that n8n, Make, and Zapier translations preserve the locked brief, cano
 ## Phase H — Re-evaluate Ollama two-step generation
 
 Measure whether separate skeleton and enrichment calls improve quality after the brief/compiler boundary is stable. Retain the current generation path unless evidence supports the added complexity.
-
