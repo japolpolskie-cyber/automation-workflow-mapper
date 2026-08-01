@@ -2,25 +2,23 @@
 
 ## Exact task
 
-Phase D Sprint 1 — capability-detection foundation only: evidence-bearing detection result schema and detector interface, with no actual node-function detection rules yet.
+Phase D Sprint 2 — deterministic Router and Binary Decision detectors only, using the new detection contract and producing evidence-bearing suggestions without generating a Workflow Brief.
 
 ## Scope
 
-- Define the strict, business-level result contract for future node-function capability detection.
-- Require traceable evidence, confidence, ambiguity, and clarification information appropriate to the existing Canonical Workflow Brief.
-- Define a deterministic detector interface without implementing detection rules.
-- Preserve the finalized 23-entry conceptual catalog as the only allowed node-function vocabulary.
+- Implement only deterministic Router and Binary Decision detection against the finalized conceptual catalog.
+- Return strict capability-detection results with exact evidence offsets, confidence, ambiguity, and clarification needs.
+- Preserve semantic business outcomes and the existing distinction between two-outcome decisions, multi-route decisions, descriptive conditions, and parallel behavior.
+- Keep output at suggestion level for later review.
 
 ## Explicit exclusions
 
-- No actual node-function detection rules.
-- No requirement-analysis behavior changes.
+- No Loop, Wait, Approval, Filter, AI, or other node-function detectors.
+- No Workflow Brief generation, mutation, confirmation, or locking.
 - No prompts, providers, Ollama calls, models, tools, or runtime memory.
-- No UI or interactive review implementation.
-- No graph generation, compiler integration, planner changes, or platform translation.
-- No capability-pack expansion.
-- No Workflow Brief schema change unless a separately proven compatibility defect requires an independently scoped decision.
+- No UI, graph compilation, planner integration, or platform translation.
+- No catalog or shared-schema expansion unless a separately verified compatibility defect is found.
 
 ## Completion standard
 
-The result should add only a strict evidence-bearing detection-result schema and detector interface, with focused tests and no production detection behavior.
+The result should add only deterministic Router and Binary Decision detectors with evidence-bearing suggestions and focused false-positive coverage, without generating a Workflow Brief or changing runtime planning behavior.

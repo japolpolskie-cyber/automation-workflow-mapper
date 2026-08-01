@@ -36,6 +36,8 @@ Sprint 6 is implemented: the complete 23-entry catalog now has stable derived co
 
 Define how verified application operations, platform mappings, unsupported states, ambiguity, and confidence attach to brief requirements.
 
+Sprint 1 is implemented: the knowledge package now exposes a strict v1.0 evidence-bearing capability-detection result, synchronous detector interface, no-op reference detector, catalog-backed ID validation, and pure Workflow Brief metadata preview. Empty results are valid, and no actual node-function detection rule, Workflow Brief generation, or runtime behavior was added.
+
 ## Phase E — Interactive Brief review
 
 Design and implement review behavior for users to confirm, edit, reject, or lock business needs and unresolved decisions before compilation.
