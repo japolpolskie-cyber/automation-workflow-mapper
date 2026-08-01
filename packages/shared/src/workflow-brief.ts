@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const CANONICAL_WORKFLOW_BRIEF_SCHEMA_VERSION = '1.0' as const;
+
 const idSchema = z.string().trim().min(1, 'ID must not be empty.');
 const nameSchema = z.string().trim().min(1, 'Name must not be empty.');
 const textSchema = z.string().trim().min(1);
@@ -270,6 +272,17 @@ export const workflowBriefReviewStateSchema = z.object({
   if (state.status !== 'locked' && (state.lockedAt !== undefined || state.lockedBy !== undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Only a locked brief may carry lock metadata.', path: ['lockedAt'] });
 });
 
+export const WORKFLOW_BRIEF_ENTITY_TYPES = Object.freeze([...workflowBriefEntityTypeSchema.options]);
+export const WORKFLOW_BRIEF_CAPABILITY_TYPES = Object.freeze([...workflowBriefCapabilityTypeSchema.options]);
+export const WORKFLOW_BRIEF_REVIEW_STATES = Object.freeze([...workflowBriefReviewStatusSchema.options]);
+export const WORKFLOW_BRIEF_CONTROL_FLOW_ENUMS = Object.freeze({
+  decisionTypes: Object.freeze([...workflowBriefDecisionTypeSchema.options]),
+  loopTypes: Object.freeze([...workflowBriefLoopTypeSchema.options]),
+  waitTypes: Object.freeze([...workflowBriefWaitTypeSchema.options]),
+  mergeTypes: Object.freeze([...workflowBriefMergeTypeSchema.options]),
+  aggregationTypes: Object.freeze([...workflowBriefAggregationTypeSchema.options]),
+});
+
 const uniqueIds = (
   items: readonly { id: string }[],
   collection: 'actors' | 'applications' | 'triggers' | 'actions' | 'routes' | 'decisions' | 'loops' | 'waits' | 'approvals' | 'merges' | 'iterators' | 'aggregators' | 'evidence' | 'confidence' | 'clarificationQuestions' | 'reviewDecisions' | 'capabilitySuggestions',
@@ -289,7 +302,7 @@ const uniqueIds = (
 };
 
 export const canonicalWorkflowBriefSchema = z.object({
-  schemaVersion: z.literal('1.0'),
+  schemaVersion: z.literal(CANONICAL_WORKFLOW_BRIEF_SCHEMA_VERSION),
   id: idSchema,
   name: nameSchema,
   summary: textSchema,
@@ -476,6 +489,10 @@ export function parseCanonicalWorkflowBrief(input: unknown): CanonicalWorkflowBr
 
 export function safeParseCanonicalWorkflowBrief(input: unknown) {
   return canonicalWorkflowBriefSchema.safeParse(input);
+}
+
+export function serializeCanonicalWorkflowBrief(input: unknown): string {
+  return JSON.stringify(parseCanonicalWorkflowBrief(input));
 }
 
 export type WorkflowBriefActor = z.infer<typeof workflowBriefActorSchema>;

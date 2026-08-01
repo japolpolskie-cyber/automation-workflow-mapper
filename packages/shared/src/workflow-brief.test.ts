@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { aiChatbotDraftWorkflowBrief, departmentRoutingWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, websiteEnquiryWorkflowBrief } from './workflow-brief.fixtures.js';
-import { canonicalWorkflowBriefSchema, parseCanonicalWorkflowBrief, safeParseCanonicalWorkflowBrief, workflowBriefConfidenceSchema, type CanonicalWorkflowBrief } from './workflow-brief.js';
+import * as sharedPublicContract from './index.js';
+import { aiChatbotDraftWorkflowBrief, collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, invalidWorkflowBriefFixtures, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, websiteEnquiryWorkflowBrief } from './workflow-brief.fixtures.js';
+import { CANONICAL_WORKFLOW_BRIEF_SCHEMA_VERSION, WORKFLOW_BRIEF_CAPABILITY_TYPES, WORKFLOW_BRIEF_CONTROL_FLOW_ENUMS, WORKFLOW_BRIEF_ENTITY_TYPES, WORKFLOW_BRIEF_REVIEW_STATES, canonicalWorkflowBriefSchema, parseCanonicalWorkflowBrief, safeParseCanonicalWorkflowBrief, serializeCanonicalWorkflowBrief, workflowBriefAggregationTypeSchema, workflowBriefCapabilityTypeSchema, workflowBriefConfidenceSchema, workflowBriefDecisionTypeSchema, workflowBriefEntityTypeSchema, workflowBriefLoopTypeSchema, workflowBriefMergeTypeSchema, workflowBriefReviewStatusSchema, workflowBriefWaitTypeSchema, type CanonicalWorkflowBrief } from './workflow-brief.js';
 
 const minimumBrief = (): CanonicalWorkflowBrief => ({
   schemaVersion: '1.0' as const,
@@ -299,5 +300,75 @@ describe('canonical Workflow Brief schema', () => {
       expect(safeParseCanonicalWorkflowBrief(fixture).success).toBe(true);
       expect(fixture.reviewState.status).toBe('draft');
     }
+  });
+
+  const compatibilityFixtures = [
+    minimumWorkflowBrief,
+    lockedDepartmentRoutingWorkflowBrief,
+    leadFollowUpWorkflowBrief,
+    collectionProcessingWorkflowBrief,
+    humanApprovalWorkflowBrief,
+    aiChatbotDraftWorkflowBrief,
+  ];
+
+  it.each(compatibilityFixtures.map((fixture) => [fixture.name, fixture] as const))('parses the %s compatibility fixture', (_name, fixture) => {
+    expect(parseCanonicalWorkflowBrief(fixture)).toEqual(fixture);
+  });
+
+  it.each(compatibilityFixtures.map((fixture) => [fixture.name, fixture] as const))('round-trips the %s fixture through canonical JSON', (_name, fixture) => {
+    const serialized = serializeCanonicalWorkflowBrief(fixture);
+    expect(parseCanonicalWorkflowBrief(JSON.parse(serialized))).toEqual(fixture);
+  });
+
+  it('parse and serialization helpers do not mutate their inputs', () => {
+    const fixture = structuredClone(lockedDepartmentRoutingWorkflowBrief);
+    const before = JSON.stringify(fixture);
+    parseCanonicalWorkflowBrief(fixture);
+    safeParseCanonicalWorkflowBrief(fixture);
+    serializeCanonicalWorkflowBrief(fixture);
+    expect(JSON.stringify(fixture)).toBe(before);
+  });
+
+  it('validates before serialization and does not silently remove unknown fields', () => {
+    expect(() => serializeCanonicalWorkflowBrief({ ...minimumWorkflowBrief, unknown: true })).toThrow();
+  });
+
+  it.each(invalidWorkflowBriefFixtures)('rejects compatibility case: $name', ({ input, expectedPath }) => {
+    const result = safeParseCanonicalWorkflowBrief(input);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.some((issue) => JSON.stringify(issue.path) === JSON.stringify(expectedPath))).toBe(true);
+  });
+
+  it('keeps public constants aligned with their Zod enum schemas', () => {
+    expect(WORKFLOW_BRIEF_ENTITY_TYPES).toEqual(workflowBriefEntityTypeSchema.options);
+    expect(WORKFLOW_BRIEF_CAPABILITY_TYPES).toEqual(workflowBriefCapabilityTypeSchema.options);
+    expect(WORKFLOW_BRIEF_REVIEW_STATES).toEqual(workflowBriefReviewStatusSchema.options);
+    expect(WORKFLOW_BRIEF_CONTROL_FLOW_ENUMS).toEqual({
+      decisionTypes: workflowBriefDecisionTypeSchema.options,
+      loopTypes: workflowBriefLoopTypeSchema.options,
+      waitTypes: workflowBriefWaitTypeSchema.options,
+      mergeTypes: workflowBriefMergeTypeSchema.options,
+      aggregationTypes: workflowBriefAggregationTypeSchema.options,
+    });
+  });
+
+  it('accepts only the public v1.0 schema version', () => {
+    expect(CANONICAL_WORKFLOW_BRIEF_SCHEMA_VERSION).toBe('1.0');
+    expect(safeParseCanonicalWorkflowBrief(minimumWorkflowBrief).success).toBe(true);
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumWorkflowBrief, schemaVersion: '2.0' }).success).toBe(false);
+  });
+
+  it('retains strict validation at top-level and nested compatibility boundaries', () => {
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumWorkflowBrief, platform: 'n8n' }).success).toBe(false);
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumWorkflowBrief, actions: [{ ...minimumWorkflowBrief.actions[0], runtimeNodeId: 'node-1' }] }).success).toBe(false);
+  });
+
+  it('exports the intended Workflow Brief contract from the shared package index', () => {
+    expect(sharedPublicContract.canonicalWorkflowBriefSchema).toBe(canonicalWorkflowBriefSchema);
+    expect(sharedPublicContract.parseCanonicalWorkflowBrief).toBe(parseCanonicalWorkflowBrief);
+    expect(sharedPublicContract.safeParseCanonicalWorkflowBrief).toBe(safeParseCanonicalWorkflowBrief);
+    expect(sharedPublicContract.serializeCanonicalWorkflowBrief).toBe(serializeCanonicalWorkflowBrief);
+    expect(sharedPublicContract.minimumWorkflowBrief).toBe(minimumWorkflowBrief);
+    expect(sharedPublicContract.WORKFLOW_BRIEF_ENTITY_TYPES).toEqual(workflowBriefEntityTypeSchema.options);
   });
 });

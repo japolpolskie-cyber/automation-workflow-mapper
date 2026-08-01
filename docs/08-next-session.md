@@ -2,13 +2,13 @@
 
 ## Exact task
 
-Phase B Sprint 4 — schema hardening, compatibility fixtures, and public contract documentation only.
+Phase C Sprint 1 — conceptual node-function catalog foundation only, beginning with catalog structure and Router behavior contract, without detection logic or runtime integration.
 
 ## Scope
 
-- Harden the existing Workflow Brief schema without adding new runtime behavior.
-- Add compatibility fixtures for the versioned public contract.
-- Document the public schema contract and its invariants.
+- Define the business-level conceptual node-function catalog structure.
+- Begin with the Router behavior contract and its semantic route invariants.
+- Preserve the completed Canonical Workflow Brief v1.0 boundary.
 
 ## Explicit exclusions
 
@@ -18,8 +18,10 @@ Phase B Sprint 4 — schema hardening, compatibility fixtures, and public contra
 - No platform translation changes.
 - No capability-pack expansion.
 - No two-step generation experiment.
-- No new capability or control-flow contracts.
+- No Workflow Brief schema expansion unless a separately verified compatibility defect is found.
+- No detection logic or requirement analysis.
+- No runtime integration or graph compilation.
 
 ## Completion standard
 
-The result should harden and document the completed schema contracts while preserving compatibility and keeping later review, compilation, and translation phases deferred.
+The result should establish only the conceptual catalog structure and Router contract, independently tested and without activating detection, compilation, translation, or execution behavior.

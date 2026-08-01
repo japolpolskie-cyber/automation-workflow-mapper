@@ -14,6 +14,8 @@ Sprint 2 is implemented: the brief now represents business-level decisions and s
 
 Sprint 3 is implemented: the brief now carries source evidence, deterministic confidence bands, clarification questions, conceptual capability suggestions, review decisions, and explicit review/lock state. Locked briefs enforce resolved blocking questions, traceable capability evidence, and confirmed or required capability review without triggering runtime behavior.
 
+Sprint 4 is implemented: the v1.0 public contract now exposes stable version and enum constants, validated serialization, breadth and negative compatibility fixtures, round-trip and immutability guarantees, and developer-facing contract and versioning documentation. Phase B schema work is complete; detection and runtime integration remain deferred.
+
 ## Phase C — Complete conceptual node-function catalog
 
 Compare brief concepts against the existing canonical function model and close only demonstrated conceptual gaps without duplicating functions.
