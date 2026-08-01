@@ -26,6 +26,8 @@ Sprint 2 is implemented: Binary Decision and the Retry, Follow-up, Revision, Pol
 
 Sprint 3 is implemented: Wait, Approval, Merge, Iterator, and Aggregator are now strict detailed contracts. The catalog distinguishes event boundaries from repeated checking and outreach, active human approval from descriptive status, branch synchronization from collection aggregation, and item iteration from other loop families without adding detection or runtime behavior.
 
+Sprint 4 is implemented: Trigger, Action, Filter, Error Handler, Sub-workflow, and Terminal are now strict detailed contracts. The catalog distinguishes start boundaries, concrete operations, one-sided gates, operational failure handling, reusable process delegation, and semantic finality while keeping capability-only concepts out of runtime implementation.
+
 ## Phase D — Capability detection and confidence
 
 Define how verified application operations, platform mappings, unsupported states, ambiguity, and confidence attach to brief requirements.

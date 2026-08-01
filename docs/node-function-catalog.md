@@ -20,7 +20,7 @@ The catalog does not currently detect requirements or change a Workflow Brief.
 
 ## Current inventory
 
-Twelve contracts are detailed after Phase C Sprint 3:
+Eighteen contracts are detailed after Phase C Sprint 4:
 
 - `router`
 - `binary-decision`
@@ -34,13 +34,15 @@ Twelve contracts are detailed after Phase C Sprint 3:
 - `merge`
 - `iterator`
 - `aggregator`
+- `trigger`
+- `action`
+- `filter`
+- `error-handler`
+- `sub-workflow`
+- `terminal`
 
 These entries remain foundation status:
 
-- Trigger and action: `trigger`, `action`
-- Decisions and filtering: `filter`
-- Resilience: `error-handler`
-- Orchestration and completion: `sub-workflow`, `terminal`
 - Conceptual AI functions: `ai-agent`, `ai-classification`, `ai-extraction`, `ai-summarization`, `ai-generation`
 
 ## Router behavior contract
@@ -94,6 +96,22 @@ Iterator processes each member of a real business collection through the same bo
 Aggregator optionally recombines Iterator results by collecting, counting, summarizing, grouping, or combining them. It requires an agreeing source Iterator and an explicit aggregate result. Aggregator is not required for every Iterator.
 
 Merge and Aggregator are distinct: Merge synchronizes workflow branches, while Aggregator recombines item-level collection results.
+
+## Trigger, Action, and Filter
+
+Trigger defines the primary event, schedule, request, or manual boundary that begins an execution. It is distinct from Wait inside an active workflow, Polling after start, and recurring Follow-up outreach. Explicit source application context is preserved.
+
+Action represents one concrete business operation with a defined subject, inputs, result, and optional application or actor context. It must not collapse unrelated work or replace Trigger, Decision, Wait, Iterator, Merge, or Aggregator boundaries.
+
+Filter is a one-sided gate: matching items or executions continue while non-matches are skipped, discarded, ignored, or stopped. When both outcomes contain meaningful downstream work, Binary Decision is appropriate; three or more outcomes use Router.
+
+## Failure, delegation, and finality
+
+Error Handler responds to operational failure through recovery, escalation, compensation, fallback, audit, or termination. It preserves Retry exhaustion and is distinct from ordinary business rejection.
+
+Sub-workflow delegates a coherent reusable multi-step business process through explicit input, output, success, and failure boundaries. One operation remains Action, and an internal return remains Return-to-step Loop. Sub-workflow remains conceptual and contains no execution identifier.
+
+Terminal represents a semantic final success, failure, rejection, cancellation, or completion state with no outgoing continuation. Recoverable failure belongs to Error Handler; a Wait, Merge, notification, or loop exit followed by more work is not terminal.
 
 ## Semantic route-label rule
 

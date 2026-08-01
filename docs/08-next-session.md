@@ -2,11 +2,11 @@
 
 ## Exact task
 
-Phase C Sprint 4 — detailed Trigger, Action, Filter, Error Handler, Sub-workflow, and Terminal contracts only.
+Phase C Sprint 5 — detailed AI Agent, AI Classification, AI Extraction, AI Summarization, and AI Generation contracts only.
 
 ## Scope
 
-- Promote Trigger, Action, Filter, Error Handler, Sub-workflow, and Terminal from foundation to detailed business-level contracts.
+- Promote AI Agent, AI Classification, AI Extraction, AI Summarization, and AI Generation from foundation to detailed conceptual contracts.
 - Preserve the catalog foundation and all existing detailed contracts.
 - Preserve the Canonical Workflow Brief v1.0 boundary.
 
@@ -18,7 +18,7 @@ Phase C Sprint 4 — detailed Trigger, Action, Filter, Error Handler, Sub-workfl
 - No platform translation changes.
 - No capability-pack expansion.
 - No two-step generation experiment.
-- No Wait, Approval, Merge, Iterator, or Aggregator redesign unless a separately verified consistency defect is found.
+- No Trigger, Action, Filter, Error Handler, Sub-workflow, or Terminal redesign unless a separately verified consistency defect is found.
 - No unrelated catalog expansion.
 - No Workflow Brief schema expansion unless a separately verified compatibility defect is found.
 - No detection logic or requirement analysis.
@@ -26,4 +26,4 @@ Phase C Sprint 4 — detailed Trigger, Action, Filter, Error Handler, Sub-workfl
 
 ## Completion standard
 
-The result should add only independently tested Trigger, Action, Filter, Error Handler, Sub-workflow, and Terminal behavior contracts without activating detection, compilation, translation, or execution behavior.
+The result should add only independently tested conceptual AI behavior contracts without adding models, tools, memory, providers, detection, compilation, translation, or execution behavior.

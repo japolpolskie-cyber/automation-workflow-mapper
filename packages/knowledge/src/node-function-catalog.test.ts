@@ -1,10 +1,13 @@
-import { collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, type CanonicalWorkflowBrief } from '@awm/shared';
+import { collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, websiteEnquiryWorkflowBrief, type CanonicalWorkflowBrief } from '@awm/shared';
 import { describe, expect, it } from 'vitest';
 import * as publicKnowledge from './index.js';
 import {
+  actionNodeFunctionContract,
   aggregatorNodeFunctionContract,
   approvalNodeFunctionContract,
   binaryDecisionNodeFunctionContract,
+  errorHandlerNodeFunctionContract,
+  filterNodeFunctionContract,
   followUpLoopNodeFunctionContract,
   getNodeFunctionContract,
   hasNodeFunctionContract,
@@ -20,6 +23,9 @@ import {
   revisionLoopNodeFunctionContract,
   routerNodeFunctionContract,
   safeParseNodeFunctionContract,
+  subWorkflowNodeFunctionContract,
+  terminalNodeFunctionContract,
+  triggerNodeFunctionContract,
   waitNodeFunctionContract,
 } from './node-function-catalog.js';
 
@@ -42,7 +48,7 @@ describe('conceptual node-function catalog', () => {
   });
 
   it('keeps the seven completed contracts detailed and unrelated entries at foundation status', () => {
-    const detailedIds = new Set(['router', 'binary-decision', 'retry', 'follow-up-loop', 'revision-loop', 'polling-loop', 'return-to-step-loop', 'wait', 'approval', 'merge', 'iterator', 'aggregator']);
+    const detailedIds = new Set(['router', 'binary-decision', 'retry', 'follow-up-loop', 'revision-loop', 'polling-loop', 'return-to-step-loop', 'wait', 'approval', 'merge', 'iterator', 'aggregator', 'trigger', 'action', 'filter', 'error-handler', 'sub-workflow', 'terminal']);
     for (const contract of listNodeFunctionContracts()) expect(contract.status).toBe(detailedIds.has(contract.id) ? 'detailed' : 'foundation');
   });
 
@@ -293,6 +299,98 @@ describe('Workflow Brief compatibility for boundary contracts', () => {
     const invalidAggregator = structuredClone(collectionProcessingWorkflowBrief);
     invalidAggregator.aggregators[0]!.sourceIteratorId = 'missing-iterator';
     expect(safeParseCanonicalWorkflowBrief(invalidAggregator).success).toBe(false);
+  });
+});
+
+const executionContracts = [
+  triggerNodeFunctionContract,
+  actionNodeFunctionContract,
+  filterNodeFunctionContract,
+  errorHandlerNodeFunctionContract,
+  subWorkflowNodeFunctionContract,
+  terminalNodeFunctionContract,
+];
+
+describe('Trigger, Action, Filter, Error Handler, Sub-workflow, and Terminal contracts', () => {
+  it.each(executionContracts.map((contract) => [contract.id, contract] as const))('validates detailed contract %s', (_id, contract) => {
+    expect(parseNodeFunctionContract(contract)).toEqual(contract);
+    expect(contract.status).toBe('detailed');
+    expect(contract.inputRequirements.some((input) => input.required)).toBe(true);
+    expect(contract.outputRequirements.length).toBeGreaterThan(0);
+    expect(contract.safeguards.length).toBeGreaterThan(0);
+    expect(contract.positiveExamples.every((example) => example.valid)).toBe(true);
+    expect(contract.negativeExamples.every((example) => !example.valid)).toBe(true);
+  });
+
+  it('distinguishes Trigger from Wait, Polling, and Follow-up', () => {
+    const excluded = triggerNodeFunctionContract.negativeExamples.map((example) => example.expectedInterpretation).join(' ');
+    expect(excluded).toMatch(/Wait/i);
+    expect(excluded).toMatch(/Polling Loop/i);
+    expect(triggerNodeFunctionContract.exclusionCriteria.join(' ')).toMatch(/Follow-up Loop/i);
+    expect(triggerNodeFunctionContract.outputRequirements.some((output) => output.id === 'start-boundary')).toBe(true);
+  });
+
+  it('requires one concrete Action and preserves application or actor context', () => {
+    expect(actionNodeFunctionContract.inputRequirements.find((input) => input.id === 'operation')).toMatchObject({ required: true });
+    expect(actionNodeFunctionContract.outputRequirements.find((output) => output.id === 'completed-operation')).toMatchObject({ maximumCount: 1 });
+    expect(actionNodeFunctionContract.inputRequirements.some((input) => input.id === 'application-actor')).toBe(true);
+    expect(actionNodeFunctionContract.safeguards.some((safeguard) => safeguard.id === 'preserve-context')).toBe(true);
+  });
+
+  it('keeps Filter distinct from Binary Decision and Router', () => {
+    const excluded = filterNodeFunctionContract.negativeExamples.map((example) => example.expectedInterpretation).join(' ');
+    expect(excluded).toMatch(/Binary Decision/i);
+    expect(excluded).toMatch(/Router/i);
+    expect(filterNodeFunctionContract.safeguards.some((safeguard) => safeguard.id === 'no-second-branch')).toBe(true);
+  });
+
+  it('distinguishes Error Handler from normal rejection and preserves retry exhaustion', () => {
+    expect(errorHandlerNodeFunctionContract.negativeExamples.some((example) => /normal business outcome/i.test(example.expectedInterpretation))).toBe(true);
+    expect(errorHandlerNodeFunctionContract.inputRequirements.some((input) => input.id === 'retry-relationship')).toBe(true);
+    expect(errorHandlerNodeFunctionContract.safeguards.some((safeguard) => safeguard.id === 'preserve-exhaustion')).toBe(true);
+  });
+
+  it('requires reusable multi-step Sub-workflow boundaries and excludes actions and internal loops', () => {
+    expect(subWorkflowNodeFunctionContract.inputRequirements.map((input) => input.id)).toEqual(expect.arrayContaining(['process-purpose', 'process-inputs', 'process-outputs']));
+    const excluded = subWorkflowNodeFunctionContract.negativeExamples.map((example) => example.expectedInterpretation).join(' ');
+    expect(excluded).toMatch(/Action/i);
+    expect(excluded).toMatch(/Return-to-step Loop/i);
+    expect(subWorkflowNodeFunctionContract.safeguards.some((safeguard) => safeguard.id === 'coherent-process')).toBe(true);
+  });
+
+  it('gives Terminal explicit finality with no continuation', () => {
+    expect(terminalNodeFunctionContract.outputRequirements.find((output) => output.id === 'outgoing-continuation')).toMatchObject({ minimumCount: 0, maximumCount: 0 });
+    expect(terminalNodeFunctionContract.safeguards.some((safeguard) => safeguard.id === 'no-continuation')).toBe(true);
+    expect(terminalNodeFunctionContract.negativeExamples.some((example) => /Error Handler/i.test(example.expectedInterpretation))).toBe(true);
+  });
+
+  it('contains no implementation terms in the expanded detailed catalog', () => {
+    for (const contract of listNodeFunctionContracts().filter((item) => item.status === 'detailed')) {
+      expect(JSON.stringify(contract)).not.toMatch(/n8n|make\.com|zapier|reactflow|nodeType|provider|modelId|runtime configuration/i);
+    }
+  });
+});
+
+describe('Workflow Brief compatibility for execution contracts', () => {
+  it('aligns Trigger and Action with existing valid fixtures', () => {
+    expect(safeParseCanonicalWorkflowBrief(minimumWorkflowBrief).success).toBe(true);
+    expect(minimumWorkflowBrief.triggers[0]?.triggerType).toBe('event');
+    expect(minimumWorkflowBrief.actions[0]?.inputs).toEqual([]);
+    expect(safeParseCanonicalWorkflowBrief(websiteEnquiryWorkflowBrief).success).toBe(true);
+    expect(websiteEnquiryWorkflowBrief.triggers[0]?.applicationId).toBe('website');
+    expect(websiteEnquiryWorkflowBrief.actions.some((action) => action.applicationId === 'crm')).toBe(true);
+    expect(websiteEnquiryWorkflowBrief.actions.some((action) => action.actorId === 'sales-team')).toBe(true);
+  });
+
+  it('keeps Filter conceptual without adding a dedicated Workflow Brief entity', () => {
+    expect(filterNodeFunctionContract.relatedWorkflowBriefEntityTypes).toEqual(expect.arrayContaining(['decision', 'route', 'action', 'iterator']));
+    expect(listNodeFunctionContracts().some((contract) => contract.id === 'filter')).toBe(true);
+  });
+
+  it('keeps Error Handler, Sub-workflow, and Terminal at capability level', () => {
+    for (const contract of [errorHandlerNodeFunctionContract, subWorkflowNodeFunctionContract, terminalNodeFunctionContract]) {
+      expect(contract.relatedWorkflowBriefEntityTypes).toContain('capability');
+    }
   });
 });
 
