@@ -2,15 +2,13 @@
 
 ## Exact task
 
-Design the canonical internal Workflow Brief schema only, without implementing provider calls, UI, or graph generation.
+Design the Workflow Brief evidence, confidence, clarification, and review/lock state contracts only.
 
 ## Scope
 
-- Inspect existing shared schemas, deterministic evidence/fact contracts, canonical function definitions, application operations, planner context, and V2 traceability references.
-- Define a versioned internal schema for business objective, actors, systems, triggers, data/cardinality, actions, decisions, semantic route outcomes, waits, approvals, collections, errors, capability requirements, confidence, evidence, clarifications, assumptions, and review/lock state.
-- Define identifiers and source references needed for later brief-to-graph traceability.
-- Specify validation invariants and migration/versioning expectations.
-- Add schema-focused tests only if implementation of the schema is explicitly authorized in that session.
+- Extend the existing brief with evidence/source references, bounded confidence, clarification records, and explicit review/lock state.
+- Define traceability and referential invariants without adding requirement detection or provider behavior.
+- Preserve the implemented business entities and control-flow contracts.
 
 ## Explicit exclusions
 
@@ -20,8 +18,8 @@ Design the canonical internal Workflow Brief schema only, without implementing p
 - No platform translation changes.
 - No capability-pack expansion.
 - No two-step generation experiment.
+- No additional control-flow contracts.
 
 ## Completion standard
 
 The result should make the future brief the unambiguous business authority while clearly distinguishing implemented schema work from later review, compilation, and translation phases.
-

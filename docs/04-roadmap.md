@@ -10,6 +10,8 @@ Design the internal, versioned business-requirement contract only. Define eviden
 
 Sprint 1 is implemented: the shared package now provides the strict `CanonicalWorkflowBrief` foundation for actors, applications, business-level triggers, and actions, including unique-ID and cross-reference validation. Control-flow, evidence, confidence, clarification, and review/lock contracts remain for later explicitly scoped sprints.
 
+Sprint 2 is implemented: the brief now represents business-level decisions and semantic routes, bounded loops, waits, human approvals, merges, iterators, and aggregators with strict semantic and referential validation. Evidence, confidence, clarification, and review/lock contracts remain deferred to the next schema sprint.
+
 ## Phase C — Complete conceptual node-function catalog
 
 Compare brief concepts against the existing canonical function model and close only demonstrated conceptual gaps without duplicating functions.

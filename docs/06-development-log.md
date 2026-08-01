@@ -46,5 +46,9 @@
 
 ## Current checkpoint
 
-Current validation is 30/30 real-world scenarios, average score 91, capability safety 100%, 478 server tests passed with 4 skipped, and a passing complete project typecheck.
+### Workflow Brief schema foundation
 
+- Phase B Sprint 1 added strict actors, applications, triggers, actions, parse helpers, and foundational cross-reference validation.
+- Phase B Sprint 2 added business-level control-flow contracts for decisions/routes, loops, waits, approvals, merges, iterators, and aggregators. Semantic labels and control references are validated without platform node details or runtime integration.
+
+Current validation is 30/30 real-world scenarios, average score 91, capability safety 100%, 478 server tests passed with 4 skipped, and a passing complete project typecheck.
