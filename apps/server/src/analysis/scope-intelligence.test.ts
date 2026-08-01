@@ -65,6 +65,46 @@ describe('K3 deterministic scope intelligence', () => {
   });
 
   it.each([
+    ['data-retrieval', 'Retrieve new Gmail attachments'],
+    ['data-retrieval', 'Fetch the customer profile'],
+    ['data-retrieval', 'Get the invoice data'],
+    ['data-retrieval', 'Load the account status'],
+    ['data-retrieval', 'Search HubSpot for the matching contact'],
+    ['data-retrieval', 'Find the customer record'],
+    ['data-retrieval', 'Look up the lead details'],
+    ['validation', 'Validate the invoice fields'],
+    ['validation', 'Verify the email address'],
+    ['validation', 'Check the required fields'],
+    ['notification', 'Notify the account manager in Slack'],
+    ['notification', 'Alert the project owner'],
+    ['notification', 'Inform the sales team'],
+    ['notification', 'Send a notification to the customer'],
+    ['logging', 'Log the result in Google Sheets'],
+    ['logging', 'Record the execution history'],
+    ['logging', 'Audit the workflow history'],
+    ['logging', 'Write history to the audit log'],
+  ])('maps bounded workflow verb language to %s: %s', (canonicalFunction, scope) => {
+    expect(run(scope).facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_function', value: canonicalFunction }),
+    ]));
+  });
+
+  it.each([
+    ['Get approval', 'data-retrieval'],
+    ['Check with the manager', 'validation'],
+    ['Record a video', 'logging'],
+    ['Send the invoice', 'notification'],
+  ])('does not map ambiguous language to %s: %s', (scope, canonicalFunction) => {
+    expect(run(scope).facts.some((fact) => fact.kind === 'workflow_function' && fact.value === canonicalFunction)).toBe(false);
+  });
+
+  it('preserves named application context alongside verb classification', () => {
+    const result = run('Search HubSpot for the matching contact, notify the account manager in Slack, and log the result in Google Sheets.');
+    expect(result.facts.filter((fact) => fact.kind === 'application').map((fact) => fact.value)).toEqual(expect.arrayContaining(['HubSpot', 'Slack', 'Google Sheets']));
+    expect(result.facts.filter((fact) => fact.kind === 'workflow_function').map((fact) => fact.value)).toEqual(expect.arrayContaining(['data-retrieval', 'notification', 'logging']));
+  });
+
+  it.each([
     ['Request human approval before processing the invoice.'],
     ['The finance manager must approve or reject the purchase request.'],
     ['When an onboarding task is approved, create the customer folder.'],

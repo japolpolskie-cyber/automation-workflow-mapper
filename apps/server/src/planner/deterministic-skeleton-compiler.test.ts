@@ -97,4 +97,18 @@ describe('P4 deterministic skeleton compiler', () => {
     expect(result.plan.nodes.find((node) => node.id === trueEdge?.target)?.title).toBe('send a receipt');
     expect(result.plan.nodes.find((node) => node.id === falseEdge?.target)?.title).toBe('notify finance');
   });
+
+  it('preserves classified verb functions in the generated skeleton', () => {
+    const scope = 'Search HubSpot for the matching contact. Validate the invoice fields. Notify the account manager in Slack. Log the result in Google Sheets.';
+    const context = contextBuilder.build(scope, 'n8n', intelligence.analyze(scope, new Date('2026-07-16T00:00:00.000Z')));
+    const result = compiler.compile(context);
+    expect(result.issues).toEqual([]);
+    expect(result.plan.nodes.map((node) => node.canonicalFunctionId)).toEqual(expect.arrayContaining([
+      'data-retrieval',
+      'validation',
+      'notification',
+      'logging',
+    ]));
+    expect(context.facts.filter((fact) => fact.kind === 'application').map((fact) => fact.value)).toEqual(expect.arrayContaining(['HubSpot', 'Slack', 'Google Sheets']));
+  });
 });
