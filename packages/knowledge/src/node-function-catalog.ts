@@ -376,16 +376,209 @@ export const returnToStepLoopNodeFunctionContract: NodeFunctionContract = {
   relatedWorkflowBriefEntityTypes: ['loop', 'action', 'decision'], notes: ['Maps to loopType return-to-step with a required loopBackActionId.'],
 };
 
+export const waitNodeFunctionContract: NodeFunctionContract = {
+  id: 'wait', name: 'Wait', category: 'timing', status: 'detailed',
+  purpose: 'Pause workflow execution until a stated duration, date, event, response, or approval boundary is reached.',
+  selectionCriteria: ['Wait for a fixed duration.', 'Wait until a date or deadline.', 'Pause until an event occurs.', 'Wait for a customer or external response.', 'Resume after an approval or business event.'],
+  exclusionCriteria: ['Repeated technical attempts belong to Retry.', 'Repeated status checks belong to Polling Loop.', 'Communication cadence belongs to Follow-up Loop.', 'A recurring schedule that starts new executions belongs to Trigger.', 'Vague delay wording without a meaningful boundary is incomplete.'],
+  inputRequirements: [
+    { id: 'wait-type', name: 'Wait type', description: 'The duration, date, event, response, or approval boundary type.', required: true },
+    { id: 'boundary-description', name: 'Boundary description', description: 'The exact business boundary that ends the pause.', required: true, clarificationQuestion: 'What event, date, duration, response, or approval resumes the workflow?' },
+    { id: 'resume-condition', name: 'Resume condition', description: 'The condition that confirms the boundary was reached.', required: true },
+    { id: 'resume-action', name: 'Resume action', description: 'The next business action after waiting.', required: true },
+    { id: 'boundary-detail', name: 'Duration, date, or event detail', description: 'The concrete detail required by the selected wait type.', required: true },
+  ],
+  outputRequirements: [
+    { id: 'paused-state', name: 'Paused state', description: 'The workflow state while the boundary remains unmet.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'resume-path', name: 'Resume path', description: 'The continuation after the stated boundary.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'timeout-path', name: 'Timeout or alternate path', description: 'An optional explicit outcome when waiting ends another way.', minimumCount: 0, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'preserve-boundary', description: 'Preserve the actual duration, date, event, response, or approval boundary.', reason: 'The boundary determines when execution may resume.' },
+    { id: 'no-invented-detail', description: 'Do not invent durations, dates, or events.', reason: 'Wait details must come from reviewed business requirements.' },
+    { id: 'exclude-polling', description: 'Do not treat until alone as polling.', reason: 'Polling requires explicit repeated checking.' },
+    { id: 'event-versus-check', description: 'Distinguish event-driven waiting from repeated state checks.', reason: 'They represent different business behavior.' },
+    { id: 'clarify-resume', description: 'Request clarification when the resume boundary is unclear.', reason: 'An unresolved boundary cannot define a deterministic Wait.' },
+    { id: 'exclude-recurring-follow-up', description: 'Do not flatten recurring follow-up into one Wait.', reason: 'Follow-up includes repeated outreach and stopping semantics.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Wait three days before sending the next follow-up.', expectedInterpretation: 'Pause for three days, then resume at the next follow-up.', valid: true },
+    { requirementText: 'Pause until the customer replies.', expectedInterpretation: 'Wait for the customer-response event.', valid: true },
+    { requirementText: 'Resume after manager approval.', expectedInterpretation: 'Wait for the manager-approval boundary.', valid: true },
+    { requirementText: 'Wait until the invoice due date.', expectedInterpretation: 'Wait until the stated business date.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Check every five minutes until complete.', expectedInterpretation: 'Use a Polling Loop.', valid: false },
+    { requirementText: 'Retry the failed request three times.', expectedInterpretation: 'Use Retry.', valid: false },
+    { requirementText: 'Run every Monday.', expectedInterpretation: 'Use a schedule Trigger.', valid: false },
+    { requirementText: 'Send reminders every two days.', expectedInterpretation: 'Use a Follow-up Loop.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['wait', 'action'], notes: ['Maps to WorkflowBriefWait and its waitType-specific boundary field.'],
+};
+
+export const approvalNodeFunctionContract: NodeFunctionContract = {
+  id: 'approval', name: 'Approval', category: 'human', status: 'detailed',
+  purpose: 'Create a real human decision boundary where a person reviews, approves, rejects, or requests changes before continuation.',
+  selectionCriteria: ['Work is sent for approval.', 'Human review is required.', 'The workflow waits for an approve or reject decision.', 'A supervisor, manager, client, or reviewer decides.', 'Continuation branches on the approval outcome.'],
+  exclusionCriteria: ['Descriptive approved-status phrases do not create approval.', 'Automatic validation has no human reviewer.', 'A system condition without human authority belongs to Binary Decision.', 'Notification to a person is not a decision request.', 'Historical approval mentions do not create a new boundary.'],
+  inputRequirements: [
+    { id: 'reviewed-item', name: 'Item or request being reviewed', description: 'The business item submitted for a human decision.', required: true },
+    { id: 'approver-role', name: 'Approver or decision role', description: 'The person or role authorized to decide.', required: true, clarificationQuestion: 'Who has authority to approve or reject?' },
+    { id: 'approval-criteria', name: 'Approval criteria', description: 'Optional stated criteria used by the reviewer.', required: false },
+    { id: 'approved-outcome', name: 'Approved outcome', description: 'The business continuation after approval.', required: true },
+    { id: 'rejected-outcome', name: 'Rejected outcome', description: 'The business handling after rejection.', required: true },
+    { id: 'alternate-behavior', name: 'Timeout or revision behavior', description: 'An optional timeout or return-for-changes outcome.', required: false },
+  ],
+  outputRequirements: [
+    { id: 'approval-request', name: 'Approval request boundary', description: 'The active request for a human decision.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'approved-route', name: 'Approved route', description: 'The explicitly approved business outcome.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'rejected-route', name: 'Rejected route', description: 'The explicitly rejected business outcome.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'timeout-revision-route', name: 'Timeout or revision route', description: 'An optional stated alternate decision outcome.', minimumCount: 0, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'active-language', description: 'Require active approval, review, or decision language.', reason: 'Approval is an action boundary, not a status adjective.' },
+    { id: 'exclude-adjective', description: 'Do not infer approval from descriptive approved status.', reason: 'Already-approved content does not request a new decision.' },
+    { id: 'exclude-notification', description: 'Do not treat notification as approval.', reason: 'A recipient without decision authority is not an approver.' },
+    { id: 'preserve-outcomes', description: 'Preserve approved and rejected semantics.', reason: 'The human decision determines distinct business paths.' },
+    { id: 'separate-revision', description: 'Distinguish plain rejection from a Revision Loop return.', reason: 'Revision requires changes and resubmission.' },
+    { id: 'clarify-authority', description: 'Request clarification when the approver or an outcome is missing.', reason: 'A human boundary requires authority and decision handling.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Send the proposal to the manager for approval.', expectedInterpretation: 'Request an authorized manager decision.', valid: true },
+    { requirementText: 'Wait until the client approves or rejects the design.', expectedInterpretation: 'Create approved and rejected routes from a client decision.', valid: true },
+    { requirementText: 'Require human review before publishing.', expectedInterpretation: 'Pause publication at a human-review boundary.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Publish approved social posts.', expectedInterpretation: 'Treat approved as descriptive status.', valid: false },
+    { requirementText: 'Validate the invoice automatically.', expectedInterpretation: 'Use Validation.', valid: false },
+    { requirementText: 'Notify the manager.', expectedInterpretation: 'Use Notification.', valid: false },
+    { requirementText: 'If payment succeeds, continue.', expectedInterpretation: 'Use a system condition, not Approval.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['approval', 'actor', 'action', 'route'], notes: ['Maps to WorkflowBriefApproval and its distinct approved and rejected route references.'],
+};
+
+export const mergeNodeFunctionContract: NodeFunctionContract = {
+  id: 'merge', name: 'Merge', category: 'synchronization', status: 'detailed',
+  purpose: 'Synchronize or reunite multiple workflow branches before continuing to a shared downstream business step.',
+  selectionCriteria: ['Continue after all branches finish.', 'Continue when any branch completes.', 'Continue with the first completed result.', 'Parallel outcomes reunite before a shared step.', 'Approvals, checks, or parallel work reconverge.'],
+  exclusionCriteria: ['Mutually exclusive Router outcomes do not need Merge unless they explicitly reconverge.', 'Collection result recombination belongs to Aggregator.', 'Sequential flow has no branch synchronization.', 'Combining fields is data transformation.', 'Duplicate downstream connections alone do not establish synchronization.'],
+  inputRequirements: [
+    { id: 'incoming-branches', name: 'Incoming branches', description: 'At least two workflow branches entering synchronization.', required: true },
+    { id: 'merge-strategy', name: 'Merge strategy', description: 'Whether all, any, or the first completed branch permits continuation.', required: true, clarificationQuestion: 'Must all branches finish, any branch finish, or only the first result continue?' },
+    { id: 'downstream-target', name: 'Downstream target', description: 'The shared business action after synchronization.', required: true },
+    { id: 'completion-semantics', name: 'Correlation or completion semantics', description: 'Optional rules establishing which branch completions belong together.', required: false },
+  ],
+  outputRequirements: [
+    { id: 'incoming-boundary', name: 'Merged branch boundary', description: 'A synchronization boundary with at least two incoming branches.', minimumCount: 2, semanticLabelRequired: false, genericLabelsAllowed: false },
+    { id: 'synchronized-continuation', name: 'Synchronized continuation', description: 'One continuation governed by the merge strategy.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'target-action', name: 'Target business action', description: 'The shared action reached after synchronization.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'minimum-branches', description: 'Require at least two incoming branches.', reason: 'One branch does not require synchronization.' },
+    { id: 'preserve-strategy', description: 'Preserve all, any, and first-completed semantics.', reason: 'Each strategy has different continuation behavior.' },
+    { id: 'not-visual-junction', description: 'Do not use Merge as a generic visual junction.', reason: 'A Merge represents a real synchronization boundary.' },
+    { id: 'exclude-aggregator', description: 'Do not confuse Merge with Aggregator.', reason: 'Merge synchronizes branches; Aggregator recombines collection results.' },
+    { id: 'bounded-reconvergence', description: 'Do not merge mutually exclusive routes unless the process explicitly reconverges.', reason: 'A shared continuation must be a stated business need.' },
+    { id: 'clarify-strategy', description: 'Request clarification when synchronization behavior is unspecified.', reason: 'Continuation cannot be determined without a merge strategy.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'After Finance and Legal both approve, create the contract.', expectedInterpretation: 'Merge all approval branches before contract creation.', valid: true },
+    { requirementText: 'Continue when either the customer reply or timeout path completes.', expectedInterpretation: 'Merge using any-completed semantics.', valid: true },
+    { requirementText: 'Wait for all onboarding checks before activating the employee.', expectedInterpretation: 'Synchronize all check branches before activation.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Route requests to IT or HR.', expectedInterpretation: 'Use a decision route, not branch synchronization.', valid: false },
+    { requirementText: 'Collect all processed invoice totals.', expectedInterpretation: 'Use Aggregator.', valid: false },
+    { requirementText: 'Then send an email.', expectedInterpretation: 'Use a sequential Action.', valid: false },
+    { requirementText: 'Combine first and last name.', expectedInterpretation: 'Use data transformation.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['merge', 'route', 'action'], notes: ['Maps to WorkflowBriefMerge with all, any, or first-completed strategy.'],
+};
+
+export const iteratorNodeFunctionContract: NodeFunctionContract = {
+  id: 'iterator', name: 'Iterator', category: 'collection', status: 'detailed',
+  purpose: 'Process each item in a business collection individually using the same repeated body of actions.',
+  selectionCriteria: ['The requirement says for each item.', 'Every record must be processed.', 'Attachments, rows, contacts, orders, or files are iterated.', 'The same logic applies to each collection member.'],
+  exclusionCriteria: ['Retrying one failed operation belongs to Retry.', 'Repeated outreach belongs to Follow-up Loop.', 'Repeated state checks belong to Polling Loop.', 'Feedback-driven changes belong to Revision Loop.', 'Repeating from an earlier checkpoint belongs to Return-to-step Loop.', 'A single object does not require Iterator.'],
+  inputRequirements: [
+    { id: 'source-collection', name: 'Source collection', description: 'The retrieved or produced collection containing multiple business items.', required: true, clarificationQuestion: 'Which collection supplies the items?' },
+    { id: 'item-description', name: 'Item description', description: 'The meaning of one collection member.', required: true },
+    { id: 'body-actions', name: 'Body actions', description: 'The business actions applied to every item.', required: true },
+    { id: 'per-item-condition', name: 'Per-item condition', description: 'An optional condition evaluated for each item.', required: false },
+    { id: 'aggregation-need', name: 'Aggregation requirement', description: 'An optional requirement to recombine item-level results.', required: false },
+  ],
+  outputRequirements: [
+    { id: 'item-execution', name: 'Item-by-item execution', description: 'One repeated execution for each collection member.', minimumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+    { id: 'loop-body', name: 'Loop body', description: 'The actions performed for every item.', minimumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+    { id: 'completion-boundary', name: 'Collection completion boundary', description: 'The point after all required item processing finishes.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'aggregator-reference', name: 'Aggregator reference', description: 'An optional link to required result recombination.', minimumCount: 0, maximumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'require-collection', description: 'Require a real collection source.', reason: 'Iterator applies to multiple items, not one object.' },
+    { id: 'preserve-retrieval', description: 'Preserve retrieval before iteration without duplicating it.', reason: 'The collection must exist before item processing begins.' },
+    { id: 'notification-placement', description: 'Keep per-item notifications inside the body and completion notifications after completion.', reason: 'Notification placement changes business meaning.' },
+    { id: 'optional-aggregation', description: 'Do not force Aggregator when recombination is not needed.', reason: 'Iteration can complete without producing one combined result.' },
+    { id: 'exclude-other-loops', description: 'Distinguish Iterator from Retry and Follow-up Loop.', reason: 'Iterator repeats by collection membership rather than failure or communication state.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'For each email attachment, save the file.', expectedInterpretation: 'Iterate through the attachment collection and save each item.', valid: true },
+    { requirementText: 'Process every invoice row and validate the amount.', expectedInterpretation: 'Apply validation to each invoice row.', valid: true },
+    { requirementText: 'For each customer, calculate the renewal date.', expectedInterpretation: 'Apply the calculation to every customer.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Retry the upload three times.', expectedInterpretation: 'Use Retry.', valid: false },
+    { requirementText: 'Follow up with the lead weekly.', expectedInterpretation: 'Use a Follow-up Loop.', valid: false },
+    { requirementText: 'Check status until complete.', expectedInterpretation: 'Use a Polling Loop.', valid: false },
+    { requirementText: 'Process the submitted invoice.', expectedInterpretation: 'Use a single Action.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['iterator', 'action', 'aggregator'], notes: ['Maps to WorkflowBriefIterator; aggregatorId remains optional.'],
+};
+
+export const aggregatorNodeFunctionContract: NodeFunctionContract = {
+  id: 'aggregator', name: 'Aggregator', category: 'collection', status: 'detailed',
+  purpose: 'Combine, collect, count, summarize, group, or otherwise recombine results produced from collection processing.',
+  selectionCriteria: ['Collect processed item results.', 'Summarize all item outcomes.', 'Count matching records.', 'Group results by a business field.', 'Combine item-level outputs into one downstream result.'],
+  exclusionCriteria: ['Branch synchronization belongs to Merge.', 'One-record field changes are data transformation.', 'Item-by-item processing belongs to Iterator.', 'Completion notification alone does not require combined data.', 'Generic combine wording without collection context is insufficient.'],
+  inputRequirements: [
+    { id: 'source-iterator', name: 'Source Iterator', description: 'The collection-processing boundary producing item results.', required: true },
+    { id: 'aggregation-type', name: 'Aggregation type', description: 'Collect, summarize, count, group, or combine semantics.', required: true },
+    { id: 'item-results', name: 'Item-level results', description: 'The outputs produced for individual collection items.', required: true },
+    { id: 'output-description', name: 'Output description', description: 'The meaning and shape of the recombined business result.', required: true, clarificationQuestion: 'What combined result should collection processing produce?' },
+    { id: 'downstream-target', name: 'Downstream target', description: 'The business action receiving the aggregated result.', required: true },
+  ],
+  outputRequirements: [
+    { id: 'aggregated-result', name: 'Aggregated result', description: 'One collected, summarized, counted, grouped, or combined result.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'completion-boundary', name: 'Aggregation completion boundary', description: 'The point after required item results are recombined.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'target-step', name: 'Target business step', description: 'The next action receiving the aggregate.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'valid-iterator', description: 'Require a valid source Iterator.', reason: 'Aggregator recombines item-level results from collection processing.' },
+    { id: 'not-automatic', description: 'Do not create Aggregator for every collection.', reason: 'Many collection workflows need no recombination.' },
+    { id: 'paired-references', description: 'Preserve Iterator and Aggregator agreement.', reason: 'Both sides must identify the same collection boundary.' },
+    { id: 'exclude-merge', description: 'Do not confuse Aggregator with Merge.', reason: 'Aggregator combines item results; Merge synchronizes branches.' },
+    { id: 'completion-notification', description: 'Keep completion notifications after aggregation.', reason: 'Notification should receive the completed aggregate when required.' },
+    { id: 'clarify-output', description: 'Request clarification when the desired aggregate is unclear.', reason: 'The recombined business result must be explicit.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Collect all low-stock items into one report.', expectedInterpretation: 'Collect item-level low-stock results into one report.', valid: true },
+    { requirementText: 'Count the number of failed records.', expectedInterpretation: 'Count failed item results.', valid: true },
+    { requirementText: 'Group processed orders by region.', expectedInterpretation: 'Group item-level order results by region.', valid: true },
+    { requirementText: 'Summarize all customer responses.', expectedInterpretation: 'Summarize the collection of response results.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Wait for both approval branches.', expectedInterpretation: 'Use Merge.', valid: false },
+    { requirementText: 'For each item, validate the value.', expectedInterpretation: 'Use Iterator.', valid: false },
+    { requirementText: 'Send a completion message.', expectedInterpretation: 'Use Notification.', valid: false },
+    { requirementText: 'Combine first and last name.', expectedInterpretation: 'Use data transformation.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['aggregator', 'iterator', 'action'], notes: ['Maps to WorkflowBriefAggregator and requires agreement with its source Iterator.'],
+};
+
 type FoundationSeed = { id: string; name: string; category: NodeFunctionCategory; entities: NodeFunctionContract['relatedWorkflowBriefEntityTypes'] };
 const foundationSeeds: FoundationSeed[] = [
   { id: 'trigger', name: 'Trigger', category: 'trigger', entities: ['trigger'] },
   { id: 'action', name: 'Action', category: 'action', entities: ['action'] },
   { id: 'filter', name: 'Filter', category: 'decision', entities: ['decision', 'route'] },
-  { id: 'iterator', name: 'Iterator', category: 'collection', entities: ['iterator'] },
-  { id: 'aggregator', name: 'Aggregator', category: 'collection', entities: ['aggregator'] },
-  { id: 'merge', name: 'Merge', category: 'synchronization', entities: ['merge'] },
-  { id: 'wait', name: 'Wait', category: 'timing', entities: ['wait'] },
-  { id: 'approval', name: 'Approval', category: 'human', entities: ['approval'] },
   { id: 'error-handler', name: 'Error Handler', category: 'resilience', entities: ['capability'] },
   { id: 'sub-workflow', name: 'Sub-workflow', category: 'orchestration', entities: ['capability'] },
   { id: 'terminal', name: 'Terminal', category: 'terminal', entities: ['action'] },
@@ -428,6 +621,11 @@ const internalNodeFunctionCatalog = deepFreeze(nodeFunctionCatalogSchema.parse([
   revisionLoopNodeFunctionContract,
   pollingLoopNodeFunctionContract,
   returnToStepLoopNodeFunctionContract,
+  waitNodeFunctionContract,
+  approvalNodeFunctionContract,
+  mergeNodeFunctionContract,
+  iteratorNodeFunctionContract,
+  aggregatorNodeFunctionContract,
 ]));
 
 export function parseNodeFunctionContract(input: unknown): NodeFunctionContract {

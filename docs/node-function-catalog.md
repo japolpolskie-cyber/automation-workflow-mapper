@@ -20,7 +20,7 @@ The catalog does not currently detect requirements or change a Workflow Brief.
 
 ## Current inventory
 
-Seven contracts are detailed after Phase C Sprint 2:
+Twelve contracts are detailed after Phase C Sprint 3:
 
 - `router`
 - `binary-decision`
@@ -29,13 +29,16 @@ Seven contracts are detailed after Phase C Sprint 2:
 - `revision-loop`
 - `polling-loop`
 - `return-to-step-loop`
+- `wait`
+- `approval`
+- `merge`
+- `iterator`
+- `aggregator`
 
 These entries remain foundation status:
 
 - Trigger and action: `trigger`, `action`
 - Decisions and filtering: `filter`
-- Collections and synchronization: `iterator`, `aggregator`, `merge`
-- Timing and human boundaries: `wait`, `approval`
 - Resilience: `error-handler`
 - Orchestration and completion: `sub-workflow`, `terminal`
 - Conceptual AI functions: `ai-agent`, `ai-classification`, `ai-extraction`, `ai-summarization`, `ai-generation`
@@ -75,6 +78,22 @@ The five detailed Loop-family contracts have distinct business boundaries:
 - `return-to-step-loop` returns execution to a named earlier business action and repeats from that checkpoint.
 
 Retry must not replace communication follow-up or polling. Follow-up preserves the wait boundary and distinguishes initial contact from later outreach. Revision requires a real return-for-changes path, not merely an approved/rejected decision. Polling requires repeated checking language, an interval, and a safe bound; a direct event resume uses Wait instead. Return-to-step requires a resolvable earlier action and must not infer its target from vague step numbering.
+
+## Wait and Approval boundaries
+
+Wait pauses execution until one explicit duration, date, event, response, or approval boundary. It preserves the stated resume condition and action without inventing details. Repeated status checks belong to Polling Loop; recurring outreach belongs to Follow-up Loop; a recurring schedule that starts a new execution belongs to Trigger.
+
+Approval creates an active human decision boundary with an authorized reviewer and distinct approved and rejected outcomes. Descriptive phrases such as “approved social posts,” automatic validation, notification without decision authority, and historical approval mentions do not create Approval.
+
+## Merge, Iterator, and Aggregator
+
+Merge synchronizes at least two workflow branches under `all`, `any`, or `first-completed` semantics before one shared continuation. It is not a generic visual junction. Mutually exclusive routes need Merge only when the business process explicitly reconverges.
+
+Iterator processes each member of a real business collection through the same body. It preserves source retrieval before iteration, keeps explicitly per-item behavior inside the repeated body, and places collection-completion behavior afterward. Retry, Follow-up, Polling, Revision, and Return-to-step repeat for different reasons and are not Iterator behavior.
+
+Aggregator optionally recombines Iterator results by collecting, counting, summarizing, grouping, or combining them. It requires an agreeing source Iterator and an explicit aggregate result. Aggregator is not required for every Iterator.
+
+Merge and Aggregator are distinct: Merge synchronizes workflow branches, while Aggregator recombines item-level collection results.
 
 ## Semantic route-label rule
 

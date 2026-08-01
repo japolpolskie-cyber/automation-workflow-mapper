@@ -24,6 +24,8 @@ Sprint 1 is implemented: the knowledge package now exposes a strict conceptual n
 
 Sprint 2 is implemented: Binary Decision and the Retry, Follow-up, Revision, Polling, and Return-to-step Loop-family entries are now strict detailed contracts. Their business inputs, outputs, safeguards, examples, exclusions, and Workflow Brief compatibility distinguish two-outcome decisions and each repeated-process boundary without adding detection or runtime behavior.
 
+Sprint 3 is implemented: Wait, Approval, Merge, Iterator, and Aggregator are now strict detailed contracts. The catalog distinguishes event boundaries from repeated checking and outreach, active human approval from descriptive status, branch synchronization from collection aggregation, and item iteration from other loop families without adding detection or runtime behavior.
+
 ## Phase D — Capability detection and confidence
 
 Define how verified application operations, platform mappings, unsupported states, ambiguity, and confidence attach to brief requirements.

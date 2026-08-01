@@ -1,12 +1,16 @@
-import { leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, type CanonicalWorkflowBrief } from '@awm/shared';
+import { collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, type CanonicalWorkflowBrief } from '@awm/shared';
 import { describe, expect, it } from 'vitest';
 import * as publicKnowledge from './index.js';
 import {
+  aggregatorNodeFunctionContract,
+  approvalNodeFunctionContract,
   binaryDecisionNodeFunctionContract,
   followUpLoopNodeFunctionContract,
   getNodeFunctionContract,
   hasNodeFunctionContract,
+  iteratorNodeFunctionContract,
   listNodeFunctionContracts,
+  mergeNodeFunctionContract,
   nodeFunctionCatalogSchema,
   nodeFunctionContractSchema,
   parseNodeFunctionContract,
@@ -16,6 +20,7 @@ import {
   revisionLoopNodeFunctionContract,
   routerNodeFunctionContract,
   safeParseNodeFunctionContract,
+  waitNodeFunctionContract,
 } from './node-function-catalog.js';
 
 const expectedCatalogIds = [
@@ -37,7 +42,7 @@ describe('conceptual node-function catalog', () => {
   });
 
   it('keeps the seven completed contracts detailed and unrelated entries at foundation status', () => {
-    const detailedIds = new Set(['router', 'binary-decision', 'retry', 'follow-up-loop', 'revision-loop', 'polling-loop', 'return-to-step-loop']);
+    const detailedIds = new Set(['router', 'binary-decision', 'retry', 'follow-up-loop', 'revision-loop', 'polling-loop', 'return-to-step-loop', 'wait', 'approval', 'merge', 'iterator', 'aggregator']);
     for (const contract of listNodeFunctionContracts()) expect(contract.status).toBe(detailedIds.has(contract.id) ? 'detailed' : 'foundation');
   });
 
@@ -175,6 +180,119 @@ describe('Workflow Brief compatibility for detailed contracts', () => {
     expect(safeParseCanonicalWorkflowBrief(withLoop({ ...baseLoop, loopType: 'bounded-retry' })).success).toBe(false);
     expect(safeParseCanonicalWorkflowBrief(withLoop({ ...baseLoop, loopType: 'polling' })).success).toBe(false);
     expect(safeParseCanonicalWorkflowBrief(withLoop({ ...baseLoop, loopType: 'return-to-step' })).success).toBe(false);
+  });
+});
+
+const boundaryContracts = [
+  waitNodeFunctionContract,
+  approvalNodeFunctionContract,
+  mergeNodeFunctionContract,
+  iteratorNodeFunctionContract,
+  aggregatorNodeFunctionContract,
+];
+
+describe('Wait, Approval, Merge, Iterator, and Aggregator contracts', () => {
+  it.each(boundaryContracts.map((contract) => [contract.id, contract] as const))('validates detailed contract %s', (_id, contract) => {
+    expect(parseNodeFunctionContract(contract)).toEqual(contract);
+    expect(contract.status).toBe('detailed');
+    expect(contract.inputRequirements.some((input) => input.required)).toBe(true);
+    expect(contract.outputRequirements.length).toBeGreaterThan(0);
+    expect(contract.safeguards.length).toBeGreaterThan(0);
+    expect(contract.positiveExamples.every((example) => example.valid)).toBe(true);
+    expect(contract.negativeExamples.every((example) => !example.valid)).toBe(true);
+  });
+
+  it('distinguishes Wait boundaries from Polling and Follow-up', () => {
+    expect(waitNodeFunctionContract.inputRequirements.map((input) => input.id)).toEqual(expect.arrayContaining(['wait-type', 'boundary-description', 'resume-condition', 'resume-action', 'boundary-detail']));
+    const excluded = waitNodeFunctionContract.negativeExamples.map((example) => example.expectedInterpretation).join(' ');
+    expect(excluded).toMatch(/Polling Loop/i);
+    expect(excluded).toMatch(/Follow-up Loop/i);
+    expect(waitNodeFunctionContract.positiveExamples.map((example) => example.requirementText).join(' ')).toMatch(/three days|customer replies|manager approval|due date/i);
+  });
+
+  it('requires active human Approval and rejects descriptive approved status', () => {
+    expect(approvalNodeFunctionContract.safeguards.some((safeguard) => safeguard.id === 'active-language')).toBe(true);
+    expect(approvalNodeFunctionContract.inputRequirements.find((input) => input.id === 'approver-role')).toMatchObject({ required: true });
+    expect(approvalNodeFunctionContract.negativeExamples.some((example) => /approved social posts/i.test(example.requirementText) && !example.valid)).toBe(true);
+  });
+
+  it('requires Merge to synchronize at least two branches with an explicit strategy', () => {
+    expect(mergeNodeFunctionContract.outputRequirements.find((output) => output.id === 'incoming-boundary')?.minimumCount).toBe(2);
+    expect(mergeNodeFunctionContract.inputRequirements.find((input) => input.id === 'merge-strategy')).toMatchObject({ required: true });
+    expect(mergeNodeFunctionContract.notes.join(' ')).toMatch(/all, any, or first-completed/i);
+  });
+
+  it('keeps Merge and Aggregator conceptually distinct', () => {
+    expect(mergeNodeFunctionContract.negativeExamples.some((example) => /Aggregator/i.test(example.expectedInterpretation))).toBe(true);
+    expect(aggregatorNodeFunctionContract.negativeExamples.some((example) => /Merge/i.test(example.expectedInterpretation))).toBe(true);
+    expect(mergeNodeFunctionContract.purpose).toMatch(/branches/i);
+    expect(aggregatorNodeFunctionContract.purpose).toMatch(/collection processing/i);
+  });
+
+  it('requires Iterator collection semantics and excludes other loop families', () => {
+    expect(iteratorNodeFunctionContract.inputRequirements.find((input) => input.id === 'source-collection')).toMatchObject({ required: true });
+    const excluded = iteratorNodeFunctionContract.negativeExamples.map((example) => example.expectedInterpretation).join(' ');
+    expect(excluded).toMatch(/Retry/i);
+    expect(excluded).toMatch(/Follow-up Loop/i);
+    expect(excluded).toMatch(/Polling Loop/i);
+  });
+
+  it('keeps Aggregator optional and tied to a source Iterator', () => {
+    expect(aggregatorNodeFunctionContract.inputRequirements.find((input) => input.id === 'source-iterator')).toMatchObject({ required: true });
+    expect(aggregatorNodeFunctionContract.safeguards.some((safeguard) => safeguard.id === 'not-automatic')).toBe(true);
+    expect(iteratorNodeFunctionContract.outputRequirements.find((output) => output.id === 'aggregator-reference')).toMatchObject({ minimumCount: 0, maximumCount: 1 });
+  });
+
+  it('contains no implementation terms in any detailed contract', () => {
+    for (const contract of listNodeFunctionContracts().filter((item) => item.status === 'detailed')) {
+      expect(JSON.stringify(contract)).not.toMatch(/n8n|make\.com|zapier|reactflow|nodeType|provider|modelId|runtime configuration/i);
+    }
+  });
+});
+
+describe('Workflow Brief compatibility for boundary contracts', () => {
+  it('aligns Wait with the valid lead-response boundary', () => {
+    expect(safeParseCanonicalWorkflowBrief(leadFollowUpWorkflowBrief).success).toBe(true);
+    expect(leadFollowUpWorkflowBrief.waits[0]).toMatchObject({ waitType: 'until-response', resumeActionId: 'qualify-lead' });
+  });
+
+  it('aligns Approval with the valid human-approval fixture', () => {
+    expect(safeParseCanonicalWorkflowBrief(humanApprovalWorkflowBrief).success).toBe(true);
+    expect(humanApprovalWorkflowBrief.approvals[0]).toMatchObject({ approverActorId: 'manager', approvedRouteId: 'expense-approved', rejectedRouteId: 'expense-rejected' });
+  });
+
+  it('aligns Merge with a valid merge-all Workflow Brief', () => {
+    const brief = structuredClone(departmentRoutingWorkflowBrief);
+    brief.merges = [{ id: 'department-merge', name: 'Rejoin department work', description: 'Continue after both selected department outcomes complete.', mergeType: 'all', incomingRouteIds: ['route-it', 'route-marketing'], targetActionId: 'handle-support' }];
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(true);
+  });
+
+  it('aligns Iterator and optional Aggregator with the collection fixture', () => {
+    expect(safeParseCanonicalWorkflowBrief(collectionProcessingWorkflowBrief).success).toBe(true);
+    expect(collectionProcessingWorkflowBrief.iterators[0]?.aggregatorId).toBe('result-aggregator');
+    expect(collectionProcessingWorkflowBrief.aggregators[0]?.sourceIteratorId).toBe('document-iterator');
+    const withoutAggregation = structuredClone(collectionProcessingWorkflowBrief);
+    delete withoutAggregation.iterators[0]!.aggregatorId;
+    withoutAggregation.aggregators = [];
+    expect(safeParseCanonicalWorkflowBrief(withoutAggregation).success).toBe(true);
+  });
+
+  it('keeps invalid Wait, Approval, Merge, Iterator, and Aggregator briefs rejected', () => {
+    const invalidWait = structuredClone(leadFollowUpWorkflowBrief);
+    delete invalidWait.waits[0]!.eventDescription;
+    expect(safeParseCanonicalWorkflowBrief(invalidWait).success).toBe(false);
+    const invalidApproval = structuredClone(humanApprovalWorkflowBrief);
+    invalidApproval.approvals[0] = { ...invalidApproval.approvals[0]!, name: 'Approved content', description: 'Content with approved status.' };
+    expect(safeParseCanonicalWorkflowBrief(invalidApproval).success).toBe(false);
+    const invalidMerge = structuredClone(departmentRoutingWorkflowBrief);
+    invalidMerge.merges = [{ id: 'bad-merge', name: 'Bad merge', description: 'Invalid single route.', mergeType: 'all', incomingRouteIds: ['route-it'], targetActionId: 'handle-support' }];
+    expect(safeParseCanonicalWorkflowBrief(invalidMerge).success).toBe(false);
+    const invalidIterator = structuredClone(collectionProcessingWorkflowBrief);
+    invalidIterator.iterators[0]!.sourceActionId = 'missing-action';
+    expect(safeParseCanonicalWorkflowBrief(invalidIterator).success).toBe(false);
+    const invalidAggregator = structuredClone(collectionProcessingWorkflowBrief);
+    invalidAggregator.aggregators[0]!.sourceIteratorId = 'missing-iterator';
+    expect(safeParseCanonicalWorkflowBrief(invalidAggregator).success).toBe(false);
   });
 });
 
