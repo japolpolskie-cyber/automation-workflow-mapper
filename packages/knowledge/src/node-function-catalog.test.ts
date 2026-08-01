@@ -1,9 +1,14 @@
-import { collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, websiteEnquiryWorkflowBrief, type CanonicalWorkflowBrief } from '@awm/shared';
+import { aiChatbotDraftWorkflowBrief, collectionProcessingWorkflowBrief, departmentRoutingWorkflowBrief, humanApprovalWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, minimumWorkflowBrief, safeParseCanonicalWorkflowBrief, websiteEnquiryWorkflowBrief, type CanonicalWorkflowBrief } from '@awm/shared';
 import { describe, expect, it } from 'vitest';
 import * as publicKnowledge from './index.js';
 import {
   actionNodeFunctionContract,
   aggregatorNodeFunctionContract,
+  aiAgentNodeFunctionContract,
+  aiClassificationNodeFunctionContract,
+  aiExtractionNodeFunctionContract,
+  aiGenerationNodeFunctionContract,
+  aiSummarizationNodeFunctionContract,
   approvalNodeFunctionContract,
   binaryDecisionNodeFunctionContract,
   errorHandlerNodeFunctionContract,
@@ -47,9 +52,8 @@ describe('conceptual node-function catalog', () => {
     for (const contract of listNodeFunctionContracts()) expect(parseNodeFunctionContract(contract)).toEqual(contract);
   });
 
-  it('keeps the seven completed contracts detailed and unrelated entries at foundation status', () => {
-    const detailedIds = new Set(['router', 'binary-decision', 'retry', 'follow-up-loop', 'revision-loop', 'polling-loop', 'return-to-step-loop', 'wait', 'approval', 'merge', 'iterator', 'aggregator', 'trigger', 'action', 'filter', 'error-handler', 'sub-workflow', 'terminal']);
-    for (const contract of listNodeFunctionContracts()) expect(contract.status).toBe(detailedIds.has(contract.id) ? 'detailed' : 'foundation');
+  it('keeps every catalog contract at detailed status', () => {
+    expect(listNodeFunctionContracts().every((contract) => contract.status === 'detailed')).toBe(true);
   });
 
   it('supports normalized lookup, presence checks, and unknown IDs', () => {
@@ -391,6 +395,89 @@ describe('Workflow Brief compatibility for execution contracts', () => {
     for (const contract of [errorHandlerNodeFunctionContract, subWorkflowNodeFunctionContract, terminalNodeFunctionContract]) {
       expect(contract.relatedWorkflowBriefEntityTypes).toContain('capability');
     }
+  });
+});
+
+const aiContracts = [
+  aiAgentNodeFunctionContract,
+  aiClassificationNodeFunctionContract,
+  aiExtractionNodeFunctionContract,
+  aiSummarizationNodeFunctionContract,
+  aiGenerationNodeFunctionContract,
+];
+
+describe('conceptual AI behavior contracts', () => {
+  it.each(aiContracts.map((contract) => [contract.id, contract] as const))('validates detailed contract %s', (_id, contract) => {
+    expect(parseNodeFunctionContract(contract)).toEqual(contract);
+    expect(contract.status).toBe('detailed');
+    expect(contract.inputRequirements.some((input) => input.required)).toBe(true);
+    expect(contract.outputRequirements.length).toBeGreaterThan(0);
+    expect(contract.safeguards.length).toBeGreaterThan(0);
+    expect(contract.positiveExamples.length).toBeGreaterThanOrEqual(3);
+    expect(contract.negativeExamples.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('reserves AI Agent for open-ended, multi-step, dynamically selected bounded capabilities', () => {
+    expect(aiAgentNodeFunctionContract.purpose).toMatch(/open-ended.*multi-step.*dynamic/i);
+    expect(aiAgentNodeFunctionContract.inputRequirements.map((input) => input.id)).toEqual(expect.arrayContaining(['business-objective', 'capability-boundaries', 'completion-handoff', 'human-boundary', 'safety-limits', 'clarification-needs']));
+    const exclusions = aiAgentNodeFunctionContract.negativeExamples.map((example) => example.expectedInterpretation).join(' ');
+    expect(exclusions).toMatch(/AI Classification/i);
+    expect(exclusions).toMatch(/AI Extraction/i);
+    expect(exclusions).toMatch(/AI Summarization/i);
+    expect(exclusions).toMatch(/AI Generation/i);
+    expect(exclusions).toMatch(/Router/i);
+    expect(exclusions).toMatch(/Action/i);
+  });
+
+  it('requires Classification to use a known category set and retain deterministic routing', () => {
+    expect(aiClassificationNodeFunctionContract.inputRequirements.find((input) => input.id === 'allowed-categories')).toMatchObject({ required: true });
+    expect(aiClassificationNodeFunctionContract.safeguards.map((safeguard) => safeguard.id)).toEqual(expect.arrayContaining(['known-categories', 'fallback-path', 'deterministic-first', 'separate-routing']));
+  });
+
+  it('requires Extraction to use defined fields without inventing missing values', () => {
+    expect(aiExtractionNodeFunctionContract.inputRequirements.find((input) => input.id === 'required-fields')).toMatchObject({ required: true });
+    expect(aiExtractionNodeFunctionContract.safeguards.map((safeguard) => safeguard.id)).toEqual(expect.arrayContaining(['defined-fields', 'no-invention', 'missing-versus-uncertain', 'structured-alternative']));
+  });
+
+  it('keeps Summarization faithful and distinct from fixed-field Extraction', () => {
+    expect(aiSummarizationNodeFunctionContract.safeguards.map((safeguard) => safeguard.id)).toEqual(expect.arrayContaining(['no-unsupported-facts', 'preserve-critical', 'separate-extraction', 'state-uncertainty']));
+    expect(aiSummarizationNodeFunctionContract.negativeExamples.some((example) => /AI Extraction/i.test(example.expectedInterpretation))).toBe(true);
+  });
+
+  it('limits Generation to one bounded artifact without delivery authority', () => {
+    expect(aiGenerationNodeFunctionContract.outputRequirements.find((output) => output.id === 'generated-artifact')).toMatchObject({ minimumCount: 1, maximumCount: 1 });
+    expect(aiGenerationNodeFunctionContract.safeguards.map((safeguard) => safeguard.id)).toEqual(expect.arrayContaining(['no-invented-facts', 'prefer-template', 'external-review', 'no-delivery-authority']));
+  });
+
+  it('contains no platform or runtime implementation language', () => {
+    for (const contract of aiContracts) {
+      expect(JSON.stringify(contract)).not.toMatch(/n8n|make\.com|zapier|reactflow|nodeType|provider|modelId|runtime configuration/i);
+    }
+  });
+});
+
+describe('Workflow Brief compatibility for conceptual AI contracts', () => {
+  it('aligns AI Agent with the evidence-backed draft chatbot fixture', () => {
+    expect(safeParseCanonicalWorkflowBrief(aiChatbotDraftWorkflowBrief).success).toBe(true);
+    expect(aiChatbotDraftWorkflowBrief.capabilitySuggestions[0]).toMatchObject({ capabilityType: 'ai-agent' });
+    expect(aiChatbotDraftWorkflowBrief.evidence.length).toBeGreaterThan(0);
+    expect(aiChatbotDraftWorkflowBrief.confidence.length).toBeGreaterThan(0);
+    expect(aiChatbotDraftWorkflowBrief.reviewDecisions.length).toBeGreaterThan(0);
+    expect(aiChatbotDraftWorkflowBrief.clarificationQuestions.length).toBeGreaterThan(0);
+  });
+
+  it('allows a reviewed AI Agent capability to be locked without runtime details', () => {
+    const brief = structuredClone(aiChatbotDraftWorkflowBrief);
+    brief.reviewDecisions[0] = { ...brief.reviewDecisions[0]!, state: 'confirmed', reviewedBy: 'user', reviewedAt: '2026-08-01T00:00:00.000Z' };
+    brief.reviewState = { status: 'locked', lockedAt: '2026-08-01T00:00:00.000Z', lockedBy: 'user', version: 1, notes: ['Conceptual capability reviewed.'] };
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(true);
+  });
+
+  it('rejects runtime AI configuration fields in a Workflow Brief capability', () => {
+    const brief = structuredClone(aiChatbotDraftWorkflowBrief) as CanonicalWorkflowBrief & { capabilitySuggestions: Array<CanonicalWorkflowBrief['capabilitySuggestions'][number] & { model?: string; tools?: string[] }> };
+    brief.capabilitySuggestions[0]!.model = 'runtime-choice';
+    brief.capabilitySuggestions[0]!.tools = ['external-system'];
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(false);
   });
 });
 

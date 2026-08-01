@@ -20,7 +20,7 @@ The catalog does not currently detect requirements or change a Workflow Brief.
 
 ## Current inventory
 
-Eighteen contracts are detailed after Phase C Sprint 4:
+All 23 contracts are detailed after Phase C Sprint 5:
 
 - `router`
 - `binary-decision`
@@ -40,10 +40,11 @@ Eighteen contracts are detailed after Phase C Sprint 4:
 - `error-handler`
 - `sub-workflow`
 - `terminal`
-
-These entries remain foundation status:
-
-- Conceptual AI functions: `ai-agent`, `ai-classification`, `ai-extraction`, `ai-summarization`, `ai-generation`
+- `ai-agent`
+- `ai-classification`
+- `ai-extraction`
+- `ai-summarization`
+- `ai-generation`
 
 ## Router behavior contract
 
@@ -113,6 +114,18 @@ Sub-workflow delegates a coherent reusable multi-step business process through e
 
 Terminal represents a semantic final success, failure, rejection, cancellation, or completion state with no outgoing continuation. Recoverable failure belongs to Error Handler; a Wait, Merge, notification, or loop exit followed by more work is not terminal.
 
+## Conceptual AI behavior contracts
+
+The five AI contracts describe reviewed business behavior only. They contain no runtime choices, external-system access configuration, retained-context implementation, or execution settings.
+
+- AI Agent handles open-ended, context-dependent, multi-step interaction that dynamically selects among bounded business capabilities. It requires explicit authority, completion or handoff, human escalation, safety limits, and clarification boundaries.
+- AI Classification assigns unstructured content to a predefined category set with an explicit fallback or review outcome. Classification produces labels; Router applies downstream business paths.
+- AI Extraction identifies a defined set of fields from unstructured content. Missing and uncertain values remain distinct, and absent facts must not be invented.
+- AI Summarization produces a shorter, faithful representation for a stated audience and purpose while preserving required facts, decisions, risks, and uncertainty.
+- AI Generation creates one bounded new business artifact from approved facts and constraints. Creating content does not grant authority to send or publish it.
+
+Deterministic behavior remains preferred whenever structured rules, known fields, fixed templates, or ordinary business actions are sufficient. AI wording alone does not select an AI contract, and ambiguity about scope or authority requires clarification and review.
+
 ## Semantic route-label rule
 
 Route labels describe business outcomes. Labels such as `IT`, `Marketing`, `Customer Support`, `Paid`, `Pending`, `Overdue`, and priority names are valid when supported by the requirement.
@@ -139,4 +152,4 @@ Excluded examples:
 
 ## Non-goals
 
-This catalog does not implement requirement detection, platform translation, runtime execution, UI behavior, provider prompts, graph compilation, or detailed behavior for the remaining foundation entries.
+This catalog does not implement requirement detection, platform translation, runtime execution, UI behavior, provider prompts, graph compilation, or catalog-to-runtime integration.

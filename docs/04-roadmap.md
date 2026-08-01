@@ -28,6 +28,8 @@ Sprint 3 is implemented: Wait, Approval, Merge, Iterator, and Aggregator are now
 
 Sprint 4 is implemented: Trigger, Action, Filter, Error Handler, Sub-workflow, and Terminal are now strict detailed contracts. The catalog distinguishes start boundaries, concrete operations, one-sided gates, operational failure handling, reusable process delegation, and semantic finality while keeping capability-only concepts out of runtime implementation.
 
+Sprint 5 is implemented: AI Agent, AI Classification, AI Extraction, AI Summarization, and AI Generation are now strict detailed conceptual contracts. The catalog distinguishes open-ended bounded interaction, known-label assignment, defined-field identification, faithful compression, and bounded artifact creation while preferring deterministic business behavior and excluding runtime AI configuration.
+
 ## Phase D — Capability detection and confidence
 
 Define how verified application operations, platform mappings, unsupported states, ambiguity, and confidence attach to brief requirements.

@@ -811,13 +811,222 @@ export const terminalNodeFunctionContract: NodeFunctionContract = {
   relatedWorkflowBriefEntityTypes: ['capability', 'action', 'route', 'loop'], notes: ['Terminal remains a conceptual capability or semantically final Action where no dedicated Workflow Brief entity exists.'],
 };
 
+export const aiAgentNodeFunctionContract: NodeFunctionContract = {
+  id: 'ai-agent', name: 'AI Agent', category: 'ai', status: 'detailed',
+  purpose: 'Handle open-ended, context-dependent business interactions that may require conversational understanding, multi-step reasoning, dynamic choice among allowed business capabilities, or iterative clarification.',
+  selectionCriteria: ['Free-form conversation determines the next business action.', 'The interaction dynamically selects among several bounded business capabilities.', 'Multiple conversational steps cannot be fully represented by fixed deterministic rules.', 'Clarification may be required before acting.', 'Context must be carried across multiple turns or decisions.', 'The next allowed business action depends on interpreted intent.'],
+  exclusionCriteria: ['One-shot known-label assignment belongs to AI Classification.', 'Defined-field identification belongs to AI Extraction.', 'Faithful content compression belongs to AI Summarization.', 'One bounded new artifact belongs to AI Generation.', 'Known paths belong to Router, Binary Decision, Filter, or form-based flow.', 'Simple lookup without a reasoning loop belongs to Action.'],
+  inputRequirements: [
+    { id: 'business-objective', name: 'Business objective', description: 'The outcome the interaction is intended to achieve.', required: true },
+    { id: 'interaction-context', name: 'User or system input context', description: 'The conversational and business context available for interpretation.', required: true },
+    { id: 'capability-boundaries', name: 'Allowed capability boundaries', description: 'The bounded business capabilities available for dynamic selection.', required: true, clarificationQuestion: 'Which business actions may this capability select?' },
+    { id: 'completion-handoff', name: 'Completion or handoff outcome', description: 'The state that completes the interaction or hands it to another owner.', required: true },
+    { id: 'human-boundary', name: 'Escalation or human-review boundary', description: 'When uncertainty, sensitivity, or lack of authority requires a person.', required: true },
+    { id: 'safety-limits', name: 'Prohibited actions or safety limits', description: 'Business actions and outcomes that are not authorized.', required: true },
+    { id: 'clarification-needs', name: 'Clarification needs', description: 'Missing information that must be requested before action.', required: true },
+  ],
+  outputRequirements: [
+    { id: 'interpreted-intent', name: 'Interpreted intent', description: 'The business intent understood from the interaction.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'selected-capability', name: 'Selected business capability', description: 'The bounded capability or next action selected for the current step.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'interaction-result', name: 'Response or action result', description: 'The business result produced by the selected capability.', minimumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+    { id: 'interaction-state', name: 'Completion, escalation, or clarification state', description: 'The reviewed state reached after the current interaction.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'business-rationale', name: 'Business-level rationale', description: 'Optional traceable reasoning required for review.', minimumCount: 0, semanticLabelRequired: false, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'not-keyword-selected', description: 'Do not select AI Agent merely because AI or chatbot wording appears.', reason: 'The business behavior must require open-ended interaction.' },
+    { id: 'deterministic-first', description: 'Prefer deterministic routing, decisions, filters, actions, or forms when paths are known.', reason: 'Known business rules do not need open-ended autonomy.' },
+    { id: 'bounded-capabilities', description: 'Require bounded allowed business capabilities.', reason: 'Dynamic selection must stay within reviewed authority.' },
+    { id: 'human-escalation', description: 'Require human escalation for uncertain, sensitive, or unauthorized outcomes when relevant.', reason: 'Some outcomes require accountable human authority.' },
+    { id: 'no-unbounded-access', description: 'Do not assume access beyond explicitly allowed business capabilities.', reason: 'Capability scope must be reviewed and finite.' },
+    { id: 'no-assumed-retention', description: 'Do not assume context is retained beyond the stated interaction boundary.', reason: 'Retention is not part of this conceptual contract.' },
+    { id: 'not-requirement-substitute', description: 'Do not use AI Agent to replace missing process requirements.', reason: 'Unknown business rules require clarification.' },
+    { id: 'clarify-autonomy', description: 'Request clarification when intended autonomy or allowed actions are unclear.', reason: 'The review boundary depends on explicit authority.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Create a support assistant that understands free-form requests, asks clarifying questions, and chooses whether to search approved knowledge, create a ticket, or escalate to a person.', expectedInterpretation: 'Use bounded conversational reasoning with clarification and human escalation.', valid: true },
+    { requirementText: 'Let customers describe their issue conversationally, then determine the correct business process and continue until resolved or handed to an agent.', expectedInterpretation: 'Use multi-step intent interpretation and bounded process selection.', valid: true },
+    { requirementText: 'Review an incoming request, decide which approved business capability is needed, and ask for missing information before acting.', expectedInterpretation: 'Use dynamic bounded capability selection with clarification.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Classify each email as Sales, Support, or Billing.', expectedInterpretation: 'Use AI Classification or Router.', valid: false },
+    { requirementText: 'Extract invoice number, amount, and due date.', expectedInterpretation: 'Use AI Extraction.', valid: false },
+    { requirementText: 'Summarize the meeting transcript.', expectedInterpretation: 'Use AI Summarization.', valid: false },
+    { requirementText: 'Write a reply email.', expectedInterpretation: 'Use AI Generation.', valid: false },
+    { requirementText: 'Route requests by department.', expectedInterpretation: 'Use Router.', valid: false },
+    { requirementText: 'Search the CRM for the customer.', expectedInterpretation: 'Use Action.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['capability', 'action'], notes: ['Maps to an ai-agent capability suggestion and remains conceptual and reviewable.'],
+};
+
+export const aiClassificationNodeFunctionContract: NodeFunctionContract = {
+  id: 'ai-classification', name: 'AI Classification', category: 'ai', status: 'detailed',
+  purpose: 'Assign unstructured or ambiguous business content to one or more known categories, labels, priorities, intents, sentiments, or routing outcomes.',
+  selectionCriteria: ['Free-form content must be assigned to known labels.', 'The business outcome is an intent, category, priority, sentiment, urgency, or risk class.', 'Expected variability makes deterministic keyword rules insufficient.', 'Output categories are predefined and clearly enumerable.'],
+  exclusionCriteria: ['Structured field conditions should use deterministic routing.', 'Open-ended multi-step reasoning belongs to AI Agent.', 'Defined-field identification belongs to AI Extraction.', 'Content compression belongs to AI Summarization.', 'New content composition belongs to AI Generation.', 'Unknown or undefined output classes are not ready for classification.'],
+  inputRequirements: [
+    { id: 'classified-item', name: 'Item being classified', description: 'The unstructured business content receiving a label.', required: true },
+    { id: 'allowed-categories', name: 'Allowed categories', description: 'The predefined labels that may be returned.', required: true, clarificationQuestion: 'What are the complete allowed categories?' },
+    { id: 'category-definitions', name: 'Category definitions', description: 'The business meaning and boundaries of each category.', required: true },
+    { id: 'fallback-handling', name: 'Ambiguous or fallback handling', description: 'The Other, Unknown, unmatched, or review outcome.', required: true },
+    { id: 'review-threshold', name: 'Confidence or review threshold', description: 'An optional boundary for human review of uncertainty.', required: false },
+  ],
+  outputRequirements: [
+    { id: 'selected-categories', name: 'Selected category or categories', description: 'One or more labels from the reviewed category set.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'uncertainty-state', name: 'Confidence or uncertainty state', description: 'A business-level indication of classification certainty.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'fallback-outcome', name: 'Fallback or review outcome', description: 'The unmatched, uncertain, or human-review path.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'classification-explanation', name: 'Business explanation', description: 'Optional reviewable explanation for the assigned label.', minimumCount: 0, semanticLabelRequired: false, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'known-categories', description: 'Require predefined categories and definitions.', reason: 'Classification returns known labels.' },
+    { id: 'fallback-path', description: 'Preserve an Other, Unknown, or review path when categories may not be exhaustive.', reason: 'Ambiguous content must not be forced into an incorrect class.' },
+    { id: 'deterministic-first', description: 'Do not use AI Classification when structured field routing is sufficient.', reason: 'Known deterministic conditions should remain deterministic.' },
+    { id: 'no-invented-categories', description: 'Do not silently invent categories.', reason: 'Outputs must remain within reviewed business labels.' },
+    { id: 'sensitive-review', description: 'Require human review for uncertain high-impact classifications when relevant.', reason: 'Sensitive decisions need accountable review.' },
+    { id: 'separate-routing', description: 'Keep classification distinct from downstream Router behavior.', reason: 'Classification produces labels; Router applies business paths.' },
+    { id: 'clarify-overlap', description: 'Request clarification when category meanings overlap.', reason: 'Overlapping definitions undermine reliable classification.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Classify incoming support messages as Billing, Technical, Account Access, or Other.', expectedInterpretation: 'Return one reviewed support category with fallback handling.', valid: true },
+    { requirementText: 'Determine whether a lead is High, Medium, or Low priority from the free-form enquiry.', expectedInterpretation: 'Assign one known priority label from unstructured content.', valid: true },
+    { requirementText: 'Classify customer feedback by sentiment and issue category.', expectedInterpretation: 'Return known sentiment and issue labels.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'If amount is over $1,000, send for review.', expectedInterpretation: 'Use Filter or Binary Decision.', valid: false },
+    { requirementText: 'Extract the customer name and order number.', expectedInterpretation: 'Use AI Extraction.', valid: false },
+    { requirementText: 'Summarize the complaint.', expectedInterpretation: 'Use AI Summarization.', valid: false },
+    { requirementText: 'Decide which capabilities to use and continue the conversation.', expectedInterpretation: 'Use AI Agent.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['capability', 'action', 'route'], notes: ['Maps to ai-classification and may supply semantic labels without replacing Router.'],
+};
+
+export const aiExtractionNodeFunctionContract: NodeFunctionContract = {
+  id: 'ai-extraction', name: 'AI Extraction', category: 'ai', status: 'detailed',
+  purpose: 'Identify and return defined business fields, entities, facts, or structured values from unstructured content.',
+  selectionCriteria: ['Named fields must be identified in unstructured content.', 'The expected output field set is known.', 'Values may appear in varying language or layout.', 'Deterministic parsing is insufficient for expected variability.'],
+  exclusionCriteria: ['Known-label assignment belongs to AI Classification.', 'Content compression belongs to AI Summarization.', 'New content composition belongs to AI Generation.', 'Open-ended reasoning belongs to AI Agent.', 'Already-structured fields should be retrieved or mapped deterministically.'],
+  inputRequirements: [
+    { id: 'source-content', name: 'Source content', description: 'The email, document, transcript, image, or free-form text containing values.', required: true },
+    { id: 'required-fields', name: 'Required fields', description: 'The defined business fields to identify.', required: true, clarificationQuestion: 'Which exact fields must be returned?' },
+    { id: 'field-definitions', name: 'Field definitions', description: 'The meaning and expected value of each field.', required: true },
+    { id: 'field-requiredness', name: 'Required versus optional fields', description: 'Which values are mandatory and which may be absent.', required: true },
+    { id: 'missing-behavior', name: 'Missing-value behavior', description: 'How absent values are represented without invention.', required: true },
+    { id: 'review-expectations', name: 'Validation or review expectations', description: 'The checks or human review required for important values.', required: true },
+  ],
+  outputRequirements: [
+    { id: 'extracted-values', name: 'Structured extracted values', description: 'The defined fields and values identified in source content.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'missing-uncertain', name: 'Missing or uncertain fields', description: 'Explicitly separated absent and uncertain values.', minimumCount: 0, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'source-traceability', name: 'Source traceability', description: 'Optional evidence connecting values to source content.', minimumCount: 0, semanticLabelRequired: false, genericLabelsAllowed: false },
+    { id: 'review-state', name: 'Validation or review state', description: 'The business review status of extracted values.', minimumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'defined-fields', description: 'Require a defined field set and definitions.', reason: 'Extraction returns known structured values.' },
+    { id: 'no-invention', description: 'Do not invent missing values.', reason: 'Absent source facts must remain absent.' },
+    { id: 'missing-versus-uncertain', description: 'Distinguish missing from uncertain values.', reason: 'They require different business handling.' },
+    { id: 'preserve-evidence', description: 'Preserve source evidence when required.', reason: 'High-impact values may need traceability.' },
+    { id: 'important-review', description: 'Require validation or human review for important extracted data when relevant.', reason: 'Consequential data needs verification.' },
+    { id: 'structured-alternative', description: 'Do not use AI Extraction for ordinary structured-field mapping.', reason: 'Known fields can be handled deterministically.' },
+    { id: 'clarify-fields', description: 'Request clarification when requested fields are unclear.', reason: 'An undefined output set is not extraction-ready.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Extract invoice number, supplier, amount, and due date from uploaded invoices.', expectedInterpretation: 'Return the four defined invoice fields without inventing absent values.', valid: true },
+    { requirementText: 'Read the email and extract the customer name, order ID, and requested delivery date.', expectedInterpretation: 'Return the stated customer and order fields.', valid: true },
+    { requirementText: 'Extract action items, owners, and deadlines from the meeting transcript.', expectedInterpretation: 'Return structured action-item fields from unstructured discussion.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Classify the invoice as paid or overdue.', expectedInterpretation: 'Use AI Classification or Router.', valid: false },
+    { requirementText: 'Summarize the invoice.', expectedInterpretation: 'Use AI Summarization.', valid: false },
+    { requirementText: 'Write a payment reminder.', expectedInterpretation: 'Use AI Generation.', valid: false },
+    { requirementText: 'Map the JSON amount field to the CRM amount field.', expectedInterpretation: 'Use deterministic transformation.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['capability', 'action'], notes: ['Maps to ai-extraction and may define expected Action outputs.'],
+};
+
+export const aiSummarizationNodeFunctionContract: NodeFunctionContract = {
+  id: 'ai-summarization', name: 'AI Summarization', category: 'ai', status: 'detailed',
+  purpose: 'Produce a shorter, faithful business representation of supplied content while preserving information needed for a defined audience or downstream process.',
+  selectionCriteria: ['Long content must be summarized.', 'An executive summary, case brief, meeting summary, or concise handoff is required.', 'Key facts, decisions, risks, or action items must be preserved.', 'The output purpose and audience are known.'],
+  exclusionCriteria: ['Fixed-field identification belongs to AI Extraction.', 'Known-label assignment belongs to AI Classification.', 'New persuasive or creative content belongs to AI Generation.', 'Open-ended interaction belongs to AI Agent.', 'Simple truncation or formatting is deterministic.', 'Numeric collection combination belongs to Aggregator.'],
+  inputRequirements: [
+    { id: 'source-content', name: 'Source content', description: 'The supplied text, document, conversation, record, or collection result.', required: true },
+    { id: 'audience', name: 'Intended audience', description: 'The business audience receiving the summary.', required: true, clarificationQuestion: 'Who will use this summary?' },
+    { id: 'summary-purpose', name: 'Summary purpose', description: 'The decision, handoff, or understanding the summary supports.', required: true },
+    { id: 'required-facts', name: 'Required information to preserve', description: 'Critical facts, decisions, risks, responsibilities, or actions.', required: true },
+    { id: 'scope-detail', name: 'Desired scope or detail', description: 'The required breadth and level of detail.', required: true },
+    { id: 'prohibited-inventions', name: 'Prohibited inventions', description: 'Business facts that must not be added beyond the source.', required: true },
+  ],
+  outputRequirements: [
+    { id: 'concise-summary', name: 'Concise summary', description: 'A shorter faithful representation for the stated purpose.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'preserved-facts', name: 'Preserved key facts', description: 'The required facts, decisions, risks, or actions retained from source.', minimumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+    { id: 'uncertainty-note', name: 'Uncertainty or missing-context note', description: 'An optional note when source content is incomplete or contradictory.', minimumCount: 0, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'summary-sections', name: 'Structured summary sections', description: 'Optional business sections such as risks or action items.', minimumCount: 0, semanticLabelRequired: true, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'no-unsupported-facts', description: 'Do not add unsupported facts.', reason: 'A summary must remain faithful to its source.' },
+    { id: 'preserve-critical', description: 'Preserve critical dates, amounts, decisions, and responsibilities when required.', reason: 'Brevity must not remove business-critical meaning.' },
+    { id: 'separate-extraction', description: 'Distinguish summarization from fixed-field extraction.', reason: 'A summary compresses meaning rather than returning only a field set.' },
+    { id: 'state-uncertainty', description: 'State uncertainty when source content is incomplete or contradictory.', reason: 'A faithful summary must expose source limitations.' },
+    { id: 'no-critical-omission', description: 'Do not omit required critical details solely for brevity.', reason: 'The summary purpose controls what must remain.' },
+    { id: 'clarify-audience', description: 'Request clarification when audience or purpose materially changes the output.', reason: 'Different audiences need different faithful emphasis.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Summarize the discovery call for the implementation team, including requirements, risks, and next actions.', expectedInterpretation: 'Create a faithful implementation handoff with required sections.', valid: true },
+    { requirementText: 'Create an executive summary of the monthly operations report.', expectedInterpretation: 'Compress the report for an executive audience.', valid: true },
+    { requirementText: 'Summarize the support conversation before handing it to a human agent.', expectedInterpretation: 'Create a concise faithful handoff summary.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Extract action item owners and deadlines.', expectedInterpretation: 'Use AI Extraction.', valid: false },
+    { requirementText: 'Classify the conversation by sentiment.', expectedInterpretation: 'Use AI Classification.', valid: false },
+    { requirementText: 'Write a marketing email based on the report.', expectedInterpretation: 'Use AI Generation.', valid: false },
+    { requirementText: 'Count failed orders.', expectedInterpretation: 'Use Aggregator.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['capability', 'action', 'aggregator'], notes: ['Maps to ai-summarization and may summarize Action or Aggregator results.'],
+};
+
+export const aiGenerationNodeFunctionContract: NodeFunctionContract = {
+  id: 'ai-generation', name: 'AI Generation', category: 'ai', status: 'detailed',
+  purpose: 'Create a new business-facing text or content artifact from a defined instruction, source context, audience, and output objective.',
+  selectionCriteria: ['A new email, reply, proposal, description, report section, post, or other artifact must be drafted.', 'Output wording must be newly composed.', 'Tone, audience, purpose, and source facts are known.', 'The task is one bounded capability rather than open-ended orchestration.'],
+  exclusionCriteria: ['Faithful compression belongs to AI Summarization.', 'Defined-field identification belongs to AI Extraction.', 'Known-label assignment belongs to AI Classification.', 'Fully defined template filling is deterministic Action.', 'Open-ended conversational orchestration belongs to AI Agent.', 'Unauthorized decisions or unsupported factual claims are excluded.'],
+  inputRequirements: [
+    { id: 'content-objective', name: 'Content objective', description: 'The business artifact and outcome to create.', required: true },
+    { id: 'audience', name: 'Audience', description: 'The intended recipient or reader.', required: true, clarificationQuestion: 'Who is the intended audience?' },
+    { id: 'source-facts', name: 'Source facts or context', description: 'The approved facts that may appear in the artifact.', required: true },
+    { id: 'tone-style', name: 'Tone or style', description: 'The required business voice and presentation.', required: true },
+    { id: 'inclusions-exclusions', name: 'Required inclusions and exclusions', description: 'The constraints governing artifact content.', required: true },
+    { id: 'review-boundary', name: 'Approval or review boundary', description: 'The optional human review required before external use.', required: false },
+  ],
+  outputRequirements: [
+    { id: 'generated-artifact', name: 'Generated artifact', description: 'One newly composed bounded business artifact.', minimumCount: 1, maximumCount: 1, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'constraint-compliance', name: 'Fact and constraint compliance', description: 'The artifact preserves approved facts and stated constraints.', minimumCount: 1, semanticLabelRequired: false, genericLabelsAllowed: false },
+    { id: 'review-state', name: 'Review or approval state', description: 'An optional state before external use.', minimumCount: 0, semanticLabelRequired: true, genericLabelsAllowed: false },
+    { id: 'missing-information', name: 'Missing-information warning', description: 'A warning when source facts are insufficient.', minimumCount: 0, semanticLabelRequired: true, genericLabelsAllowed: false },
+  ],
+  safeguards: [
+    { id: 'no-invented-facts', description: 'Do not invent business facts.', reason: 'New wording must remain grounded in approved context.' },
+    { id: 'preserve-constraints', description: 'Preserve required names, dates, amounts, and policy constraints.', reason: 'The artifact must remain factually and operationally bounded.' },
+    { id: 'separate-summary', description: 'Distinguish generation from summarization.', reason: 'Generation creates new wording for an objective.' },
+    { id: 'prefer-template', description: 'Prefer deterministic templates when output is fully structured.', reason: 'A fully specified artifact does not require open-ended composition.' },
+    { id: 'external-review', description: 'Require review before external publication or high-impact use when relevant.', reason: 'External consequences may require human authority.' },
+    { id: 'no-delivery-authority', description: 'Do not infer authority to send or publish because content was generated.', reason: 'Composition and delivery are separate business actions.' },
+    { id: 'clarify-context', description: 'Request clarification when audience, tone, or source facts are missing.', reason: 'A bounded artifact needs sufficient context.' },
+  ],
+  positiveExamples: [
+    { requirementText: 'Draft a professional reply to the customer using the order details and refund policy.', expectedInterpretation: 'Create one bounded reply grounded in approved facts.', valid: true },
+    { requirementText: 'Generate a product description from the approved product specifications.', expectedInterpretation: 'Compose a product description without adding unsupported facts.', valid: true },
+    { requirementText: 'Write a follow-up email based on the discovery-call summary.', expectedInterpretation: 'Compose one follow-up artifact from supplied context.', valid: true },
+  ],
+  negativeExamples: [
+    { requirementText: 'Summarize the customer email.', expectedInterpretation: 'Use AI Summarization.', valid: false },
+    { requirementText: 'Extract the order number.', expectedInterpretation: 'Use AI Extraction.', valid: false },
+    { requirementText: 'Classify the message by intent.', expectedInterpretation: 'Use AI Classification.', valid: false },
+    { requirementText: 'Choose which capabilities to use and complete the case.', expectedInterpretation: 'Use AI Agent.', valid: false },
+    { requirementText: 'Insert the customer name into this fixed template.', expectedInterpretation: 'Use deterministic Action.', valid: false },
+  ],
+  relatedWorkflowBriefEntityTypes: ['capability', 'action', 'approval'], notes: ['Maps to ai-generation and grants no delivery or publication authority.'],
+};
+
 type FoundationSeed = { id: string; name: string; category: NodeFunctionCategory; entities: NodeFunctionContract['relatedWorkflowBriefEntityTypes'] };
 const foundationSeeds: FoundationSeed[] = [
-  { id: 'ai-agent', name: 'AI Agent', category: 'ai', entities: ['capability'] },
-  { id: 'ai-classification', name: 'AI Classification', category: 'ai', entities: ['capability'] },
-  { id: 'ai-extraction', name: 'AI Extraction', category: 'ai', entities: ['capability'] },
-  { id: 'ai-summarization', name: 'AI Summarization', category: 'ai', entities: ['capability'] },
-  { id: 'ai-generation', name: 'AI Generation', category: 'ai', entities: ['capability'] },
 ];
 
 const foundationContract = (seed: FoundationSeed): NodeFunctionContract => ({
@@ -863,6 +1072,11 @@ const internalNodeFunctionCatalog = deepFreeze(nodeFunctionCatalogSchema.parse([
   errorHandlerNodeFunctionContract,
   subWorkflowNodeFunctionContract,
   terminalNodeFunctionContract,
+  aiAgentNodeFunctionContract,
+  aiClassificationNodeFunctionContract,
+  aiExtractionNodeFunctionContract,
+  aiSummarizationNodeFunctionContract,
+  aiGenerationNodeFunctionContract,
 ]));
 
 export function parseNodeFunctionContract(input: unknown): NodeFunctionContract {
