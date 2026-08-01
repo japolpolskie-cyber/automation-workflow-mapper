@@ -39,6 +39,24 @@ describe('V2.1 central control-flow classifier', () => {
     expect(result.some((item) => item.type === 'binary-decision')).toBe(false);
   });
 
+  it.each([
+    'Send the post to the manager for approval.',
+    'Wait until the supervisor approves or rejects the request.',
+    'Require human review before publishing.',
+    'If approved, continue; otherwise return for revision.',
+  ])('classifies an explicit approval action or boundary: %s', (scope) => {
+    expect(classify(scope).some((item) => item.type === 'approval')).toBe(true);
+  });
+
+  it.each([
+    'Retrieve approved social posts.',
+    'Publish approved content.',
+    'Archive approved requests.',
+    'Notify users about approved records.',
+  ])('does not classify an existing approved status as a new approval boundary: %s', (scope) => {
+    expect(classify(scope).some((item) => item.type === 'approval')).toBe(false);
+  });
+
   it('classifies external signature and payment dependencies as event waits', () => {
     for (const scope of ['Wait until the signature is received.', 'Await payment before onboarding.']) {
       expect(classify(scope).find((item) => item.type === 'event-wait')?.wait).toMatchObject({ kind: 'external-event' });
