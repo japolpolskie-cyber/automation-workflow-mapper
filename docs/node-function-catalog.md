@@ -20,13 +20,23 @@ The catalog does not currently detect requirements or change a Workflow Brief.
 
 ## Current inventory
 
-Router is the only detailed contract in Phase C Sprint 1. These entries are foundation status:
+Seven contracts are detailed after Phase C Sprint 2:
+
+- `router`
+- `binary-decision`
+- `retry`
+- `follow-up-loop`
+- `revision-loop`
+- `polling-loop`
+- `return-to-step-loop`
+
+These entries remain foundation status:
 
 - Trigger and action: `trigger`, `action`
-- Decisions and filtering: `binary-decision`, `filter`
+- Decisions and filtering: `filter`
 - Collections and synchronization: `iterator`, `aggregator`, `merge`
 - Timing and human boundaries: `wait`, `approval`
-- Loop and resilience concepts: `retry`, `follow-up-loop`, `revision-loop`, `polling-loop`, `return-to-step-loop`, `error-handler`
+- Resilience: `error-handler`
 - Orchestration and completion: `sub-workflow`, `terminal`
 - Conceptual AI functions: `ai-agent`, `ai-classification`, `ai-extraction`, `ai-summarization`, `ai-generation`
 
@@ -45,6 +55,26 @@ Router outputs preserve:
 - an optional fallback route when outcomes are not exhaustive.
 
 Exactly two outcomes are normally a Binary Decision. Parallel fan-out, item iteration, retry/loop-back behavior, sequential actions, and a single downstream action are not Router behavior.
+
+## Binary Decision behavior contract
+
+Binary Decision chooses exactly one of two mutually exclusive business outcomes. It requires a decision subject, a condition, a positive outcome, and an alternate outcome. Both outcomes must affect workflow behavior.
+
+Binary Decision produces exactly two routes with conditions and preserved business actions. Requirement-provided semantic labels such as `Interested` and `Not Interested` take precedence. `TRUE` and `FALSE` are permitted only as fallback labels when no semantic labels are stated.
+
+Three or more outcomes belong to Router. Parallel fan-out, retry behavior, descriptive status text, and a condition with no alternate path are not Binary Decisions.
+
+## Loop-family behavior contracts
+
+The five detailed Loop-family contracts have distinct business boundaries:
+
+- `retry` repeats a failed or incomplete operation under a required attempt bound, then follows a preserved exhausted outcome.
+- `follow-up-loop` repeats outreach or reminders around a cadence until response, success, or a stopping rule.
+- `revision-loop` returns rejected work for changes and re-review until acceptance, escalation, or termination.
+- `polling-loop` checks external state at a required interval until completion or a bounded timeout/exhaustion outcome.
+- `return-to-step-loop` returns execution to a named earlier business action and repeats from that checkpoint.
+
+Retry must not replace communication follow-up or polling. Follow-up preserves the wait boundary and distinguishes initial contact from later outreach. Revision requires a real return-for-changes path, not merely an approved/rejected decision. Polling requires repeated checking language, an interval, and a safe bound; a direct event resume uses Wait instead. Return-to-step requires a resolvable earlier action and must not infer its target from vague step numbering.
 
 ## Semantic route-label rule
 
@@ -72,4 +102,4 @@ Excluded examples:
 
 ## Non-goals
 
-This catalog does not implement requirement detection, platform translation, runtime execution, UI behavior, provider prompts, graph compilation, or detailed behavior for the foundation entries.
+This catalog does not implement requirement detection, platform translation, runtime execution, UI behavior, provider prompts, graph compilation, or detailed behavior for the remaining foundation entries.

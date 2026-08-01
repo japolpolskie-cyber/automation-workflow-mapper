@@ -22,6 +22,8 @@ Compare brief concepts against the existing canonical function model and close o
 
 Sprint 1 is implemented: the knowledge package now exposes a strict conceptual node-function catalog with 23 entries, pure defensive-copy lookup helpers, and a detailed Router contract covering semantic routes, exclusions, safeguards, and Workflow Brief compatibility. Binary Decision and Loop-family contracts remain foundation entries for the next sprint.
 
+Sprint 2 is implemented: Binary Decision and the Retry, Follow-up, Revision, Polling, and Return-to-step Loop-family entries are now strict detailed contracts. Their business inputs, outputs, safeguards, examples, exclusions, and Workflow Brief compatibility distinguish two-outcome decisions and each repeated-process boundary without adding detection or runtime behavior.
+
 ## Phase D — Capability detection and confidence
 
 Define how verified application operations, platform mappings, unsupported states, ambiguity, and confidence attach to brief requirements.

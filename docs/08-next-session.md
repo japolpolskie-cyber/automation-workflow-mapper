@@ -2,13 +2,13 @@
 
 ## Exact task
 
-Phase C Sprint 2 — detailed Binary Decision and Loop-family behavior contracts only.
+Phase C Sprint 3 — detailed Wait, Approval, Merge, Iterator, and Aggregator contracts only.
 
 ## Scope
 
-- Promote Binary Decision from foundation to a detailed business-level contract.
-- Promote the bounded Loop-family entries requested by the sprint specification to detailed contracts.
-- Preserve the catalog foundation, Router contract, and Canonical Workflow Brief v1.0 boundary.
+- Promote Wait, Approval, Merge, Iterator, and Aggregator from foundation to detailed business-level contracts.
+- Preserve the catalog foundation and all existing detailed contracts.
+- Preserve the Canonical Workflow Brief v1.0 boundary.
 
 ## Explicit exclusions
 
@@ -18,11 +18,12 @@ Phase C Sprint 2 — detailed Binary Decision and Loop-family behavior contracts
 - No platform translation changes.
 - No capability-pack expansion.
 - No two-step generation experiment.
-- No Router contract redesign or unrelated catalog expansion.
+- No Binary Decision or Loop-family redesign unless a separately verified consistency defect is found.
+- No unrelated catalog expansion.
 - No Workflow Brief schema expansion unless a separately verified compatibility defect is found.
 - No detection logic or requirement analysis.
 - No runtime integration or graph compilation.
 
 ## Completion standard
 
-The result should add only independently tested Binary Decision and Loop-family behavior contracts without activating detection, compilation, translation, or execution behavior.
+The result should add only independently tested Wait, Approval, Merge, Iterator, and Aggregator behavior contracts without activating detection, compilation, translation, or execution behavior.
