@@ -2,13 +2,13 @@
 
 ## Exact task
 
-Design the Workflow Brief evidence, confidence, clarification, and review/lock state contracts only.
+Phase B Sprint 4 — schema hardening, compatibility fixtures, and public contract documentation only.
 
 ## Scope
 
-- Extend the existing brief with evidence/source references, bounded confidence, clarification records, and explicit review/lock state.
-- Define traceability and referential invariants without adding requirement detection or provider behavior.
-- Preserve the implemented business entities and control-flow contracts.
+- Harden the existing Workflow Brief schema without adding new runtime behavior.
+- Add compatibility fixtures for the versioned public contract.
+- Document the public schema contract and its invariants.
 
 ## Explicit exclusions
 
@@ -18,8 +18,8 @@ Design the Workflow Brief evidence, confidence, clarification, and review/lock s
 - No platform translation changes.
 - No capability-pack expansion.
 - No two-step generation experiment.
-- No additional control-flow contracts.
+- No new capability or control-flow contracts.
 
 ## Completion standard
 
-The result should make the future brief the unambiguous business authority while clearly distinguishing implemented schema work from later review, compilation, and translation phases.
+The result should harden and document the completed schema contracts while preserving compatibility and keeping later review, compilation, and translation phases deferred.

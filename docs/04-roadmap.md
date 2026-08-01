@@ -12,6 +12,8 @@ Sprint 1 is implemented: the shared package now provides the strict `CanonicalWo
 
 Sprint 2 is implemented: the brief now represents business-level decisions and semantic routes, bounded loops, waits, human approvals, merges, iterators, and aggregators with strict semantic and referential validation. Evidence, confidence, clarification, and review/lock contracts remain deferred to the next schema sprint.
 
+Sprint 3 is implemented: the brief now carries source evidence, deterministic confidence bands, clarification questions, conceptual capability suggestions, review decisions, and explicit review/lock state. Locked briefs enforce resolved blocking questions, traceable capability evidence, and confirmed or required capability review without triggering runtime behavior.
+
 ## Phase C — Complete conceptual node-function catalog
 
 Compare brief concepts against the existing canonical function model and close only demonstrated conceptual gaps without duplicating functions.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { departmentRoutingWorkflowBrief, leadFollowUpWorkflowBrief, websiteEnquiryWorkflowBrief } from './workflow-brief.fixtures.js';
-import { canonicalWorkflowBriefSchema, parseCanonicalWorkflowBrief, safeParseCanonicalWorkflowBrief, type CanonicalWorkflowBrief } from './workflow-brief.js';
+import { aiChatbotDraftWorkflowBrief, departmentRoutingWorkflowBrief, leadFollowUpWorkflowBrief, lockedDepartmentRoutingWorkflowBrief, websiteEnquiryWorkflowBrief } from './workflow-brief.fixtures.js';
+import { canonicalWorkflowBriefSchema, parseCanonicalWorkflowBrief, safeParseCanonicalWorkflowBrief, workflowBriefConfidenceSchema, type CanonicalWorkflowBrief } from './workflow-brief.js';
 
 const minimumBrief = (): CanonicalWorkflowBrief => ({
   schemaVersion: '1.0' as const,
@@ -21,6 +21,12 @@ const minimumBrief = (): CanonicalWorkflowBrief => ({
   merges: [],
   iterators: [],
   aggregators: [],
+  evidence: [],
+  confidence: [],
+  clarificationQuestions: [],
+  reviewDecisions: [],
+  capabilitySuggestions: [],
+  reviewState: { status: 'draft', version: 1, notes: [] },
   assumptions: [],
   missingInformation: [],
   warnings: [],
@@ -184,5 +190,114 @@ describe('canonical Workflow Brief schema', () => {
     expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), waits: [{ id: 'wait-1', name: 'Wait for event', description: 'Wait for a business event.', waitType: 'until-event', boundaryDescription: 'Resume on event.', resumeActionId: 'missing-action', eventDescription: 'Event received.' }] }).success).toBe(false);
     expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), loops: [{ id: 'loop-1', name: 'Repeat work', description: 'Repeat bounded work.', loopType: 'bounded-retry', entryActionId: 'action-1', bodyActionIds: ['missing-action'], exitCondition: 'Work succeeds.', maximumIterations: 2 }] }).success).toBe(false);
     expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), decisions: [{ id: 'decision-1', name: 'Choose outcome', description: 'Choose one outcome.', decisionType: 'binary', conditionDescription: 'Which outcome?', routeIds: ['missing-1', 'missing-2'], n8nSwitch: true }] }).success).toBe(false);
+  });
+
+  it('accepts evidence tied to a route with valid requirement offsets', () => {
+    const brief = structuredClone(departmentRoutingWorkflowBrief);
+    brief.evidence = [{ id: 'evidence-1', sourceType: 'requirement-text', sourceText: 'route it to IT', sourceStart: 22, sourceEnd: 36, explanation: 'The requirement names the IT route.', relatedEntityType: 'route', relatedEntityId: 'route-it' }];
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(true);
+  });
+
+  it('rejects partial, reversed, and out-of-range requirement offsets', () => {
+    const evidence = { id: 'evidence-1', sourceType: 'requirement-text' as const, sourceText: 'work', sourceStart: 0, sourceEnd: 4, explanation: 'Requirement evidence.', relatedEntityType: 'action' as const, relatedEntityId: 'action-1' };
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), evidence: [{ ...evidence, sourceEnd: undefined }] }).success).toBe(false);
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), evidence: [{ ...evidence, sourceStart: 4, sourceEnd: 4 }] }).success).toBe(false);
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), evidence: [{ ...evidence, sourceEnd: 999 }] }).success).toBe(false);
+  });
+
+  it.each([
+    [0.2, 'low'], [0.5, 'medium'], [0.85, 'high'], [1, 'confirmed'],
+  ] as const)('accepts confidence score %s as %s', (score, level) => {
+    expect(workflowBriefConfidenceSchema.safeParse({ id: 'confidence-1', entityType: 'action', entityId: 'action-1', score, level, reason: 'Deterministic range test.' }).success).toBe(true);
+  });
+
+  it('rejects confidence level and score mismatches without coercion', () => {
+    expect(workflowBriefConfidenceSchema.safeParse({ id: 'confidence-1', entityType: 'action', entityId: 'action-1', score: 0.5, level: 'low', reason: 'Mismatch.' }).success).toBe(false);
+    expect(workflowBriefConfidenceSchema.safeParse({ id: 'confidence-1', entityType: 'action', entityId: 'action-1', score: '1', level: 'confirmed', reason: 'No coercion.' }).success).toBe(false);
+  });
+
+  it('accepts an open clarification and enforces answer-state consistency', () => {
+    const question = { id: 'question-1', question: 'Who owns this work?', reason: 'Ownership is absent.', priority: 'high' as const, status: 'open' as const, createdFromEvidenceIds: [] };
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), clarificationQuestions: [question] }).success).toBe(true);
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), clarificationQuestions: [{ ...question, status: 'answered', answerSource: 'user' }] }).success).toBe(false);
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), clarificationQuestions: [{ ...question, answer: 'Sales', answerSource: 'user' }] }).success).toBe(false);
+  });
+
+  it('rejects unresolved evidence and entity references', () => {
+    const brief = minimumBrief();
+    brief.clarificationQuestions = [{ id: 'question-1', question: 'What next?', reason: 'Missing detail.', relatedEntityType: 'action', relatedEntityId: 'missing', priority: 'low', status: 'open', createdFromEvidenceIds: ['missing-evidence'] }];
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(false);
+  });
+
+  it('accepts system suggestions, user confirmations, and rejected history', () => {
+    const system = { id: 'review-1', entityType: 'action' as const, entityId: 'action-1', state: 'suggested' as const, reason: 'System proposal.', reviewedBy: 'system' as const };
+    const confirmed = { ...system, id: 'review-2', state: 'confirmed' as const, reviewedBy: 'user' as const, reviewedAt: '2026-08-01T00:00:00.000Z' };
+    const rejected = { ...confirmed, id: 'review-3', state: 'rejected' as const };
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), reviewDecisions: [system, confirmed, rejected] }).success).toBe(true);
+  });
+
+  it('accepts an edited decision with a valid replacement and rejects self replacement', () => {
+    const brief = minimumBrief();
+    brief.actions.push({ id: 'action-2', name: 'Replacement work', description: 'Perform replacement work.', inputs: [], outputs: [] });
+    brief.reviewDecisions = [{ id: 'review-1', entityType: 'action', entityId: 'action-1', state: 'edited', reason: 'The user changed the action.', reviewedBy: 'user', replacementEntityId: 'action-2' }];
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(true);
+    brief.reviewDecisions[0]!.replacementEntityId = 'action-1';
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(false);
+  });
+
+  it('accepts the conceptual AI Agent fixture and rejects runtime or platform fields', () => {
+    expect(safeParseCanonicalWorkflowBrief(aiChatbotDraftWorkflowBrief).success).toBe(true);
+    const runtime = structuredClone(aiChatbotDraftWorkflowBrief) as CanonicalWorkflowBrief & { capabilitySuggestions: Array<CanonicalWorkflowBrief['capabilitySuggestions'][number] & { model?: string }> };
+    runtime.capabilitySuggestions[0]!.model = 'provider-model';
+    expect(safeParseCanonicalWorkflowBrief(runtime).success).toBe(false);
+    const platform = structuredClone(aiChatbotDraftWorkflowBrief);
+    platform.capabilitySuggestions[0]!.name = 'n8n AI Agent';
+    expect(safeParseCanonicalWorkflowBrief(platform).success).toBe(false);
+  });
+
+  it('accepts a completely reviewed and locked department-routing brief', () => {
+    expect(safeParseCanonicalWorkflowBrief(lockedDepartmentRoutingWorkflowBrief).success).toBe(true);
+  });
+
+  it('enforces lock metadata and excludes it from non-locked states', () => {
+    const missingMetadata = structuredClone(lockedDepartmentRoutingWorkflowBrief);
+    delete missingMetadata.reviewState.lockedAt;
+    expect(safeParseCanonicalWorkflowBrief(missingMetadata).success).toBe(false);
+    expect(safeParseCanonicalWorkflowBrief({ ...minimumBrief(), reviewState: { status: 'draft', version: 1, notes: [], lockedAt: '2026-08-01T00:00:00.000Z', lockedBy: 'user' } }).success).toBe(false);
+  });
+
+  it('prevents locking with an open blocking clarification', () => {
+    const brief = structuredClone(lockedDepartmentRoutingWorkflowBrief);
+    brief.clarificationQuestions = [{ id: 'blocking-question', question: 'Which department owns unmatched requests?', reason: 'Fallback ownership is unknown.', priority: 'blocking', status: 'open', createdFromEvidenceIds: ['department-routing-evidence'] }];
+    expect(safeParseCanonicalWorkflowBrief(brief).success).toBe(false);
+  });
+
+  it('requires confirmed or required review and evidence for every locked capability', () => {
+    const suggested = structuredClone(lockedDepartmentRoutingWorkflowBrief);
+    suggested.reviewDecisions[0]!.state = 'suggested';
+    suggested.reviewDecisions[0]!.reviewedBy = 'system';
+    delete suggested.reviewDecisions[0]!.reviewedAt;
+    expect(safeParseCanonicalWorkflowBrief(suggested).success).toBe(false);
+    const required = structuredClone(lockedDepartmentRoutingWorkflowBrief);
+    required.reviewDecisions[0]!.state = 'required';
+    expect(safeParseCanonicalWorkflowBrief(required).success).toBe(true);
+    required.capabilitySuggestions[0]!.evidenceIds = [];
+    expect(safeParseCanonicalWorkflowBrief(required).success).toBe(false);
+  });
+
+  it('retains rejected capability history in drafts but rejects it in locked briefs', () => {
+    const draft = structuredClone(aiChatbotDraftWorkflowBrief);
+    draft.reviewDecisions[0] = { ...draft.reviewDecisions[0]!, state: 'rejected', reviewedBy: 'user', reviewedAt: '2026-08-01T00:00:00.000Z' };
+    expect(safeParseCanonicalWorkflowBrief(draft).success).toBe(true);
+    const locked = structuredClone(lockedDepartmentRoutingWorkflowBrief);
+    locked.reviewDecisions[0]!.state = 'rejected';
+    expect(safeParseCanonicalWorkflowBrief(locked).success).toBe(false);
+  });
+
+  it('keeps all Sprint 1 and Sprint 2 fixtures valid with explicit draft metadata', () => {
+    for (const fixture of [websiteEnquiryWorkflowBrief, departmentRoutingWorkflowBrief, leadFollowUpWorkflowBrief]) {
+      expect(safeParseCanonicalWorkflowBrief(fixture).success).toBe(true);
+      expect(fixture.reviewState.status).toBe('draft');
+    }
   });
 });
