@@ -194,9 +194,11 @@ export class DeterministicSkeletonCompiler {
   private collectionProcessing(graph: GraphBuilder, previous: Node, blockers: string[], context: PlannerContext): Node {
     const pattern = ['collection-processing'];
     const functions = new Set(context.facts.filter((fact) => fact.kind === 'workflow_function').map((fact) => fact.value));
+    const itemScopedNotification = /\b(?:for each|for every)\s+[a-z][a-z-]*\s*,?\s*(?:notify|alert|inform|send\s+(?:a\s+)?(?:notification|alert|notice))\b|\b(?:notify|alert|inform|send\s+(?:a\s+)?(?:notification|alert|notice))\b[^.;]{0,60}\b(?:for each|per)\s+[a-z][a-z-]*/i.test(context.objective)
+      && !/\b(?:after|once|when)\b[^.;]{0,80}\b(?:processing|iteration|collection|aggregation)\b[^.;]{0,40}\b(?:complete|completed|finishes|finished|done)\b/i.test(context.objective);
     let entry = previous;
     if (functions.has('data-retrieval')) {
-      const retrieval = graph.node('data-retrieval', 'Retrieve collection for processing', pattern);
+      const retrieval = graph.node('data-retrieval', this.functionEvidenceTitle(context, 'data-retrieval', 'Retrieve collection for processing'), pattern);
       graph.edge(entry, retrieval, 'RETRIEVE COLLECTION', null, 'pattern.collection.retrieve');
       entry = retrieval;
     }
@@ -209,8 +211,8 @@ export class DeterministicSkeletonCompiler {
       graph.edge(itemTail, delay, 'WAIT', null, 'pattern.collection.delay');
       itemTail = delay;
     }
-    if (functions.has('notification')) {
-      const notification = graph.node('notification', 'Send notification for current item', pattern);
+    if (functions.has('notification') && itemScopedNotification) {
+      const notification = graph.node('notification', this.functionEvidenceTitle(context, 'notification', 'Send notification for current item'), pattern);
       graph.edge(itemTail, notification, 'NOTIFY', null, 'pattern.collection.notify');
       itemTail = notification;
     }
@@ -220,13 +222,26 @@ export class DeterministicSkeletonCompiler {
       itemTail = logging;
     }
     graph.edge(itemTail, iterator, 'NEXT ITEM', 'More items remain.', 'pattern.collection.next');
-    const aggregate = graph.node('aggregator', 'Aggregate item results', pattern);
-    graph.edge(iterator, aggregate, 'ITERATION COMPLETE', 'No collection items remain.', 'pattern.collection.complete');
+    let collectionTail: Node = iterator;
+    if (functions.has('aggregator')) {
+      const aggregate = graph.node('aggregator', 'Aggregate item results', pattern);
+      graph.edge(iterator, aggregate, 'ITERATION COMPLETE', 'No collection items remain.', 'pattern.collection.complete');
+      collectionTail = aggregate;
+    } else {
+      const completion = graph.node('data-transformation', 'Collection processing complete', pattern);
+      graph.edge(iterator, completion, 'DONE', 'No collection items remain.', 'pattern.collection.complete');
+      collectionTail = completion;
+    }
+    if (functions.has('notification') && !itemScopedNotification) {
+      const notification = graph.node('notification', this.functionEvidenceTitle(context, 'notification', 'Send collection completion notification'), pattern);
+      graph.edge(collectionTail, notification, 'NOTIFY', 'Collection processing is complete.', 'pattern.collection.notify-complete');
+      collectionTail = notification;
+    }
     const aggregatorPosition = this.firstEvidencePosition(context, 'aggregator');
     const actionAfterAggregator = context.facts.some((fact) => fact.kind === 'workflow_function' && fact.value === 'action' && this.factPosition(context, fact) > aggregatorPosition);
-    if (!actionAfterAggregator) return aggregate;
+    if (!functions.has('aggregator') || !actionAfterAggregator) return collectionTail;
     const action = graph.node('action', 'Perform action with aggregated results', pattern);
-    graph.edge(aggregate, action, 'USE AGGREGATED RESULT', null, 'pattern.collection.aggregated-action');
+    graph.edge(collectionTail, action, 'USE AGGREGATED RESULT', null, 'pattern.collection.aggregated-action');
     return action;
   }
 
@@ -326,6 +341,19 @@ export class DeterministicSkeletonCompiler {
     return positions.length ? Math.min(...positions) : Number.MAX_SAFE_INTEGER;
   }
 
+  private functionEvidenceTitle(context: PlannerContext, functionId: string, fallback: string): string {
+    const functionFact = context.facts.find((fact) => fact.kind === 'workflow_function' && fact.value === functionId);
+    const evidence = functionFact?.evidenceIds.map((id) => context.evidence.find((item) => item.id === id)).find(Boolean);
+    const title = evidence?.text.trim() || fallback;
+    if (functionId !== 'data-retrieval' || !functionFact) return title;
+    const functionPosition = this.factPosition(context, functionFact);
+    const application = context.facts
+      .filter((fact) => fact.kind === 'application')
+      .map((fact) => ({ fact, distance: Math.abs(this.factPosition(context, fact) - functionPosition) }))
+      .sort((left, right) => left.distance - right.distance)[0]?.fact;
+    return application && !title.toLowerCase().includes(application.value.toLowerCase()) ? `${title} from ${application.value}` : title;
+  }
+
   private technicalRetry(graph: GraphBuilder, previous: Node, blockers: string[], objective: string): Node {
     const target = graph.node('action', 'Perform technical operation');
     graph.edge(previous, target, 'ATTEMPT', null, 'retry.attempt');
@@ -371,7 +399,7 @@ export class DeterministicSkeletonCompiler {
       if (node.canonicalFunctionId === 'end' && (outgoing.get(node.id)?.length ?? 0) > 0) issues.push({ code: 'P4_END_HAS_OUTPUT', message: `${node.id} end has an outgoing edge.` });
       if (node.canonicalFunctionId === 'iterator') {
         const labels = new Set(outgoing.get(node.id)?.map((edge) => edge.label));
-        if (!labels.has('ITEM') || !labels.has('ITERATION COMPLETE')) issues.push({ code: 'P4_ITERATOR_INCOMPLETE', message: `${node.id} lacks item and completion paths.` });
+        if (!labels.has('ITEM') || (!labels.has('ITERATION COMPLETE') && !labels.has('DONE'))) issues.push({ code: 'P4_ITERATOR_INCOMPLETE', message: `${node.id} lacks item and completion paths.` });
       }
       if (node.canonicalFunctionId === 'aggregator' && !(incoming.get(node.id) ?? []).some((edge) => edge.label === 'ITERATION COMPLETE')) issues.push({ code: 'P4_AGGREGATOR_SOURCE_INVALID', message: `${node.id} does not consume iterator results.` });
       if (node.canonicalFunctionId === 'delay' && !/wait|schedule|interval/i.test(node.title)) issues.push({ code: 'P4_DELAY_BOUNDARY_MISSING', message: `${node.id} lacks a deterministic delay boundary.` });

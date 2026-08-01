@@ -111,4 +111,47 @@ describe('P4 deterministic skeleton compiler', () => {
     ]));
     expect(context.facts.filter((fact) => fact.kind === 'application').map((fact) => fact.value)).toEqual(expect.arrayContaining(['HubSpot', 'Slack', 'Google Sheets']));
   });
+
+  const compileCollection = (scope: string) => compiler.compile(contextBuilder.build(scope, 'n8n', intelligence.analyze(scope, new Date('2026-07-16T00:00:00.000Z'))));
+  const indexOfFunction = (result: ReturnType<typeof compileCollection>, functionId: string) => result.plan.nodes.findIndex((node) => node.canonicalFunctionId === functionId);
+
+  it('preserves retrieval before iterator processing', () => {
+    const result = compileCollection('Retrieve all inventory records, iterate each item, and process each item.');
+    expect(indexOfFunction(result, 'data-retrieval')).toBeGreaterThan(-1);
+    expect(indexOfFunction(result, 'data-retrieval')).toBeLessThan(indexOfFunction(result, 'iterator'));
+    expect(indexOfFunction(result, 'iterator')).toBeLessThan(indexOfFunction(result, 'action'));
+  });
+
+  it('preserves the nearest detected retrieval application in the collection node title', () => {
+    const result = compileCollection('Retrieve approved social posts from Google Sheets, iterate every post, and schedule it through a Generic API.');
+    expect(result.plan.nodes.find((node) => node.canonicalFunctionId === 'data-retrieval')?.title).toMatch(/Google Sheets/i);
+  });
+
+  it('preserves retrieval, iterator processing, and required aggregation in order', () => {
+    const result = compileCollection('Retrieve all inventory records, iterate each item, process each item, and aggregate the results.');
+    expect(indexOfFunction(result, 'data-retrieval')).toBeLessThan(indexOfFunction(result, 'iterator'));
+    expect(indexOfFunction(result, 'iterator')).toBeLessThan(indexOfFunction(result, 'aggregator'));
+  });
+
+  it('places completion notification after required aggregation without duplication', () => {
+    const result = compileCollection('Retrieve all Gmail attachments, iterate each attachment, process each attachment, aggregate the results, then notify Slack when processing is complete.');
+    expect(indexOfFunction(result, 'aggregator')).toBeLessThan(indexOfFunction(result, 'notification'));
+    expect(result.plan.nodes.filter((node) => node.canonicalFunctionId === 'notification')).toHaveLength(1);
+    expect(result.plan.nodes.find((node) => node.canonicalFunctionId === 'data-retrieval')?.title).toMatch(/Gmail attachments/i);
+    expect(result.plan.nodes.find((node) => node.canonicalFunctionId === 'notification')?.title).toMatch(/notify Slack/i);
+  });
+
+  it('does not add notification to a collection flow without notification evidence', () => {
+    const result = compileCollection('Retrieve all Gmail attachments, iterate each attachment, process each attachment, and aggregate the results.');
+    expect(result.plan.nodes.some((node) => node.canonicalFunctionId === 'notification')).toBe(false);
+  });
+
+  it('does not force aggregation when collection results do not require recombination', () => {
+    const result = compileCollection('Retrieve all Outlook messages, iterate each message, and process each message.');
+    expect(result.plan.nodes.some((node) => node.canonicalFunctionId === 'aggregator')).toBe(false);
+    expect(indexOfFunction(result, 'data-retrieval')).toBeLessThan(indexOfFunction(result, 'iterator'));
+    const iterator = result.plan.nodes.find((node) => node.canonicalFunctionId === 'iterator')!;
+    expect(result.plan.edges.some((edge) => edge.source === iterator.id && edge.label === 'DONE')).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
 });
