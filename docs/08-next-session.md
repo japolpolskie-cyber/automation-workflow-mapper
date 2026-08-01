@@ -2,12 +2,13 @@
 
 ## Current status
 
-The Mapper remains production-usable. A separate internal endpoint can now generate validated draft Workflow Brief JSON using Router and Binary Decision detection. Further detector families and Mapper integration remain optional future work.
+The Mapper and internal Workflow Brief vertical slice are usable. The internal preview page can generate and inspect validated draft briefs. Further detector families and production integration remain deferred.
 
 ## Current boundary
 
-- The draft endpoint is experimental, review-only, and separate from production generation.
-- Draft scaffolding supplies the schema-required start boundary and review action until ordinary trigger/action detection is explicitly scoped.
-- No provider calls, UI, graph generation, platform translation, persistence, automatic confirmation, or locking are part of this slice.
+- `/internal/workflow-brief` is an unlisted, internal inspection page.
+- Only Router and Binary Decision detection is represented.
+- Drafts remain unconfirmed, unlocked, unpersisted, and separate from production Mapper generation.
+- No provider calls, graph compilation, platform translation, or canvas integration is included.
 
-Any next sprint must select one optional future improvement explicitly rather than treating this vertical slice as authorization for broader Mapper integration.
+Any next sprint must explicitly select one deferred improvement and must not treat the preview page as authorization for production integration.

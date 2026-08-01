@@ -42,6 +42,8 @@ Sprint 2 is implemented: deterministic Router and Binary Decision detectors now 
 
 A minimum usable vertical slice is implemented: an isolated internal server endpoint runs only the Router and Binary Decision detectors, safely merges exact scopes, assembles a validated draft Workflow Brief with explicit scaffolding, and returns reviewable JSON. It does not change production Mapper generation or add provider, graph, UI, or platform behavior.
 
+The vertical slice now includes a small internal preview page at `/internal/workflow-brief`. It provides read-only inspection of validated draft JSON and its detection metadata without adding production navigation, persistence, review mutation, graph generation, or Mapper integration.
+
 ## Phase E — Interactive Brief review
 
 Design and implement review behavior for users to confirm, edit, reject, or lock business needs and unresolved decisions before compilation.

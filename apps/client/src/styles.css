@@ -846,6 +846,63 @@ h1 em {
     grid-template-columns: 1fr;
   }
 }
+.workflow-brief-preview {
+  min-height: 100vh;
+  padding: 40px max(24px, calc((100vw - 1080px) / 2));
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+}
+
+.workflow-brief-preview__header,
+.workflow-brief-preview__form,
+.workflow-brief-preview__results > section,
+.workflow-brief-preview__empty,
+.workflow-brief-preview__state,
+.workflow-brief-preview__error {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  padding: 22px;
+}
+
+.workflow-brief-preview__header { margin-bottom: 18px; }
+.workflow-brief-preview__header span { color: var(--color-brand); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.workflow-brief-preview__header h1 { margin: 6px 0; }
+.workflow-brief-preview__header p,
+.workflow-brief-preview__form p,
+.workflow-brief-preview__card p { color: var(--color-text-secondary); }
+.workflow-brief-preview__form { display: grid; gap: 10px; }
+.workflow-brief-preview__form label { font-weight: 700; }
+.workflow-brief-preview__form textarea { width: 100%; resize: vertical; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-raised); color: var(--color-text-primary); }
+.workflow-brief-preview__form textarea:focus { outline: 2px solid var(--color-focus-ring); border-color: var(--color-brand); }
+.workflow-brief-preview__validation { margin: 0; font-size: 13px; }
+.workflow-brief-preview__actions { display: flex; gap: 10px; }
+.workflow-brief-preview__state,
+.workflow-brief-preview__error,
+.workflow-brief-preview__empty { margin-top: 18px; }
+.workflow-brief-preview__error { color: var(--color-error); border-color: var(--color-error); }
+.workflow-brief-preview__results { display: grid; gap: 18px; margin-top: 18px; }
+.workflow-brief-preview__results h2 { margin-top: 0; }
+.workflow-brief-preview__metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.workflow-brief-preview__metrics div,
+.workflow-brief-preview__card { border: 1px solid var(--color-border); border-radius: 10px; padding: 14px; }
+.workflow-brief-preview__metrics dt { color: var(--color-text-muted); font-size: 12px; }
+.workflow-brief-preview__metrics dd { margin: 4px 0 0; font-weight: 700; }
+.workflow-brief-preview__card + .workflow-brief-preview__card { margin-top: 10px; }
+.workflow-brief-preview__card h3 { margin-top: 0; }
+.workflow-brief-preview__card blockquote { margin: 8px 0; padding-left: 12px; border-left: 3px solid var(--color-brand); }
+.workflow-brief-preview__card blockquote small,
+.workflow-brief-preview__card li span,
+.workflow-brief-preview__card li small { display: block; margin-top: 3px; color: var(--color-text-muted); }
+.workflow-brief-preview__status { display: inline-block; padding: 5px 9px; border-radius: 999px; background: var(--color-brand-soft); color: var(--color-brand); font-weight: 700; }
+.workflow-brief-preview details summary { cursor: pointer; font-weight: 700; }
+.workflow-brief-preview pre { max-height: 520px; overflow: auto; margin: 14px 0 0; padding: 14px; border-radius: 10px; background: var(--color-surface-raised); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 680px) {
+  .workflow-brief-preview { padding: 20px 14px; }
+  .workflow-brief-preview__metrics { grid-template-columns: 1fr; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
