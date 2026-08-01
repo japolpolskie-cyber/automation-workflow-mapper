@@ -74,6 +74,28 @@ describe('Stage C capability-constrained grounding', () => {
     expect(result.node.unresolvedRequirement).toMatch(/multiple supported|no supported/i);
   });
 
+  it.each([
+    ['n8n', 'data-retrieval', 'Search Google Calendar for a conflicting event', 'google-calendar', 'find-calendar-event'],
+    ['make', 'action', 'Send an email through Microsoft Outlook', 'outlook', 'outlook-send-email'],
+    ['zapier', 'action', 'Create a Google Calendar event', 'google-calendar', 'create-calendar-event'],
+  ] as const)('grounds a verified %s capability without losing function or service context', async (platform, canonicalFunctionId, purpose, applicationId, operationId) => {
+    const result = await new StageCNodeGrounder().ground(input({
+      platform, canonicalFunctionId, semanticRole: canonicalFunctionId === 'data-retrieval' ? 'data-retrieval' : 'data-transformation', purpose,
+      relevantFacts: [{ id: 'fact-app', kind: 'application', value: applicationId === 'outlook' ? 'Outlook' : 'Google Calendar', entityId: null }],
+      candidates: buildStageCCandidates(canonicalFunctionId, platform), expectedOutputCardinality: 'single',
+    }), new AbortController().signal);
+    expect(result.node).toMatchObject({ canonicalFunctionId, applicationId, operationId, platformMappingStatus: 'native' });
+  });
+
+  it('keeps unverified Outlook attachment retrieval unsupported', async () => {
+    const result = await new StageCNodeGrounder().ground(input({
+      platform: 'make', canonicalFunctionId: 'data-retrieval', semanticRole: 'data-retrieval', purpose: 'Retrieve Outlook attachments',
+      relevantFacts: [{ id: 'fact-outlook', kind: 'application', value: 'Outlook', entityId: 'attachment' }],
+      candidates: buildStageCCandidates('data-retrieval', 'make'), expectedOutputCardinality: 'collection',
+    }), new AbortController().signal);
+    expect(result.node).toMatchObject({ groundingMethod: 'unresolved', operationId: null });
+  });
+
   it('rejects model symbols outside the bounded node table', async () => {
     const selector = { modelId: 'test', async select() { return { applicationSymbol: 999, operationSymbol: 999, reason: 'invented' }; } };
     const ambiguous = input({ purpose: 'Perform action', relevantFacts: [] });

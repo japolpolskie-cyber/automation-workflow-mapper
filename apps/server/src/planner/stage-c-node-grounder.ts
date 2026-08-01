@@ -31,7 +31,7 @@ const internalFunctions = new Set([
   'validation', 'filter', 'data-transformation', 'logging',
 ]);
 
-const unsupportedApplicationTerms = ['sms', 'shopify', 'outlook', 'facebook lead ads', 'hubspot'];
+const unsupportedApplicationTerms = ['sms', 'shopify', 'facebook lead ads', 'hubspot'];
 
 const semanticRoleFor = (canonicalFunctionId: string): string => ({
   trigger: 'workflow-trigger',
@@ -160,6 +160,12 @@ export class StageCNodeGrounder {
       [/(?:send|follow.?up|welcome|recommendation).*email/, 'gmail', 'send-email'],
       [/(?:receive|new).*email/, 'gmail', 'new-email'],
       [/(?:search|retrieve).*(?:reply|email|message)/, 'gmail', 'search-email'],
+      [/(?:find|search).*(?:event|conflict)/, 'google-calendar', 'find-calendar-event'],
+      [/create.*event/, 'google-calendar', 'create-calendar-event'],
+      [/update.*event/, 'google-calendar', 'update-calendar-event'],
+      [/(?:receive|new).*(?:outlook|email|message)/, 'outlook', 'outlook-new-email'],
+      [/send.*(?:outlook|email|message)/, 'outlook', 'outlook-send-email'],
+      [/create.*draft/, 'outlook', 'create-email-draft'],
       [/(?:notify|send).*(?:slack|channel)/, 'slack', 'send-channel-message'],
       [/(?:find|search).*(?:existing|matching).*(?:record|contact|lead|customer)/, 'generic-crm', 'find-record'],
       [/(?:find|retrieve).*lead/, 'generic-crm', 'find-record'],

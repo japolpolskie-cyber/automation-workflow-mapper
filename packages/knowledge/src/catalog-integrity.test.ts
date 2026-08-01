@@ -2,12 +2,36 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resolveApplication } from '@awm/shared';
 import { describe, expect, it } from 'vitest';
-import { applicationPacks, getApplicationPack } from './application-packs.js';
+import { applicationPacks, getApplicationPack, getOperation } from './application-packs.js';
 import { canonicalFunctionRegistry } from './canonical-registry.js';
 import { platformCapabilities } from './platform-capabilities.js';
 import { canonicalFunctionIds } from './types.js';
 
 describe('knowledge catalog integrity', () => {
+  it.each([
+    ['google-calendar', ['find-calendar-event', 'create-calendar-event', 'update-calendar-event']],
+    ['outlook', ['outlook-new-email', 'outlook-send-email', 'create-email-draft']],
+  ])('provides the bounded verified %s operation pack', (applicationId, operationIds) => {
+    const pack = getApplicationPack(applicationId);
+    expect(pack?.operations.map((operation) => operation.operationId)).toEqual(operationIds);
+    for (const operationId of operationIds) {
+      const operation = getOperation(applicationId, operationId)!;
+      expect(operation.knownPlatformMappings.map((mapping) => [mapping.platform, mapping.support])).toEqual([
+        ['n8n', 'native'], ['make', 'native'], ['zapier', 'native'],
+      ]);
+    }
+  });
+
+  it.each([
+    ['google-calendar', 'list-events'],
+    ['google-calendar', 'delete-event'],
+    ['outlook', 'search-messages'],
+    ['outlook', 'retrieve-attachments'],
+    ['outlook', 'create-calendar-event'],
+  ])('does not claim an unverified operation: %s.%s', (applicationId, operationId) => {
+    expect(getOperation(applicationId, operationId)).toBeUndefined();
+  });
+
   it('registers every canonical function exactly once', () => {
     const ids = canonicalFunctionRegistry.map((item) => item.id);
     expect(ids).toEqual(canonicalFunctionIds);

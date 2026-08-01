@@ -190,6 +190,15 @@ describe('K3 deterministic scope intelligence', () => {
     expect(applications).toContain('Trello');
   });
 
+  it.each([
+    ['Create a Google Calendar event.', 'Google Calendar', 'google-calendar.create-calendar-event'],
+    ['Send an email through Microsoft Outlook.', 'Outlook', 'outlook.outlook-send-email'],
+  ])('resolves %s to its verified application pack', (scope, application, operation) => {
+    const result = run(scope);
+    expect(result.facts).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'application', value: application })]));
+    expect(result.knowledgeContext.retrieved).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'operation', id: operation })]));
+  });
+
   it('keeps conflicting cardinality evidence visible and requests clarification', () => {
     const result = run('Process each attachment and a single attachment.');
     const cardinality = result.facts.find((fact) => fact.kind === 'cardinality')!;

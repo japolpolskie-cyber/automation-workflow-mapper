@@ -60,6 +60,20 @@ const gmailOperations: OperationDefinition[] = [
   op(gmailId, 'search-email', 'data-retrieval', 'Search Email', 'Searches Gmail for a reply or matching conversation.', [field('searchQuery', 'Search query', 'string', true, 'Gmail-compatible search expression.')], [field('messages', 'Messages', 'array', true, 'Matching messages.')], ['single'], 'collection', false, ['delay', 'trigger'], ['binary-condition', 'iterator'], ['Treating an empty collection as a found message'], mappings('data-retrieval', 'Gmail', 'Search Email', { zapier: { support: 'workaround', limitation: 'Gmail search availability varies by Zapier action set.', alternative: 'Use Gmail Find Email or the Gmail API through Webhooks.' } })),
 ];
 
+const calendarId = 'google-calendar';
+const calendarOperations: OperationDefinition[] = [
+  op(calendarId, 'find-calendar-event', 'data-retrieval', 'Find Event', 'Searches Google Calendar for one matching event or a conflicting time boundary.', [field('calendarId', 'Calendar ID', 'string', true, 'Calendar to search.'), query], [field('event', 'Matching event', 'object', false, 'Matching calendar event when found.'), field('found', 'Found', 'boolean', true, 'Whether an event matched.')], ['single'], 'single', false, ['trigger', 'validation'], ['binary-condition', 'action'], ['Treating an empty search result as a matching event'], mappings('data-retrieval', 'Google Calendar', 'Find Event')),
+  op(calendarId, 'create-calendar-event', 'action', 'Create Event', 'Creates one Google Calendar event from validated scheduling details.', [field('calendarId', 'Calendar ID', 'string', true, 'Destination calendar.'), field('event', 'Event details', 'object', true, 'Validated title, start, end, and optional attendees.')], [field('eventId', 'Event ID', 'string', true, 'Created calendar event identifier.')], ['single'], 'single', false, ['validation', 'binary-condition'], ['notification', 'logging', 'end'], ['Creating an event before checking required scheduling constraints'], mappings('action', 'Google Calendar', 'Create Event')),
+  op(calendarId, 'update-calendar-event', 'action', 'Update Event', 'Updates one existing Google Calendar event using its stable identifier.', [field('calendarId', 'Calendar ID', 'string', true, 'Calendar containing the event.'), field('eventId', 'Event ID', 'string', true, 'Existing calendar event identifier.'), field('changes', 'Event changes', 'object', true, 'Validated event fields to update.')], [field('updatedEvent', 'Updated event', 'object', true, 'Updated calendar event.')], ['single'], 'single', false, ['data-retrieval', 'validation'], ['notification', 'logging', 'end'], ['Updating an event without a stable event identifier'], mappings('action', 'Google Calendar', 'Update Event')),
+];
+
+const outlookId = 'outlook';
+const outlookOperations: OperationDefinition[] = [
+  op(outlookId, 'outlook-new-email', 'trigger', 'New Email', 'Starts a workflow when a matching Outlook email arrives.', [field('mailbox', 'Mailbox', 'string', false, 'Mailbox or folder to monitor.')], [field('message', 'Email message', 'object', true, 'Incoming Outlook message metadata and content.')], ['single'], 'single', false, [], ['validation', 'data-retrieval', 'filter'], ['Processing unrelated messages without a mailbox or sender filter'], mappings('trigger', 'Microsoft Outlook', 'New Email')),
+  op(outlookId, 'outlook-send-email', 'action', 'Send Email', 'Sends one email using a configured Microsoft Outlook connection.', [field('recipient', 'Recipient', 'string', true, 'Validated destination email address.'), field('subject', 'Subject', 'string', true, 'Email subject.'), field('body', 'Message body', 'string', true, 'Approved email content.')], [field('messageId', 'Message ID', 'string', true, 'Sent Outlook message identifier.')], ['single'], 'single', false, ['validation', 'data-transformation', 'binary-condition'], ['logging', 'delay', 'end'], ['Sending without a validated recipient'], mappings('action', 'Microsoft Outlook', 'Send Email')),
+  op(outlookId, 'create-email-draft', 'action', 'Create Draft', 'Creates one Outlook email draft without sending it.', [field('recipient', 'Recipient', 'string', false, 'Optional draft recipient.'), field('subject', 'Subject', 'string', false, 'Draft subject.'), field('body', 'Message body', 'string', false, 'Draft content.')], [field('draftId', 'Draft ID', 'string', true, 'Created Outlook draft identifier.')], ['single'], 'single', false, ['data-transformation', 'validation'], ['manual-review', 'action', 'end'], ['Treating a draft as a sent message'], mappings('action', 'Microsoft Outlook', 'Create Draft')),
+];
+
 const slackId = 'slack';
 const slackOperations: OperationDefinition[] = [
   op(slackId, 'new-message', 'trigger', 'New Message', 'Starts when a Slack message matches the configured channel/event.', [field('channelId', 'Channel ID', 'string', true, 'Channel to monitor.')], [field('message', 'Slack message', 'object', true, 'Message payload.')], ['single'], 'single', false, [], ['filter', 'data-retrieval'], ['Triggering on bot messages and creating loops'], mappings('trigger', 'Slack', 'New Message')),
@@ -89,6 +103,8 @@ export const applicationPacks: readonly ApplicationPack[] = [
   pack(driveId, 'Google Drive', ['drive', 'gdrive'], 'storage', driveOperations),
   pack(sheetsId, 'Google Sheets', ['sheets', 'spreadsheet'], 'spreadsheet', sheetsOperations),
   pack(gmailId, 'Gmail', ['google mail'], 'email', gmailOperations),
+  pack(calendarId, 'Google Calendar', ['gcal'], 'calendar', calendarOperations),
+  pack(outlookId, 'Outlook', ['microsoft outlook', 'office 365 outlook'], 'email', outlookOperations),
   pack(slackId, 'Slack', ['slack messaging'], 'messaging', slackOperations),
   pack(apiId, 'Webhook / Generic API', ['webhook', 'generic api', 'rest api', 'http'], 'api', apiOperations),
   pack(crmId, 'Generic CRM', ['crm', 'customer relationship management'], 'crm', crmOperations),
