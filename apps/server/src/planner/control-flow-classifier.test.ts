@@ -16,6 +16,23 @@ describe('V2.1 central control-flow classifier', () => {
     });
   });
 
+  it.each([
+    'If the payment succeeds, send a receipt; otherwise notify finance.',
+    'If the lead agrees, continue qualification; otherwise end the sequence.',
+    'When the record is valid, save it; if not, send it for review.',
+    'Process approved requests, otherwise archive them.',
+    'If inventory is available, create the order. Else notify the customer.',
+  ])('classifies a bounded clause-level alternate as a binary decision: %s', (scope) => {
+    expect(classify(scope).some((item) => item.type === 'binary-decision')).toBe(true);
+  });
+
+  it.each([
+    'Send a receipt if an email address is present.',
+    'Archive the record if requested.',
+  ])('does not classify descriptive if language without an alternate: %s', (scope) => {
+    expect(classify(scope).some((item) => item.type === 'binary-decision')).toBe(false);
+  });
+
   it('classifies three mutually exclusive outcomes as a multi-outcome decision', () => {
     const result = classify('Route by status: if new send to sales else if pending send to review otherwise archive.');
     expect(result.find((item) => item.type === 'multi-outcome-decision')).toMatchObject({

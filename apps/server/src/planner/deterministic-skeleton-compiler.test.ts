@@ -83,4 +83,18 @@ describe('P4 deterministic skeleton compiler', () => {
     expect(result.plan.binaryConditions).toHaveLength(1);
     expect(result.plan.edges.map((edge) => edge.label)).toEqual(expect.arrayContaining(['TRUE', 'FALSE']));
   });
+
+  it('preserves both stated clause-level outcomes and their decision connections', () => {
+    const scope = 'If the payment succeeds, send a receipt; otherwise notify finance.';
+    const context = contextBuilder.build(scope, 'n8n', intelligence.analyze(scope, new Date('2026-07-16T00:00:00.000Z')));
+    const result = compiler.compile(context);
+    const binary = result.plan.binaryConditions[0];
+    expect(binary).toBeDefined();
+    const trueEdge = result.plan.edges.find((edge) => edge.id === binary?.trueEdgeId);
+    const falseEdge = result.plan.edges.find((edge) => edge.id === binary?.falseEdgeId);
+    expect(trueEdge).toMatchObject({ label: 'TRUE', condition: 'the payment succeeds: send a receipt' });
+    expect(falseEdge).toMatchObject({ label: 'FALSE', condition: 'Otherwise: notify finance' });
+    expect(result.plan.nodes.find((node) => node.id === trueEdge?.target)?.title).toBe('send a receipt');
+    expect(result.plan.nodes.find((node) => node.id === falseEdge?.target)?.title).toBe('notify finance');
+  });
 });

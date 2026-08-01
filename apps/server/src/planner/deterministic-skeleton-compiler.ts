@@ -259,6 +259,7 @@ export class DeterministicSkeletonCompiler {
     const functions = functionFacts.map((fact) => fact.value);
     if (functions.includes('iterator')) return this.collectionProcessing(graph, tail, blockers, context);
     const seenControls = new Set<string>();
+    const binaryBranches = this.binaryBranches(context.objective);
     for (const functionId of functions) {
       if (functionId === 'trigger' || functionId === 'end') continue;
       if (!['action', 'notification', 'logging', 'data-retrieval', 'delay'].includes(functionId)) {
@@ -277,10 +278,10 @@ export class DeterministicSkeletonCompiler {
       } else if (functionId === 'binary-condition') {
         const decision = graph.node('binary-condition', 'Evaluate business condition', [], blockers.filter((id) => /false-path|condition/.test(id)));
         graph.edge(tail, decision, 'EVALUATE', null, 'fact.binary.entry');
-        const yes = graph.node('action', 'Handle TRUE outcome');
-        const no = graph.node('manual-review', 'Handle FALSE outcome', [], blockers.filter((id) => /false-path/.test(id)));
-        const trueEdge = graph.edge(decision, yes, 'TRUE', 'Condition is true.', 'fact.binary.true');
-        const falseEdge = graph.edge(decision, no, 'FALSE', 'Condition is false.', 'fact.binary.false');
+        const yes = graph.node('action', binaryBranches?.positive ?? 'Handle TRUE outcome');
+        const no = graph.node('manual-review', binaryBranches?.alternate ?? 'Handle FALSE outcome', [], blockers.filter((id) => /false-path/.test(id)));
+        const trueEdge = graph.edge(decision, yes, 'TRUE', binaryBranches ? `${binaryBranches.condition}: ${binaryBranches.positive}` : 'Condition is true.', 'fact.binary.true');
+        const falseEdge = graph.edge(decision, no, 'FALSE', binaryBranches ? `Otherwise: ${binaryBranches.alternate}` : 'Condition is false.', 'fact.binary.false');
         graph.binaryConditions.push({ nodeId: decision.id, trueEdgeId: trueEdge.id, falseEdgeId: falseEdge.id });
         const merge = graph.node('merge', 'Rejoin condition outcomes');
         const yesIn = graph.edge(yes, merge, 'TRUE COMPLETE', null, 'fact.binary.merge');
@@ -304,6 +305,14 @@ export class DeterministicSkeletonCompiler {
       return action;
     }
     return tail;
+  }
+
+  private binaryBranches(scope: string): { condition: string; positive: string; alternate: string } | null {
+    const conditional = /\b(?:if|when)\s+([^,.;]{1,100}),\s*([^.;]{1,120})[.;]\s*(?:otherwise|else|if\s+not)\s*,?\s*([^.;]{1,120})/i.exec(scope);
+    if (conditional) return { condition: conditional[1]!.trim(), positive: conditional[2]!.trim(), alternate: conditional[3]!.trim() };
+    const leadingAction = /\b((?:process|save|create|send|notify|archive|continue|end|update|publish)\b[^,.;]{1,120}),\s*otherwise\s+([^.;]{1,120})/i.exec(scope);
+    if (leadingAction) return { condition: leadingAction[1]!.trim(), positive: leadingAction[1]!.trim(), alternate: leadingAction[2]!.trim() };
+    return null;
   }
 
   private factPosition(context: PlannerContext, fact: PlannerContext['facts'][number]): number {

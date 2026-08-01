@@ -134,7 +134,7 @@ export class ScopeIntelligenceService {
       }
     }
 
-    const binary = find(scope, /(?:did|has|is|was|does|can|should)\s+(?:the\s+)?(?:lead|client|customer|task|record|request|operation|payment|email)[^?\n]{0,80}\?|\b(?:if|whether)\b[^.\n]{0,120}\b(?:responded|replied|approved|rejected|qualified|valid|invalid|clear|blocked|urgent|exists|found|failed|succeeded|successful|complete|completed|exceeds?|above|below)\b|\bif\b[^.\n]{0,120}\b(?:otherwise|else)\b|\b(?:yes|true|approved|success|successful|continue)\b[^.\n]{0,100}\b(?:no|false|rejected|failure|failed|stop)\b/i);
+    const binary = find(scope, /(?:did|has|is|was|does|can|should)\s+(?:the\s+)?(?:lead|client|customer|task|record|request|operation|payment|email)[^?\n]{0,80}\?|\b(?:if|whether)\b[^.\n]{0,120}\b(?:responded|replied|approved|rejected|qualified|valid|invalid|clear|blocked|urgent|exists|found|failed|succeeded|successful|complete|completed|exceeds?|above|below)\b|\b(?:if|when)\b[\s\S]{1,180}?\b(?:otherwise|else|if\s+not)\b|\b(?:process|save|create|send|notify|archive|continue|end|update|publish)\b[^.;\n]{1,120}\botherwise\b|\b(?:yes|true|approved|success|successful|continue)\b[^.\n]{0,100}\b(?:no|false|rejected|failure|failed|stop)\b/i);
     if (binary) {
       const evidence = [ev('decision.binary', 'decision', 'semantic', binary, 'The scope expresses exactly two meaningful outcomes such as yes/no, approve/reject, replied/not replied, success/failure, or stop/continue.', 0.93, 3, 'supporting', segments)];
       facts.push(fact('decision', 'binary-condition', 'The predicate has two meaningful business outcomes.', evidence));

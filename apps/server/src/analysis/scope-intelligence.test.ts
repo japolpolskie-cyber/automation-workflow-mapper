@@ -89,6 +89,21 @@ describe('K3 deterministic scope intelligence', () => {
   });
 
   it.each([
+    'If the payment succeeds, send a receipt; otherwise notify finance.',
+    'When the record is valid, save it; if not, send it for review.',
+    'Process approved requests, otherwise archive them.',
+    'If inventory is available, create the order. Else notify the customer.',
+  ])('recognizes a clause-level alternate outcome: %s', (scope) => {
+    expect(run(scope).facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow_function', value: 'binary-condition' }),
+    ]));
+  });
+
+  it('does not infer a binary decision from descriptive if language without an alternate outcome', () => {
+    expect(run('Send a receipt if an email address is present.').facts.some((fact) => fact.kind === 'workflow_function' && fact.value === 'binary-condition')).toBe(false);
+  });
+
+  it.each([
     ['Route Hardware, Software, and Access requests to separate Slack channels.', ['Hardware', 'Software', 'Access']],
     ['Route Contracts, Invoices, and Other files to matching folders.', ['Contracts', 'Invoices', 'Other']],
     ['Switch by priority: Low, Normal, High, Default.', ['Low', 'Normal', 'High', 'Default']],

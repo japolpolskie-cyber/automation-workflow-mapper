@@ -23,7 +23,7 @@ const candidates: Candidate[] = [
   { type: 'conditional-parallel-routing', expression: /\b(?:any|multiple|several|each)\s+(?:of\s+)?(?:these\s+)?(?:rules?|conditions?|approvers?)\s+(?:may|can)\s+(?:apply|approve)|\b(?:notify|send to)\b[^.;]*(?:and|,)[^.;]*(?:independently|in parallel)/i, reason: 'Multiple rules or recipients may execute together, so the routes are non-exclusive.', confidence: 0.96, exclusivity: 'non-exclusive', together: true },
   { type: 'parallel-split', expression: /\b(?:in parallel|simultaneously|at the same time|fan out)\b/i, reason: 'The requirement explicitly starts multiple concurrent paths.', confidence: 0.98, exclusivity: 'non-exclusive', together: true },
   { type: 'multi-outcome-decision', expression: /\b(?:route|switch|choose|branch)\b[^.;]*(?:based on|by)\s+(?:status|category|priority|channel|service|type)|\b(?:if|when)\b[^.;]*(?:otherwise if|else if)[^.;]*(?:otherwise|else)\b/i, reason: 'Three or more mutually exclusive outcomes require a multi-outcome decision.', confidence: 0.96, exclusivity: 'exclusive' },
-  { type: 'binary-decision', expression: /\bif\b[^.;\n]{1,100}\bthen\b[^.;\n]{1,100}\b(?:else|otherwise)\b|\b(?:whether|has|did|is|does)\b[^?;.\n]{1,100}\?|\b(?:approve|reject|yes|no|success|failure|replied|not replied|continue|stop)\b[^.;]*(?:\bor\b|\/)[^.;]*/i, reason: 'Exactly two mutually exclusive business outcomes are stated.', confidence: 0.95, exclusivity: 'exclusive' },
+  { type: 'binary-decision', expression: /\b(?:if|when)\b[\s\S]{1,180}?\b(?:otherwise|else|if\s+not)\b|\b(?:process|save|create|send|notify|archive|continue|end|update|publish)\b[^.;\n]{1,120}\botherwise\b|\b(?:whether|has|did|is|does)\b[^?;.\n]{1,100}\?|\b(?:approve|reject|yes|no|success|failure|replied|not replied|continue|stop)\b[^.;]*(?:\bor\b|\/)[^.;]*/i, reason: 'Exactly two mutually exclusive business outcomes are stated.', confidence: 0.95, exclusivity: 'exclusive' },
   { type: 'human-review', expression: /\b(?:human|manual|manager|owner|reviewer|finance|hr)\s+(?:review|inspection|verification|response)\b|\breviewed by\b/i, reason: 'A human response is required before execution can resume.', confidence: 0.98, waitKind: 'human' },
   { type: 'approval', expression: /\b(?:ask|request|require|seek|obtain|await|send|route|submit)\b[^.;\n]{0,80}\b(?:approval|human review)\b|\b(?:for|pending|awaiting)\s+(?:human\s+)?approval\b|\b(?:manager|supervisor|director|owner|reviewer|finance|hr|human)\b[^.;\n]{0,60}\b(?:approve|approves|reject|rejects|review|reviews|decision)\b|\b(?:wait|pause)\b[^.;\n]{0,80}\b(?:approve|approves|approved|reject|rejects|rejected|approval|decision)\b|\b(?:if|when|once|after|on)\b[^.;\n]{0,80}\b(?:approved|rejected)\b[^.;\n]{0,100}\b(?:continue|otherwise|else|publish|proceed|return|revise|revision|stop|notify|create|update|send)\b|\b(?:approve|authorize|reject|decline|sign[- ]?off|green[- ]?light)\b[^.;\n]{0,80}\b(?:before|after|then|otherwise|else|or)\b/i, reason: 'The requirement contains an approval action, decision, request, review, or waiting boundary.', confidence: 0.98, waitKind: 'human' },
   { type: 'event-wait', expression: /\b(?:wait|pause)\s+(?:for|until)\s+(?:the\s+)?(?:signature|payment|webhook|reply|response|external event|document is signed|invoice is paid)(?:\s+is\s+(?:received|completed))?\b|\bawait\s+(?:the\s+)?(?:signature|payment|webhook|reply|response)\b|\bwhen\s+(?:the\s+)?(?:signature|payment|webhook|reply|response)\s+(?:arrives|is received|completes|succeeds)\b/i, reason: 'Execution resumes only after an external event.', confidence: 0.98, waitKind: 'external-event' },
@@ -47,7 +47,14 @@ export class ControlFlowClassifier {
     const results: ControlFlowClassification[] = [];
 
     for (const candidate of candidates) {
-      const matchingSegments = segments.filter((segment) => {
+      const steps = analysis.segments?.filter((segment) => segment.kind === 'step') ?? [];
+      const binarySegments = steps.flatMap((segment, index) => {
+        const next = steps[index + 1];
+        if (!next || !/^(?:otherwise|else|if\s+not)\b/i.test(next.text)) return [segment];
+        return [segment, { ...segment, id: `${segment.id}-${next.id}`, text: `${segment.text} ${next.text}`, end: next.end }];
+      });
+      const candidateSegments = candidate.type === 'binary-decision' ? binarySegments : segments;
+      const matchingSegments = candidateSegments.filter((segment) => {
         const matched = candidate.expression.test(segment.text);
         candidate.expression.lastIndex = 0;
         return matched;
