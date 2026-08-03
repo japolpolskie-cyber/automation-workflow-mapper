@@ -2,7 +2,7 @@
 
 ## Current status
 
-The Mapper remains production-usable. The internal Workflow Brief endpoint and preview support Router, Binary Decision, Wait, and Approval detection. Router and Wait now recognize bounded natural-language semantic facts before their exact-pattern fallbacks. Loop-family and other detectors remain deferred.
+The Mapper remains production-usable. The internal Workflow Brief endpoint and preview support Router, Binary Decision, Wait, and Approval detection. Router and Wait recognize bounded natural-language semantic facts before their exact-pattern fallbacks. Router cue coverage includes enquiry/topic, interest, assistance, membership, service/category selection, and category-based handling language while retaining three-or-more-outcome and fan-out safeguards. Loop-family and other detectors remain deferred.
 
 ## Current boundary
 

@@ -60,6 +60,18 @@ describe('internal Workflow Brief endpoint', () => {
     expect(body.data.brief.routes.map((route: { label: string }) => route.label)).toEqual(['Billing', 'Technical Support', 'Account Access']);
   });
 
+  it.each([
+    'Review the enquiry and determine whether the prospect is asking about Workflow Automation, CRM Setup, or AI Customer Support, then assign the enquiry to the appropriate team.',
+    'We want to automate incoming sales enquiries. Review each enquiry and determine whether the prospect is asking about Workflow Automation, CRM Setup, or AI Customer Support, then assign it to the appropriate team.',
+  ])('returns the expanded Router cue acceptance through the endpoint: %s', async (sourceRequirement) => {
+    const app = await testApp();
+    const response = await app.inject({ method: 'POST', url: '/api/internal/workflow-brief/draft', payload: { sourceRequirement } });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.detectionSummary).toMatchObject({ candidateCount: 1, detectedFunctions: ['multi-route-decision'], clarificationCount: 0 });
+    expect(body.data.brief.routes.map((route: { label: string }) => route.label)).toEqual(['Workflow Automation', 'CRM Setup', 'AI Customer Support']);
+  });
+
   it('returns Wait and Approval in the backward-compatible detection summary', async () => {
     const app = await testApp();
     const wait = await app.inject({ method: 'POST', url: '/api/internal/workflow-brief/draft', payload: { sourceRequirement: 'Wait until the customer replies.' } });

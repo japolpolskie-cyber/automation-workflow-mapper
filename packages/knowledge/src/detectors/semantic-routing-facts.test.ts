@@ -15,6 +15,38 @@ describe('extractSemanticRoutingFacts', () => {
     expect(facts[0]?.outcomes).toEqual(outcomes);
   });
 
+  it.each([
+    'Determine whether the prospect is asking about Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the prospect is enquiring about Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Identify whether the prospect is inquiring about Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the prospect is interested in Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the prospect is looking for Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the prospect needs help with Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the prospect requires assistance with Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the enquiry falls under Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Identify whether the enquiry belongs to Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine which service applies: Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Identify which category applies: Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the enquiry is best handled by Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Determine whether the enquiry should go to Workflow Automation, CRM Setup, or AI Customer Support.',
+    'Assign the enquiry to the appropriate team based on category: Workflow Automation, CRM Setup, or AI Customer Support.',
+  ])('supports the Router cue family in %s', (sourceRequirement) => {
+    const fact = extractSemanticRoutingFacts(sourceRequirement)[0]!;
+    expect(fact.outcomes).toEqual(['Workflow Automation', 'CRM Setup', 'AI Customer Support']);
+  });
+
+  it.each([
+    'Review the enquiry and determine whether the prospect is asking about Workflow Automation, CRM Setup, or AI Customer Support, then assign the enquiry to the appropriate team.',
+    'We want to automate incoming sales enquiries. Review each enquiry and determine whether the prospect is asking about Workflow Automation, CRM Setup, or AI Customer Support, then assign it to the appropriate team.',
+  ])('detects one bounded Router fact for the acceptance wording: %s', (sourceRequirement) => {
+    const first = extractSemanticRoutingFacts(sourceRequirement);
+    const second = extractSemanticRoutingFacts(sourceRequirement);
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(1);
+    expect(first[0]?.outcomes).toEqual(['Workflow Automation', 'CRM Setup', 'AI Customer Support']);
+    expect(sourceRequirement.slice(first[0]!.sourceStart, first[0]!.sourceEnd)).toBe(first[0]!.evidenceText);
+  });
+
   it('joins an immediately following category-to-destination mapping and preserves exact offsets', () => {
     const sourceRequirement = 'First record the request. Review the message and determine whether it is related to billing, technical support, or account access. Send billing concerns to finance, technical support concerns to IT, and account access concerns to customer success. Then record completion.';
     const fact = extractSemanticRoutingFacts(sourceRequirement)[0]!;
@@ -42,6 +74,8 @@ describe('extractSemanticRoutingFacts', () => {
     'If approved, continue; otherwise stop.',
     'Determine whether the request concerns Billing or Support.',
     'Send billing concerns to Finance, support concerns to IT, and account concerns to Success.',
+    'The services offered are Workflow Automation, CRM Setup, and AI Customer Support.',
+    'Send the alert to Slack, Email, and Teams.',
   ])('does not invent a routing fact for %s', (sourceRequirement) => {
     expect(extractSemanticRoutingFacts(sourceRequirement)).toEqual([]);
   });

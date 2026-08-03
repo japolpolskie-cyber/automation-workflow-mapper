@@ -55,6 +55,8 @@ const basisFromList = (list: string, fallback: string) => {
   return fallback;
 };
 
+const beforeInlineHandling = (value: string) => clean(value.replace(/\s*,\s*(?:then\s+)?(?:assign|send|direct|distribute)\b[\s\S]*$/i, ''));
+
 const outcomesFrom = (value: string): string[] => {
   const list = clean(value);
   if (!/[,;]|\s+or\s+/i.test(list)) return [];
@@ -80,21 +82,25 @@ const semanticMatch = (clause: SourceClause): SemanticMatch | undefined => {
   if (fanOut.test(clause.text) || collection.test(clause.text)) return undefined;
   const body = clause.text.replace(/[.!?]+$/, '');
 
-  const relation = body.match(/\bdetermine\s+whether\s+(.+?)\s+(?:is\s+)?(related\s+to|concerns?|belongs\s+to)\s+(.+)$/i)
-    ?? body.match(/\bidentify\s+whether\s+(.+?)\s+(belongs\s+to|concerns?|is\s+related\s+to)\s+(.+)$/i);
+  const relationCue = '(?:is\\s+)?(?:related\\s+to|concerns?|asking\\s+about|enquir(?:ing|es?)\\s+about|inquir(?:ing|es?)\\s+about|interested\\s+in|looking\\s+for|needs?\\s+help\\s+with|requires?\\s+assistance\\s+with|falls?\\s+under|belongs?\\s+to|best\\s+handled\\s+by|should\\s+go\\s+to)';
+  const relation = body.match(new RegExp(`\\bdetermine\\s+whether\\s+(.+?)\\s+(${relationCue})\\s+(.+)$`, 'i'))
+    ?? body.match(new RegExp(`\\bidentify\\s+whether\\s+(.+?)\\s+(${relationCue})\\s+(.+)$`, 'i'));
   if (relation) {
     const prefix = body.slice(0, relation.index ?? 0);
     const subject = inferredSubject(prefix, relation[1]);
     return {
       ...(subject ? { subject } : {}),
-      routingBasis: /concern|related/i.test(relation[2]!) ? 'category' : 'category membership',
-      list: relation[3]!, exclusivity: /\bor\b/i.test(relation[3]!) ? 'explicit' : 'strongly-implied',
+      routingBasis: /best\s+handled|should\s+go/i.test(relation[2]!) ? 'handling category' : 'category',
+      list: beforeInlineHandling(relation[3]!), exclusivity: /\bor\b/i.test(beforeInlineHandling(relation[3]!)) ? 'explicit' : 'strongly-implied',
       reason: 'The requirement explicitly asks for one classification among named business outcomes.',
     };
   }
 
-  const which = body.match(/\bidentify\s+(?:whether\s+)?which\s+([a-z][a-z -]*?)(?:\s+applies)?\s*:\s*(.+)$/i);
-  if (which) return { routingBasis: clean(which[1]!), list: which[2]!, exclusivity: 'explicit', reason: 'The requirement asks which one of the named business outcomes applies.' };
+  const which = body.match(/\b(?:identify|determine)\s+(?:whether\s+)?which\s+([a-z][a-z -]*?)(?:\s+applies)?\s*:\s*(.+)$/i);
+  if (which) return { routingBasis: clean(which[1]!), list: beforeInlineHandling(which[2]!), exclusivity: 'explicit', reason: 'The requirement asks which one of the named business outcomes applies.' };
+
+  const appropriateTeam = body.match(/\b(?:assign|direct|send)\s+(.+?)\s+to\s+the\s+appropriate\s+team\s+based\s+on\s+category\s*:\s*(.+)$/i);
+  if (appropriateTeam) return { subject: clean(appropriateTeam[1]!), routingBasis: 'category', list: beforeInlineHandling(appropriateTeam[2]!), exclusivity: /\bor\b/i.test(appropriateTeam[2]!) ? 'explicit' : 'strongly-implied', reason: 'The requirement assigns one item to the appropriate team based on a stated category.' };
 
   const classify = body.match(/\bclassify\s+(.+?)\s+(?:as|into)\s+(.+)$/i);
   if (classify) return { subject: clean(classify[1]!), routingBasis: basisFromList(classify[2]!, 'category'), list: classify[2]!, exclusivity: /\bor\b/i.test(classify[2]!) ? 'explicit' : 'strongly-implied', reason: 'The requirement explicitly classifies one subject into named categories.' };
