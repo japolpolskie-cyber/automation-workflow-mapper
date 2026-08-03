@@ -189,6 +189,10 @@ export async function buildApp(environment: Environment) {
             ),
             (diagnostics) => app.log.info({ hybridRAG: diagnostics }, "Hybrid RAG planner rollout"),
           ),
+          (diagnostic) => app.log.info({
+            providerIteratorRepairOutcome: diagnostic.outcome,
+            providerIteratorWarningCodes: diagnostic.warningCodes,
+          }, "Provider iterator topology integrity"),
         ),
     ),
     { prefix: "/api" },

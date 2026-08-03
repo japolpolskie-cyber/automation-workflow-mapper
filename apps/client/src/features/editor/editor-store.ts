@@ -47,6 +47,9 @@ interface EditorState extends Snapshot {
 const snapshot = (state: Snapshot): Snapshot => structuredClone({ nodes: state.nodes, edges: state.edges, workflow: state.workflow });
 const nodeData = (node: WorkflowNode, platform: Platform): EditorNodeData => ({ domainNodeId: node.id, node, platform });
 const semanticLabel = (connection: WorkflowConnection) => {
+  if (connection.sourcePort === 'item') return 'Each Item';
+  if (connection.sourcePort === 'done') return 'Completed';
+  if (connection.targetPort === 'loop-back') return 'Loop Back';
   const value = connection.branchLabel || connection.label;
   if (value === 'LOOP') return 'Loop Back';
   if (value === 'DONE') return 'Completed';
@@ -94,7 +97,8 @@ const freePosition = (nodes: EditorNode[], requested?: XYPosition): XYPosition =
 export const useEditorStore = create<EditorState>((set, get) => ({
   nodes: [], edges: [], workflow: null as unknown as Project['workflow'], selectedNodeId: null, selectedEdgeId: null, past: [], future: [],
   initialize(project) {
-    const workflow = inferWorkflowConnections(structuredClone(project.workflow));
+    const loadedWorkflow = structuredClone(project.workflow);
+    const workflow = loadedWorkflow.connections.length ? loadedWorkflow : inferWorkflowConnections(loadedWorkflow);
     const projected = projectWorkflowToVisualGraph(workflow);
     const byId = new Map(workflow.nodes.map((node) => [node.id, node]));
     const savedPositions = new Map(project.visualGraph.nodes.map((node) => [node.data.domainNodeId, node.position]));

@@ -5,6 +5,22 @@ import { validateWorkflowGraph } from './graph.js';
 import { migrateWorkflow } from './workflow-migration.js';
 
 describe('automation architecture compiler', () => {
+  it('does not insert a generic merge in front of an explicit loop boundary', () => {
+    const workflow = structuredClone(leadQualificationWorkflow);
+    const iterator = { ...workflow.nodes[1]!, id: crypto.randomUUID(), category: 'loop' as const, name: 'Split collection', operation: 'Split Out' };
+    const body = { ...workflow.nodes[2]!, id: crypto.randomUUID(), name: 'Process item' };
+    const end = { ...workflow.nodes.at(-1)!, id: crypto.randomUUID() };
+    workflow.nodes = [workflow.nodes[0]!, iterator, body, end];
+    workflow.connections = [
+      { ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: workflow.nodes[0]!.id, targetNodeId: iterator.id },
+      { ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: iterator.id, targetNodeId: body.id, sourcePort: 'item', label: 'Each Item', branchLabel: null, style: 'loop', routeType: 'conditional' },
+      { ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: body.id, targetNodeId: iterator.id, targetPort: 'loop-back', label: 'Loop Back', branchLabel: 'LOOP', style: 'loop', routeType: 'conditional' },
+      { ...workflow.connections[0]!, id: crypto.randomUUID(), sourceNodeId: iterator.id, targetNodeId: end.id, sourcePort: 'done', label: 'Completed', branchLabel: 'DONE', style: 'success', routeType: 'success' },
+    ];
+    const compiled = compileAutomationArchitecture(workflow);
+    expect(compiled.nodes.some((node) => node.category === 'merge' && node.name.includes(iterator.name))).toBe(false);
+    expect(compiled.connections.some((edge) => edge.sourceNodeId === body.id && edge.targetNodeId === iterator.id && edge.targetPort === 'loop-back')).toBe(true);
+  });
   it('migrates v1 workflows without changing stable identifiers', () => {
     const legacy = { ...structuredClone(leadQualificationWorkflow), schemaVersion: '1.0' as const };
     const migrated = migrateWorkflow(legacy);

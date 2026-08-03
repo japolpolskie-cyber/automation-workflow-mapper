@@ -13,13 +13,14 @@ import { V2PromotionService } from '../planner/v2-promotion-service.js';
 import type { HybridRAGPlannerRollout } from '../hybrid-rag/hybrid-rag-planner-rollout.js';
 import { ProcessAnalysisDiagnosticsService } from '../process-intelligence/process-analysis-diagnostics.js';
 import { ClarificationReadinessService } from '../process-intelligence/clarification-readiness-service.js';
+import { hardenProviderWorkflowTopology, type ProviderIteratorRepairDiagnostic } from './provider-workflow-topology-integrity.js';
 
 export class AnalysisError extends Error {
   public constructor(public readonly code: string, message: string, public readonly statusCode = 422) { super(message); this.name = 'AnalysisError'; }
 }
 
 export class AnalysisService {
-  public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null), private readonly promotion = new V2PromotionService({ mode: 'disabled', allowPassWithWarnings: false }), private readonly hybridRAGRollout: HybridRAGPlannerRollout | null = null) {}
+  public constructor(private readonly repository: ProjectRepository, private readonly provider: AnalysisProvider, private readonly pipeline = new AnalysisPipeline(), private readonly scopeIntelligence: ScopeIntelligenceService | null = null, private readonly plannerRuntime: PlannerRuntime | null = new UnifiedPlannerRuntime('shadow', new PlannerShadowService(), null), private readonly promotion = new V2PromotionService({ mode: 'disabled', allowPassWithWarnings: false }), private readonly hybridRAGRollout: HybridRAGPlannerRollout | null = null, private readonly providerTopologyObserver: (diagnostic: ProviderIteratorRepairDiagnostic) => void = () => {}) {}
   public getProviderStatus() { return this.provider.getStatus(); }
   public async analyze(projectId: string, workflowMode: 'auto' | 'single' = 'auto', requestCorrelationId: string | null = null, clarificationAnswers: SubmittedClarificationAnswer[] = []): Promise<WorkflowAnalysisResult> {
     return this.pipeline.run(() => this.analyzeCurrent(projectId, workflowMode, requestCorrelationId, clarificationAnswers));
@@ -89,7 +90,7 @@ export class AnalysisService {
       parsed = aiWorkflowOutputSchema.safeParse(raw);
       if (!parsed.success) throw new AnalysisError('AI_SCHEMA_VALIDATION_FAILED', 'The free local fallback could not preserve the explicit workflow sequence.');
     }
-    let prepared = prepareWorkflowForPersistence(parsed.data, providerUsed === 'ollama');
+    let prepared = prepareWorkflowForPersistence(parsed.data, providerUsed === 'ollama', true, this.providerTopologyObserver);
     parsed.data = prepared.workflow;
     let validation = prepared.validation;
 
@@ -97,7 +98,7 @@ export class AnalysisService {
       const reason = prepared.boundaryError ?? validation.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('; ');
       await useFreeFallback(`Generated workflow graph was invalid: ${reason}`);
       const fallback = aiWorkflowOutputSchema.parse(raw);
-      prepared = prepareWorkflowForPersistence(fallback, false);
+      prepared = prepareWorkflowForPersistence(fallback, false, true, this.providerTopologyObserver);
       parsed = { success: true, data: prepared.workflow };
       validation = prepared.validation;
     }
@@ -182,8 +183,10 @@ function addClarificationAnswerContext(
   };
 }
 
-function prepareWorkflowForPersistence(input: CanonicalWorkflow, requireSingleEntry: boolean) {
-  let workflow = compileAutomationArchitecture(inferWorkflowConnections(input));
+function prepareWorkflowForPersistence(input: CanonicalWorkflow, requireSingleEntry: boolean, providerSelected = false, observeProviderTopology: (diagnostic: ProviderIteratorRepairDiagnostic) => void = () => {}) {
+  const providerTopologyIssues = providerSelected ? hardenProviderWorkflowTopology(input, observeProviderTopology) : null;
+  const hardened = providerTopologyIssues?.workflow ?? input;
+  let workflow = compileAutomationArchitecture(inferWorkflowConnections(hardened));
   let validation = validateWorkflowGraph(workflow);
   let entries = workflow.nodes.filter(isEntryNode);
   let boundaryError = workflow.nodes.length ? '' : 'The generated workflow contains no workflow steps.';
@@ -241,6 +244,7 @@ function prepareWorkflowForPersistence(input: CanonicalWorkflow, requireSingleEn
   if (requireSingleEntry && entries.length !== 1) {
     boundaryError = `Ollama must return exactly one trigger or start node; received ${entries.length}.`;
   }
+  if (providerTopologyIssues) validation.issues.push(...providerTopologyIssues.issues);
   return { workflow, validation, boundaryError };
 }
 

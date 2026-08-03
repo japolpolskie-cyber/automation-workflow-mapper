@@ -74,7 +74,7 @@ function insertExplicitMerges(nodes: WorkflowNode[], edges: WorkflowConnection[]
   const nextNodes = [...nodes]; let nextEdges = [...edges];
   for (const target of nodes) {
     const incoming = nextEdges.filter((edge) => edge.targetNodeId === target.id && edge.routeType !== 'error' && !isAiAttachmentConnection(edge));
-    if (incoming.length < 2 || target.category === 'merge') continue;
+    if (incoming.length < 2 || target.category === 'merge' || target.category === 'loop') continue;
     const merge = architectureNode('merge', `Merge before ${target.name}`, null, 'Wait for incoming route', `Combine converging routes before ${target.name}.`);
     nextNodes.push(merge);
     nextEdges = nextEdges.map((edge) => incoming.some((item) => item.id === edge.id) ? { ...edge, targetNodeId: merge.id } : edge);

@@ -48,11 +48,14 @@ function setup(mode: "disabled" | "compare" | "guarded" | "enabled", validV2 = t
     async execute() { return structuredClone(artifacts); },
   };
   const persist = vi.spyOn(repository, "updateWorkflow");
+  const topologyDiagnostics: Array<{ outcome: string; warningCodes: string[] }> = [];
   const service = new AnalysisService(
     repository, provider, undefined, new ScopeIntelligenceService(), runtime,
     new V2PromotionService({ mode, allowPassWithWarnings: false }),
+    null,
+    (diagnostic) => topologyDiagnostics.push(diagnostic),
   );
-  return { analyze, persist, project, repository, service };
+  return { analyze, persist, project, repository, service, topologyDiagnostics };
 }
 
 describe("V2.6 AnalysisService source selection", () => {
@@ -98,6 +101,32 @@ describe("V2.6 AnalysisService source selection", () => {
     expect(test.persist).toHaveBeenCalledOnce();
     expect(result.workflow.id).toBe(leadQualificationWorkflow.id);
     expect(test.repository.findById(test.project.id)?.workflow.id).toBe(leadQualificationWorkflow.id);
+  });
+
+  it("keeps provider fallback authoritative and persists both conservatively repaired iterator edges", async () => {
+    const requirement = "For every attachment, process the file and combine all results into one report.";
+    const artifacts = passingArtifacts("n8n", requirement);
+    const providerWorkflow = new V2CanonicalWorkflowAdapter().adapt("Provider iterator", requirement, artifacts.v24GraphRepair!.conceptual.graph, artifacts.v24GraphRepair!.platform!.graph);
+    providerWorkflow.connections = providerWorkflow.connections.filter((edge) => edge.sourcePort !== "item" && edge.sourcePort !== "done");
+    const test = setup("guarded", false, false, requirement);
+    test.analyze.mockResolvedValue(providerWorkflow);
+    const result = await test.service.analyze(test.project.id);
+    const persisted = test.repository.findById(test.project.id)!.workflow;
+    const iterator = persisted.nodes.find((node) => node.configuration.conceptualRole === "collection-iterator")!;
+    const loopBack = persisted.connections.find((edge) => edge.targetNodeId === iterator.id && edge.targetPort === "loop-back")!;
+    expect(result.workflow.id).toBe(providerWorkflow.id);
+    expect(persisted.id).toBe(providerWorkflow.id);
+    expect(persisted.connections.filter((edge) => edge.sourcePort === "item")).toEqual([
+      expect.objectContaining({ targetPort: "input", label: "Each Item" }),
+    ]);
+    expect(persisted.connections.filter((edge) => edge.sourcePort === "done")).toEqual([
+      expect.objectContaining({ targetPort: "input", label: "Completed", branchLabel: "DONE" }),
+    ]);
+    expect(loopBack).toMatchObject({ label: "Loop Back", targetPort: "loop-back" });
+    expect(persisted.connections.some((edge) => edge.sourceNodeId === iterator.id && edge.sourcePort === "output" && edge.targetPort === "input")).toBe(false);
+    expect(test.topologyDiagnostics).toEqual([
+      { outcome: "provider-iterator-repaired-item-and-completed", warningCodes: [] },
+    ]);
   });
 
   it("guarded preserves the provider candidate when V2 construction throws", async () => {

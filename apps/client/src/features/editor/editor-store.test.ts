@@ -64,6 +64,21 @@ const routerLayoutProject = (branches: Array<{ id: string; label: string; target
   };
 };
 
+const repairedProviderIteratorProject = (): Project => {
+  const base = blankProject('n8n');
+  const iterator = { ...leadQualificationWorkflow.nodes[1]!, id: crypto.randomUUID(), category: 'loop' as const, name: 'Split Out attachments' };
+  const body = { ...leadQualificationWorkflow.nodes[1]!, id: crypto.randomUUID(), name: 'Process attachment' };
+  const continuation = { ...leadQualificationWorkflow.nodes[1]!, id: crypto.randomUUID(), name: 'Record completion' };
+  const connection = leadQualificationWorkflow.connections[0]!;
+  const connections: Project['workflow']['connections'] = [
+    { ...connection, id: crypto.randomUUID(), sourceNodeId: iterator.id, targetNodeId: body.id, sourcePort: 'item', targetPort: 'input', label: 'Each Item', branchLabel: 'LOOP', style: 'loop' as const },
+    { ...connection, id: crypto.randomUUID(), sourceNodeId: body.id, targetNodeId: iterator.id, sourcePort: 'loop-back', targetPort: 'loop-back', label: 'Loop Back', branchLabel: 'LOOP', style: 'loop' as const },
+    { ...connection, id: crypto.randomUUID(), sourceNodeId: iterator.id, targetNodeId: continuation.id, sourcePort: 'done', targetPort: 'input', label: 'Completed', branchLabel: 'DONE', style: 'success' as const },
+  ];
+  const workflow = { ...base.workflow, nodes: [iterator, body, continuation], connections };
+  return { ...base, workflow, workflowSet: createWorkflowSetFromGraph(workflow), visualGraph: projectWorkflowToVisualGraph(workflow) };
+};
+
 const positionByName = (name: string) => useEditorStore.getState().nodes.find((node) => node.data.node.name === name)!.position;
 
 describe('editor workflow layout isolation', () => {
@@ -262,6 +277,62 @@ describe('editor workflow layout isolation', () => {
     useEditorStore.getState().connect({ source: loop!.id, sourceHandle: 'item', target: customNode!.id, targetHandle: null });
     expect(useEditorStore.getState().workflow.connections[0]).toMatchObject({ branchLabel: 'LOOP', style: 'loop' });
     expect(customNode!.data.node.configuration).toMatchObject({ manualCustomNode: true, dynamicConnections: true });
+  });
+
+  it('preserves canonical iterator boundaries and their presentation across initialization', () => {
+    const project = repairedProviderIteratorProject();
+    const originalConnections = structuredClone(project.workflow.connections);
+
+    useEditorStore.getState().initialize(project);
+
+    const presented = useEditorStore.getState().edges.map(({ label, sourceHandle, targetHandle }) => ({ label, sourceHandle, targetHandle }));
+    expect(presented).toEqual(expect.arrayContaining([
+      { label: 'Each Item', sourceHandle: 'item', targetHandle: null },
+      { label: 'Loop Back', sourceHandle: 'loop-back', targetHandle: 'loop-back' },
+      { label: 'Completed', sourceHandle: 'done', targetHandle: null },
+    ]));
+    expect(presented).toHaveLength(3);
+    expect(presented.filter((edge) => edge.label === 'Each Item')).toHaveLength(1);
+    expect(presented.filter((edge) => edge.label === 'Loop Back')).toHaveLength(1);
+    expect(presented.filter((edge) => edge.label === 'Completed')).toHaveLength(1);
+    expect(presented.some((edge) => edge.sourceHandle === 'default')).toBe(false);
+    expect(useEditorStore.getState().workflow.connections).toEqual(originalConnections);
+
+    const savedWorkflow = structuredClone(useEditorStore.getState().workflow);
+    const reloaded = { ...project, workflow: savedWorkflow, visualGraph: projectWorkflowToVisualGraph(savedWorkflow) };
+    useEditorStore.getState().initialize(reloaded);
+    expect(useEditorStore.getState().workflow.connections).toEqual(originalConnections);
+    expect(useEditorStore.getState().edges.map(({ label, sourceHandle, targetHandle }) => ({ label, sourceHandle, targetHandle }))).toEqual(presented);
+  });
+
+  it('keeps legacy inference for workflows with no connections', () => {
+    const project = blankProject();
+    project.workflow.nodes = [
+      { ...leadQualificationWorkflow.nodes[0]!, id: crypto.randomUUID(), name: 'Receive request' },
+      { ...leadQualificationWorkflow.nodes[1]!, id: crypto.randomUUID(), name: 'Handle request' },
+    ];
+
+    useEditorStore.getState().initialize(project);
+
+    expect(useEditorStore.getState().workflow.connections).toHaveLength(1);
+    expect(useEditorStore.getState().edges[0]).toMatchObject({ sourceHandle: 'default', targetHandle: null });
+  });
+
+  it('keeps retry-loop labels while manual iterator outputs retain item and done semantics', () => {
+    useEditorStore.getState().initialize(blankProject());
+    useEditorStore.getState().addNode('loop');
+    useEditorStore.getState().addNode('action');
+    useEditorStore.getState().addNode('action');
+    const [iterator, body, continuation] = useEditorStore.getState().nodes;
+    useEditorStore.getState().connect({ source: iterator!.id, sourceHandle: 'item', target: body!.id, targetHandle: null });
+    useEditorStore.getState().connect({ source: iterator!.id, sourceHandle: 'done', target: continuation!.id, targetHandle: null });
+    expect(useEditorStore.getState().edges.map((edge) => edge.label)).toEqual(['Each Item', 'Completed']);
+
+    const retryProject = repairedProviderIteratorProject();
+    retryProject.workflow.connections[1] = { ...retryProject.workflow.connections[1]!, sourcePort: 'output', targetPort: 'input', label: 'Retry', branchLabel: 'FAILED', style: 'loop' };
+    retryProject.visualGraph = projectWorkflowToVisualGraph(retryProject.workflow);
+    useEditorStore.getState().initialize(retryProject);
+    expect(useEditorStore.getState().edges.find((edge) => edge.data?.domainConnectionId === retryProject.workflow.connections[1]!.id)?.label).toBe('Retry');
   });
 
   it('places TRUE above FALSE during horizontal auto-layout', () => {
