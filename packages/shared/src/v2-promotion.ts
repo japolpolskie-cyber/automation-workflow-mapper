@@ -1,6 +1,17 @@
 import { z } from "zod";
 
 export const plannerV2PromotionModeSchema = z.enum(["disabled", "compare", "guarded", "enabled"]);
+
+export function resolvePlannerV2PromotionMode(
+  explicitMode: string | undefined,
+  runtimeDefault: PlannerV2PromotionMode = "disabled",
+): PlannerV2PromotionMode {
+  return plannerV2PromotionModeSchema.parse(explicitMode ?? runtimeDefault);
+}
+
+export function resolvePackagedDesktopPlannerV2PromotionMode(explicitMode: string | undefined): PlannerV2PromotionMode {
+  return explicitMode === "disabled" ? "disabled" : "guarded";
+}
 export const promotionGateSchema = z.object({
   id: z.enum([
     "conceptual-validation", "platform-validation", "capability-safety",

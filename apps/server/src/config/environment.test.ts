@@ -55,6 +55,8 @@ describe('AI environment validation', () => {
     expect(loadEnvironment({}).PLANNER_V2_ALLOW_PASS_WITH_WARNINGS).toBe(false);
     expect(loadEnvironment({ PLANNER_RUNTIME_MODE: 'distributed' }).PLANNER_RUNTIME_MODE).toBe('distributed');
     expect(loadEnvironment({ PLANNER_V2_PROMOTION_MODE: 'guarded', PLANNER_V2_ALLOW_PASS_WITH_WARNINGS: 'true' })).toMatchObject({ PLANNER_V2_PROMOTION_MODE: 'guarded', PLANNER_V2_ALLOW_PASS_WITH_WARNINGS: true });
+    expect(loadEnvironment({ PLANNER_V2_PROMOTION_MODE: 'disabled' }).PLANNER_V2_PROMOTION_MODE).toBe('disabled');
+    expect(loadEnvironment({}).PLANNER_V2_PROMOTION_MODE).not.toBe('enabled');
   });
   it('keeps Stage C disabled by default with bounded node-grounding controls', () => {
     expect(loadEnvironment({})).toMatchObject({

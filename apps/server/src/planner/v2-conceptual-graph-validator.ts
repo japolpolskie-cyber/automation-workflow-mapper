@@ -72,10 +72,16 @@ export function validateV22ConceptualGraph(graph: V22ConceptualGraph): V22Valida
     }
     if (node.role === 'collection-iterator') {
       if (!node.collectionSource) issue('V22_ITERATOR_SOURCE_REQUIRED', `${node.title} requires a collection source.`, node.id);
-      if (!outputs.some((edge) => edge.role === 'item')) issue('V22_ITERATOR_ITEM_PATH_REQUIRED', `${node.title} requires a current-item path.`, node.id);
+      const itemPaths = outputs.filter((edge) => edge.role === 'item');
+      const completions = outputs.filter((edge) => edge.role === 'iteration-complete');
+      const loopBacks = inputs.filter((edge) => edge.role === 'loop-back');
+      if (itemPaths.length !== 1) issue('V22_ITERATOR_ITEM_PATH_REQUIRED', `${node.title} requires exactly one current-item path.`, node.id);
+      if (completions.length !== 1) issue('V22_ITERATOR_COMPLETION_PATH_REQUIRED', `${node.title} requires exactly one completion path.`, node.id);
+      if (loopBacks.length !== 1) issue('V22_ITERATOR_LOOP_BACK_REQUIRED', `${node.title} requires exactly one body-tail loop-back path.`, node.id);
+      if (itemPaths[0] && loopBacks[0] && !pathExists(graph, itemPaths[0].target, loopBacks[0].source, node.id)) issue('V22_ITERATOR_BODY_UNREACHABLE', `${node.title} item path does not reach its loop-back source.`, node.id);
     }
-    if (node.role === 'item-aggregator' && !inputs.some((edge) => edge.role === 'item-result')) {
-      issue('V22_AGGREGATOR_RESULTS_REQUIRED', `${node.title} requires upstream item results.`, node.id);
+    if (node.role === 'item-aggregator' && !inputs.some((edge) => edge.role === 'iteration-complete' && nodes.get(edge.source)?.role === 'collection-iterator')) {
+      issue('V22_AGGREGATOR_RESULTS_REQUIRED', `${node.title} requires the iterator completion path.`, node.id);
     }
     if (node.role === 'loop-until') {
       if (!inputs.some((edge) => edge.role === 'loop-back')) issue('V22_LOOP_BACK_REQUIRED', `${node.title} requires an explicit loop-back path.`, node.id);
@@ -96,6 +102,19 @@ export function validateV22ConceptualGraph(graph: V22ConceptualGraph): V22Valida
     if (!terminal || terminal.role !== 'meaningful-end') issue('V22_INVALID_TERMINAL', `${terminalId} is not a meaningful terminal node.`, terminalId);
   }
   return issues;
+}
+
+function pathExists(graph: V22ConceptualGraph, sourceId: string, targetId: string, excludedId: string): boolean {
+  const visited = new Set<string>([excludedId]);
+  const queue = [sourceId];
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (current === targetId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    queue.push(...graph.edges.filter((edge) => edge.source === current).map((edge) => edge.target));
+  }
+  return false;
 }
 
 function thisReachesRole(graph: V22ConceptualGraph, sourceId: string, role: PlannerSemanticRole): boolean {

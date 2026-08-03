@@ -8,6 +8,7 @@ import {
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app } from 'electron';
+import { resolvePackagedDesktopPlannerV2PromotionMode, resolvePlannerV2PromotionMode } from '@awm/shared';
 import { findAvailablePort } from './port.js';
 
 let serverProcess: ChildProcess | null = null;
@@ -117,14 +118,20 @@ export async function startServer(): Promise<void> {
 
   serverPort = await findAvailablePort();
   const databasePath = prepareDatabasePath();
+  const promotionMode = app.isPackaged
+    ? resolvePackagedDesktopPlannerV2PromotionMode(process.env.PLANNER_V2_PROMOTION_MODE)
+    : resolvePlannerV2PromotionMode(process.env.PLANNER_V2_PROMOTION_MODE);
   console.log(`Backend selected port: ${serverPort}`);
   console.log(`Desktop database path: ${databasePath}`);
+  console.log(`Planner V2 promotion mode: ${promotionMode}`);
 
   serverProcess = spawn(process.execPath, [serverEntry], {
     env: {
       ...process.env,
       DATABASE_PATH: databasePath,
       ELECTRON_RUN_AS_NODE: '1',
+      PLANNER_V2_PROMOTION_MODE: promotionMode,
+      PLANNER_V2_ALLOW_PASS_WITH_WARNINGS: 'false',
       PORT: String(serverPort),
     },
     stdio: 'inherit',

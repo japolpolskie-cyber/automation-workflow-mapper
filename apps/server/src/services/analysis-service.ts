@@ -119,6 +119,15 @@ export class AnalysisService {
           if (promotedPrepared.validation.valid && !promotedPrepared.boundaryError) {
             parsed.data = promotedPrepared.workflow;
             validation = promotedPrepared.validation;
+          } else {
+            this.promotion.recordFailure(
+              project.platform,
+              requestCorrelationId,
+              'V2_POST_PROMOTION_VALIDATION_FAILED',
+              performance.now() - started,
+              'available',
+              providerElapsed,
+            );
           }
         }
       } catch (error) {

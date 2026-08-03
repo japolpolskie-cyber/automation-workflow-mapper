@@ -300,9 +300,9 @@ function metadataPatch(source: V22ConceptualGraph['nodes'][number], graph: V22Co
     patch.collectionSource = source.collectionSource; fields.push('configuration.collectionSource'); evidence.push(`collectionSource:${source.collectionSource}`);
   }
   if (source.role === 'item-aggregator') {
-    const inputs = graph.edges.filter((edge) => edge.target === source.id && edge.role === 'item-result').map((edge) => edge.id);
+    const inputs = graph.edges.filter((edge) => edge.target === source.id && (edge.role === 'item-result' || edge.role === 'iteration-complete')).map((edge) => edge.id);
     if (inputs.length && JSON.stringify(translated.configuration.aggregationInputEdgeIds) !== JSON.stringify(inputs)) {
-      patch.aggregationInputEdgeIds = inputs; fields.push('configuration.aggregationInputEdgeIds'); evidence.push(...inputs.map((id) => `item-result:${id}`));
+      patch.aggregationInputEdgeIds = inputs; fields.push('configuration.aggregationInputEdgeIds'); evidence.push(...inputs.map((id) => `aggregation-input:${id}`));
     }
   }
   if (source.role === 'technical-retry' && source.retry && JSON.stringify(translated.configuration.retry) !== JSON.stringify(source.retry)) {

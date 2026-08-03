@@ -39,8 +39,39 @@ describe('V2.2 platform-neutral conceptual topology', () => {
     const { result } = compile('For every attachment, process the file and combine all results into one report.');
     expect(result.validation.valid).toBe(true);
     expect(result.graph.nodes.map((node) => node.role)).toEqual(expect.arrayContaining(['collection-iterator', 'item-aggregator']));
+    const iterator = result.graph.nodes.find((node) => node.role === 'collection-iterator')!;
+    const body = result.graph.edges.find((edge) => edge.source === iterator.id && edge.role === 'item')!.target;
     const aggregator = result.graph.nodes.find((node) => node.role === 'item-aggregator')!;
-    expect(result.graph.edges.some((edge) => edge.target === aggregator.id && edge.role === 'item-result')).toBe(true);
+    expect(result.graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: iterator.id, target: body, role: 'item', label: 'EACH ITEM' }),
+      expect.objectContaining({ source: body, target: iterator.id, role: 'loop-back', label: 'LOOP BACK' }),
+      expect.objectContaining({ source: iterator.id, target: aggregator.id, role: 'iteration-complete', label: 'COMPLETED' }),
+    ]));
+  });
+
+  it.each([
+    ['item path', 'item', 'V22_ITERATOR_ITEM_PATH_REQUIRED'],
+    ['loop-back path', 'loop-back', 'V22_ITERATOR_LOOP_BACK_REQUIRED'],
+    ['completion path', 'iteration-complete', 'V22_ITERATOR_COMPLETION_PATH_REQUIRED'],
+  ] as const)('rejects an iterator missing its %s', (_name, role, code) => {
+    const { result } = compile('For every attachment, process the file and combine all results into one report.');
+    const broken = structuredClone(result.graph);
+    const iterator = broken.nodes.find((node) => node.role === 'collection-iterator')!;
+    broken.edges = broken.edges.filter((edge) => !(edge.role === role && (edge.source === iterator.id || edge.target === iterator.id)));
+    expect(validateV22ConceptualGraph(broken)).toEqual(expect.arrayContaining([expect.objectContaining({ code, nodeId: iterator.id })]));
+  });
+
+  it('rejects duplicate loop-back paths and an unreachable iterator body', () => {
+    const { result } = compile('For every attachment, process the file and combine all results into one report.');
+    const duplicate = structuredClone(result.graph);
+    const iterator = duplicate.nodes.find((node) => node.role === 'collection-iterator')!;
+    const loopBack = duplicate.edges.find((edge) => edge.target === iterator.id && edge.role === 'loop-back')!;
+    duplicate.edges.push({ ...loopBack, id: `${loopBack.id}-duplicate` });
+    expect(validateV22ConceptualGraph(duplicate)).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'V22_ITERATOR_LOOP_BACK_REQUIRED' })]));
+    const unreachable = structuredClone(result.graph);
+    const returnEdge = unreachable.edges.find((edge) => edge.target === iterator.id && edge.role === 'loop-back')!;
+    returnEdge.source = unreachable.nodes.find((node) => node.role === 'meaningful-end')!.id;
+    expect(validateV22ConceptualGraph(unreachable)).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'V22_ITERATOR_BODY_UNREACHABLE' })]));
   });
 
   it('models revision and resubmission with explicit loop-back and exit paths', () => {

@@ -47,17 +47,22 @@ export class V2CanonicalWorkflowAdapter {
         performanceNotes: [], securityNotes: [], riskLevel: "low",
       } satisfies CanonicalWorkflow["nodes"][number];
     });
-    const connections = translation.edges.map((edge) => ({
+    const conceptualEdges = new Map(conceptual.edges.map((edge) => [edge.id, edge]));
+    const connections = translation.edges.map((edge) => {
+      const role = edge.conceptualEdgeIds.map((id) => conceptualEdges.get(id)?.role).find(Boolean);
+      const semantics = edgeSemantics(role, edge.label);
+      return ({
       id: stableUuid(`edge:${translation.selectedPlatform}:${edge.id}`),
       sourceNodeId: nodeIds.get(edge.source)!,
       targetNodeId: nodeIds.get(edge.target)!,
-      sourcePort: "output", targetPort: "input", label: edge.label,
+      sourcePort: semantics.sourcePort, targetPort: semantics.targetPort, label: semantics.label,
       condition: edge.condition,
-      routeType: routeType(edge.label),
-      branchLabel: branchLabel(edge.label),
-      style: edge.label === "FALSE" || edge.label === "REJECTED" || edge.label === "FAILED" ? "failure" : edge.condition ? "conditional" : "success",
+      routeType: semantics.routeType ?? routeType(edge.label),
+      branchLabel: semantics.branchLabel ?? branchLabel(edge.label),
+      style: semantics.style ?? (edge.label === "FALSE" || edge.label === "REJECTED" || edge.label === "FAILED" ? "failure" : edge.condition ? "conditional" : "success"),
       mappings: [],
-    } satisfies CanonicalWorkflow["connections"][number]));
+    } satisfies CanonicalWorkflow["connections"][number]);
+    });
     const now = new Date().toISOString();
     return canonicalWorkflowSchema.parse({
       schemaVersion: "2.0",
@@ -77,6 +82,12 @@ export class V2CanonicalWorkflowAdapter {
       estimatedExecutionTime: "", createdAt: now, updatedAt: now,
     });
   }
+}
+function edgeSemantics(role: string | undefined, label: string): Partial<CanonicalWorkflow["connections"][number]> & { sourcePort: string; targetPort: string; label: string } {
+  if (role === "item") return { sourcePort: "item", targetPort: "input", label: "Each Item", branchLabel: null, routeType: "conditional", style: "loop" };
+  if (role === "loop-back") return { sourcePort: "output", targetPort: "loop-back", label: "Loop Back", branchLabel: "LOOP", routeType: "conditional", style: "loop" };
+  if (role === "iteration-complete") return { sourcePort: "done", targetPort: "input", label: "Completed", branchLabel: "DONE", routeType: "success", style: "success" };
+  return { sourcePort: "output", targetPort: "input", label };
 }
 
 function stableUuid(value: string) {

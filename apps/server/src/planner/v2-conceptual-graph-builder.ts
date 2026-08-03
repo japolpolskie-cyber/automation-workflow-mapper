@@ -222,11 +222,11 @@ export class V22ConceptualGraphBuilder {
     const iterator = graph.node('collection-iterator', `Iterate ${title(flow.collectionSource ?? 'Collection')}`, flow.sourceReferences, { ...this.metadata(flow), collectionSource: flow.collectionSource ?? 'item' });
     graph.edge(previous, iterator, 'flow', 'COLLECTION', flow.sourceReferences, null, flow.evidenceIds);
     const item = this.flowNode(graph, 'data-transformation', `Process Current ${title(flow.collectionSource ?? 'Item')}`, flow);
-    graph.edge(iterator, item, 'item', 'CURRENT ITEM', flow.sourceReferences, null, flow.evidenceIds);
+    graph.edge(iterator, item, 'item', 'EACH ITEM', flow.sourceReferences, null, flow.evidenceIds);
     const aggregateFlow = aggregator ?? flow;
     const aggregate = this.flowNode(graph, 'item-aggregator', 'Aggregate Item Results', aggregateFlow);
-    graph.edge(item, aggregate, 'item-result', 'ITEM RESULT', flow.sourceReferences, null, flow.evidenceIds);
-    graph.edge(iterator, aggregate, 'iteration-complete', 'ITERATION COMPLETE', flow.sourceReferences, null, flow.evidenceIds);
+    graph.edge(item, iterator, 'loop-back', 'LOOP BACK', flow.sourceReferences, null, flow.evidenceIds);
+    graph.edge(iterator, aggregate, 'iteration-complete', 'COMPLETED', flow.sourceReferences, null, flow.evidenceIds);
     const continuation = this.flowNode(graph, 'data-transformation', 'Continue With Aggregated Result', aggregateFlow);
     graph.edge(aggregate, continuation, 'continuation', 'CONTINUE', aggregateFlow.sourceReferences, null, aggregateFlow.evidenceIds);
     return { tail: continuation, consumedIds: [flow.id, ...(aggregator ? [aggregator.id] : [])] };

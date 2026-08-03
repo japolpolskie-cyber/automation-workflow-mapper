@@ -66,7 +66,9 @@ export function validateWorkflowGraph(workflow: CanonicalWorkflow): GraphValidat
       if (!node.decisionRule) issues.push({ severity: 'error', code: 'DECISION_RULE_REQUIRED', message: `${node.name} must define its decision question, field, operator, and comparison value.`, nodeId: node.id });
     }
     if (node.category === 'merge' && (incomingByNode.get(node.id)?.length ?? 0) < 2) issues.push({ severity: 'error', code: 'MERGE_INPUTS_REQUIRED', message: `${node.name} must combine at least two incoming routes.`, nodeId: node.id });
-    if (node.category === 'loop') {
+    if (node.category === 'loop' && node.configuration.conceptualRole === 'collection-iterator') {
+      validateIteratorTopology(workflow, node.id, issues);
+    } else if (node.category === 'loop') {
       const labels = outgoing.map((edge) => edge.branchLabel || edge.label.toUpperCase());
       if (!labels.includes('LOOP') || !labels.includes('DONE')) issues.push({ severity: 'error', code: 'LOOP_EXITS_REQUIRED', message: `${node.name} needs labeled LOOP and DONE routes.`, nodeId: node.id });
     }
@@ -86,6 +88,38 @@ export function validateWorkflowGraph(workflow: CanonicalWorkflow): GraphValidat
   }
   detectUnsupportedCycles(workflow, issues);
   return { valid: !issues.some((issue) => issue.severity === 'error'), issues, statistics: { nodes: workflow.nodes.length, connections: workflow.connections.length, branches: workflow.branches.length, disconnectedNodes: disconnected.length } };
+}
+
+function validateIteratorTopology(workflow: CanonicalWorkflow, iteratorId: string, issues: GraphIssue[]): void {
+  const outgoing = workflow.connections.filter((edge) => edge.sourceNodeId === iteratorId);
+  const incoming = workflow.connections.filter((edge) => edge.targetNodeId === iteratorId);
+  const items = outgoing.filter((edge) => edge.sourcePort === 'item');
+  const completions = outgoing.filter((edge) => edge.sourcePort === 'done');
+  const returns = incoming.filter((edge) => edge.targetPort === 'loop-back');
+  const add = (code: string, message: string, connectionId?: string) => issues.push({ severity: 'error', code, message, nodeId: iteratorId, ...(connectionId ? { connectionId } : {}) });
+  if (items.length !== 1) add('ITERATOR_ITEM_EDGE_REQUIRED', 'Iterator requires exactly one Each Item output.');
+  if (completions.length !== 1) add('ITERATOR_COMPLETION_EDGE_REQUIRED', 'Iterator requires exactly one Completed output.');
+  if (returns.length !== 1) add('ITERATOR_LOOP_BACK_REQUIRED', 'Iterator requires exactly one body-tail Loop Back input.');
+  for (const edge of items) if (edge.label !== 'Each Item' || edge.branchLabel !== null || edge.style !== 'loop') add('ITERATOR_ITEM_SEMANTICS_INVALID', 'Iterator item edge has invalid handle, label, or style.', edge.id);
+  for (const edge of completions) if (edge.label !== 'Completed' || edge.branchLabel !== 'DONE' || edge.style !== 'success') add('ITERATOR_COMPLETION_SEMANTICS_INVALID', 'Iterator completion edge has invalid handle, label, or style.', edge.id);
+  for (const edge of returns) if (edge.label !== 'Loop Back' || edge.branchLabel !== 'LOOP' || edge.style !== 'loop') add('ITERATOR_LOOP_BACK_SEMANTICS_INVALID', 'Iterator loop-back edge has invalid handle, label, or style.', edge.id);
+  if (items[0] && returns[0] && !canonicalPathExists(workflow, items[0].targetNodeId, returns[0].sourceNodeId, iteratorId)) add('ITERATOR_BODY_UNREACHABLE', 'Iterator body does not reach the Loop Back connection.');
+  if (items[0] && completions[0] && items[0].targetNodeId === completions[0].targetNodeId) add('ITERATOR_PATHS_NOT_DISTINCT', 'Each Item and Completed paths must have distinct destinations.');
+  const completionTarget = completions[0] && workflow.nodes.find((node) => node.id === completions[0]!.targetNodeId);
+  if (completionTarget?.configuration.conceptualRole === 'item-aggregator' && workflow.connections.filter((edge) => edge.targetNodeId === completionTarget.id).length !== 1) add('ITERATOR_AGGREGATOR_INPUT_INVALID', 'Iterator aggregator must be entered only from the Completed path.');
+}
+
+function canonicalPathExists(workflow: CanonicalWorkflow, sourceId: string, targetId: string, excludedId: string): boolean {
+  const visited = new Set<string>([excludedId]);
+  const queue = [sourceId];
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (current === targetId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    queue.push(...workflow.connections.filter((edge) => !isAiAttachmentConnection(edge) && edge.sourceNodeId === current).map((edge) => edge.targetNodeId));
+  }
+  return false;
 }
 
 function detectUnsupportedCycles(workflow: CanonicalWorkflow, issues: GraphIssue[]): void {

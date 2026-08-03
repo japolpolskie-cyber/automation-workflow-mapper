@@ -5,6 +5,7 @@ import { ScopeIntelligenceService } from "../analysis/scope-intelligence.js";
 import { createDatabase, type Database } from "../database/database.js";
 import { UnifiedPlannerRuntime, type PlannerRuntime, type PlannerRuntimeResult } from "../planner/planner-runtime-service.js";
 import { V2PromotionService } from "../planner/v2-promotion-service.js";
+import { V2CanonicalWorkflowAdapter } from "../planner/v2-canonical-workflow-adapter.js";
 import { ProjectRepository } from "../repositories/project-repository.js";
 import { AnalysisService } from "./analysis-service.js";
 
@@ -12,9 +13,9 @@ const databases: Database[] = [];
 afterEach(() => { for (const database of databases.splice(0)) database.close(); });
 const scope = "When an Asana task is created, retrieve its details and notify Slack.";
 
-function passingArtifacts(platform: Platform): PlannerRuntimeResult {
-  const analysis = new ScopeIntelligenceService().analyze(scope, new Date("2026-07-19T00:00:00.000Z"));
-  const result = new UnifiedPlannerRuntime("mock", null, null).buildV2Artifacts(scope, platform, analysis);
+function passingArtifacts(platform: Platform, inputScope = scope): PlannerRuntimeResult {
+  const analysis = new ScopeIntelligenceService().analyze(inputScope, new Date("2026-07-19T00:00:00.000Z"));
+  const result = new UnifiedPlannerRuntime("mock", null, null).buildV2Artifacts(inputScope, platform, analysis);
   const selected = result.v25AcceptanceMatrix!.platforms[platform];
   selected.result = "PASS";
   Object.assign(selected.stages.final, {
@@ -27,20 +28,23 @@ function passingArtifacts(platform: Platform): PlannerRuntimeResult {
   return result;
 }
 
-function setup(mode: "compare" | "guarded" | "enabled", validV2 = true) {
+function setup(mode: "disabled" | "compare" | "guarded" | "enabled", validV2 = true, throwV2 = false, inputScope = scope) {
   const database = createDatabase(":memory:"); databases.push(database);
   const repository = new ProjectRepository(database);
   const project = repository.create({ name: "Promotion integration", clientName: "", description: "", platform: "n8n" });
-  repository.updateScope(project.id, scope);
+  repository.updateScope(project.id, inputScope);
   const analyze = vi.fn(async () => structuredClone(leadQualificationWorkflow));
   const provider: AnalysisProvider = {
     name: "local", analyze,
     async getStatus() { return { provider: "local", available: true, models: [], message: "ready" }; },
   };
-  const artifacts = validV2 ? passingArtifacts("n8n") : {};
+  const artifacts = validV2 ? passingArtifacts("n8n", inputScope) : {};
   const runtime: PlannerRuntime = {
     mode: "mock",
-    buildV2Artifacts: () => structuredClone(artifacts),
+    buildV2Artifacts: () => {
+      if (throwV2) throw new Error("synthetic V2 failure");
+      return structuredClone(artifacts);
+    },
     async execute() { return structuredClone(artifacts); },
   };
   const persist = vi.spyOn(repository, "updateWorkflow");
@@ -68,6 +72,48 @@ describe("V2.6 AnalysisService source selection", () => {
     expect(test.persist).toHaveBeenCalledOnce();
     expect(result.workflow.id).not.toBe(leadQualificationWorkflow.id);
     expect(test.repository.findById(test.project.id)?.workflow.id).toBe(result.workflow.id);
+  });
+
+  it("persists and reloads V2 iterator handles and all three execution paths", () => {
+    const requirement = "For every attachment, process the file and combine all results into one report.";
+    const test = setup("guarded", true, false, requirement);
+    const artifacts = passingArtifacts("n8n", requirement);
+    const candidate = new V2CanonicalWorkflowAdapter().adapt("Iterator persistence", requirement, artifacts.v24GraphRepair!.conceptual.graph, artifacts.v24GraphRepair!.platform!.graph);
+    test.repository.updateWorkflow(test.project.id, candidate);
+    const reloaded = test.repository.findById(test.project.id)!.workflow;
+    const itemEdge = reloaded.connections.find((edge) => edge.sourcePort === "item")!;
+    const iterator = reloaded.nodes.find((node) => node.id === itemEdge.sourceNodeId)!;
+    expect(candidate.id).toBe(reloaded.id);
+    expect(reloaded.connections).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceNodeId: iterator.id, sourcePort: "item", label: "Each Item" }),
+      expect.objectContaining({ targetNodeId: iterator.id, targetPort: "loop-back", label: "Loop Back" }),
+      expect.objectContaining({ sourceNodeId: iterator.id, sourcePort: "done", label: "Completed" }),
+    ]));
+  });
+
+  it("guarded preserves and persists only the provider candidate when a gate fails", async () => {
+    const test = setup("guarded", false);
+    const result = await test.service.analyze(test.project.id);
+    expect(test.analyze).toHaveBeenCalledOnce();
+    expect(test.persist).toHaveBeenCalledOnce();
+    expect(result.workflow.id).toBe(leadQualificationWorkflow.id);
+    expect(test.repository.findById(test.project.id)?.workflow.id).toBe(leadQualificationWorkflow.id);
+  });
+
+  it("guarded preserves the provider candidate when V2 construction throws", async () => {
+    const test = setup("guarded", true, true);
+    const result = await test.service.analyze(test.project.id);
+    expect(test.analyze).toHaveBeenCalledOnce();
+    expect(test.persist).toHaveBeenCalledOnce();
+    expect(result.workflow.id).toBe(leadQualificationWorkflow.id);
+  });
+
+  it("explicit disabled mode remains provider-authoritative", async () => {
+    const test = setup("disabled");
+    const result = await test.service.analyze(test.project.id);
+    expect(test.analyze).toHaveBeenCalledOnce();
+    expect(test.persist).toHaveBeenCalledOnce();
+    expect(result.workflow.id).toBe(leadQualificationWorkflow.id);
   });
 
   it("enabled avoids provider execution when V2 passes", async () => {

@@ -151,14 +151,15 @@ export async function buildApp(environment: Environment) {
     (decision) => app.log.info({
       promotionMode: decision.configuredMode,
       selectedSource: decision.authoritativeSource,
-      gateResult: decision.failedGates.length ? "failed" : "passed",
-      fallbackReason: decision.fallbackReason,
+      promotionOutcome: decision.authoritativeSource === "v2" ? "promoted" : "provider-fallback",
+      promotionRejectionReasonCodes: decision.failedGates,
       selectedPlatform: decision.selectedPlatform,
       acceptanceResult: decision.acceptanceResult,
       elapsedMilliseconds: decision.timing.totalMilliseconds,
       requestCorrelationId: decision.requestCorrelationId,
     }, "Planner V2 promotion decision"),
   );
+  app.log.info({ promotionMode: promotion.mode }, "Planner V2 promotion mode active");
   await app.register(
     analysisRoutes(
       new AnalysisService(

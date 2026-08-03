@@ -6,9 +6,9 @@ import { V2PromotionService } from "./v2-promotion-service.js";
 
 const scope = "When an Asana task is created, retrieve its details and notify Slack.";
 
-function artifacts(platform: Platform = "n8n"): PlannerRuntimeResult {
-  const analysis = new ScopeIntelligenceService().analyze(scope, new Date("2026-07-19T00:00:00.000Z"));
-  const result = new UnifiedPlannerRuntime("mock", null, null).buildV2Artifacts(scope, platform, analysis);
+function artifacts(platform: Platform = "n8n", inputScope = scope): PlannerRuntimeResult {
+  const analysis = new ScopeIntelligenceService().analyze(inputScope, new Date("2026-07-19T00:00:00.000Z"));
+  const result = new UnifiedPlannerRuntime("mock", null, null).buildV2Artifacts(inputScope, platform, analysis);
   const selected = result.v25AcceptanceMatrix!.platforms[platform];
   selected.result = "PASS";
   selected.stages.final.validationPassed = true;
@@ -92,6 +92,16 @@ describe("V2.6 controlled production promotion", () => {
     expect(result.decision.failedGates).toContain("canonical-adaptation");
   });
 
+  it("rejects a translated iterator with a missing loop-back instead of promoting partial V2 output", () => {
+    const input = artifacts("n8n", "For every attachment, process the file and combine all results into one report.");
+    const conceptualLoopBack = input.v24GraphRepair!.conceptual.graph.edges.find((edge) => edge.role === "loop-back")!;
+    input.v24GraphRepair!.platform!.graph.edges = input.v24GraphRepair!.platform!.graph.edges.filter((edge) => !edge.conceptualEdgeIds.includes(conceptualLoopBack.id));
+    const result = evaluate("guarded", input);
+    expect(result.candidate).toBeNull();
+    expect(result.decision.failedGates).toContain("canonical-validation");
+    expect(result.decision.authoritativeSource).toBe("provider");
+  });
+
   it("prefers V2 in enabled mode and retains mandatory fallback", () => {
     expect(evaluate("enabled").candidate).not.toBeNull();
     expect(evaluate("enabled", {}).candidate).toBeNull();
@@ -111,6 +121,7 @@ describe("V2.6 controlled production promotion", () => {
       .evaluate(artifacts(), "Test", scope, "n8n", "request-42", 3, "available");
     const diagnostic = observe.mock.calls[0]![0];
     expect(diagnostic.requestCorrelationId).toBe("request-42");
+    expect(diagnostic.failedGates).toEqual([]);
     expect(JSON.stringify(diagnostic)).not.toContain(scope);
     expect(JSON.stringify(diagnostic)).not.toMatch(/credential|secret/i);
   });
